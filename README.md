@@ -1,66 +1,111 @@
-# Fellowship of the Token — AI Infrastructure Teaching & Planning Suite
+# FLUX — AI Workload Planner
 
-The complete collection: three related tools for teaching and planning AI
-infrastructure — how prompts become tokens, how architecture choices
-drive tokenomics, and how to configure and price real deployments.
+A Digital Realty Solution Architecture tool for configuring — and
+quantifying — the advantage of a carefully designed data-centre AI
+deployment. One self-contained HTML file: no build step, no dependencies,
+no backend. Everything runs in the browser.
 
-> The FLUX planner also lives standalone in the
-> [JRRToken](https://github.com/punkrockquantum/JRRToken) repo; this
-> repository preserves the entire suite.
+> Looking for the full teaching suite (the Sharp(er) Enterprises workshop
+> simulator and the original prompt-to-tokens simulator)? It lives in
+> [fellowship-of-the-token](https://github.com/punkrockquantum/fellowship-of-the-token).
 
-| App | Where | Run | Port |
-| --- | --- | --- | --- |
-| FLUX — AI Workload Planner | `index.html` (repo root) | `python3 -m http.server 8902` or open the file | 8902 |
-| Sharp(er) Enterprises workshop simulator | `workshop-simulator/` | `npm install && npm run dev` | 5200 |
-| Original AI infrastructure simulator | `original-simulator/` | `npm install && npm run dev` | 5173 |
+## Run it
 
-## 1. FLUX — AI Workload Planner (`index.html`)
+```bash
+python3 -m http.server 8902     # then open http://127.0.0.1:8902/
+```
 
-A Digital Realty Solution Architecture tool: single self-contained HTML
-file, no build step. Configure architecture (NVIDIA / AMD / Cerebras
-CS-3 pods / SambaNova SN40L racks), model, DLR interconnection (Cross
-Connect / Metro Connect / ServiceFabric), switching, routing, storage and
-CPU — with KVA persistent KV-cache modelling on the storage layer
-(calibrated to published FSI benchmarks: 110k-token TTFT 54.5 s → 4.0 s)
-and quadratic-attention prefill. Includes a NeoCloud GPUaaS benchmark for
-every plan. Economics are an illustrative model, not quotes.
+…or simply double-click `index.html`.
 
-## 2. Sharp(er) Enterprises workshop simulator (`workshop-simulator/`)
+## What FLUX does
 
-The full workshop app (React + Vite + TypeScript, 72 tests) for the
-AuraCopilot scenario — Llama 3.3 70B at native FP16 across Ashburn,
-Frankfurt and Tokyo hubs:
+You configure a deployment layer by layer; FLUX computes feasibility,
+performance, power and economics live, benchmarks the same deployment
+against renting it from a NeoCloud, compares every architecture on the
+same workload, and recommends the next efficiency to take. Two tabs:
 
-- **Workshop tracks A–E** — the judges' registry with live simulation,
-  HPE XD670 / Dell / SambaNova / Cerebras reference architectures, and a
-  watts-to-tokens journey with a TTFT/token-value optimiser.
-- **Explainer** — seven choices, three options each, built for live
-  sessions of 10–50 people.
-- **Sharp(er) Enterprises — Token Consultant** — architects build their
-  constraints from blank boxes and generate a balanced pitch brief.
-- **Token Alchemy Challenge** — the scored evaluation terminal: business
-  cases (Life Sciences drug discovery, FSI fraud detection, and more),
-  rack density, storage layer with the WEKA/Alletra judges' note, the
-  Track A 5/3/1 rubric, coefficient breakdowns, dollar ROI and a
-  five-team leaderboard.
-- **Simple view / Full stack explorer** — prompt-to-token teaching and
-  the complete tunable physics sandbox (including persistent KV-cache
-  context reuse).
+1. **Comprehensive Planner** — the full configuration surface.
+2. **Prompt → Token → Value** — an animated journey of a single prompt
+   through three DLR sites (LHR19 / ACC4 / SIN10) for demos.
 
-Also includes `sharepoint/` — self-contained single-file builds
-(`.html`/`.aspx`) for hosting on SharePoint, plus a workshop launcher.
+## The configuration surface
 
-## 3. Original AI infrastructure simulator (`original-simulator/`)
+### Workload & model
 
-The general-purpose ancestor of the workshop app: model/silicon/network/
-cooling/datacenter catalogs, roofline simulation engine, animated
-prompt-journey, cost-per-token breakdowns and deep-dive explainers.
+- **Use cases** — presets that configure everything for a realistic
+  scenario, all editable afterwards: Life Science drug discovery, FSI
+  fraud detection, network-backbone inference, robotics, computer
+  vision, manufacturing, self-driving fleet support, a 10 MW+ regional
+  training hub, and NeoCloud GPUaaS.
+- **Architecture** — NVIDIA (H100, H200, GH200, B100, B200, B300, GB300
+  NVL72, DGX Spark, RTX PRO 6000, Vera Rubin NVL144), AMD (MI300X,
+  MI325X, MI355X, Helios rack), and alternative architectures as sold at
+  market: **Cerebras CS-3** (4-system wafer-scale pods, ~2,000 tok/s per
+  stream, 44 GB on-wafer SRAM each) and **SambaNova SN40L** (DataScale
+  racks, HBM + DDR tiered memory). VRAM variants per platform.
+- **Workload** — inference (context window × concurrent users) or
+  training (node count), against a model catalog spanning cloud frontier
+  estimates (labelled), emerging models, open weights (Kimi K2,
+  DeepSeek-V3, Llama, Qwen, Mistral…) and small/edge models. MoE models
+  prefill on active parameters; VRAM holds total weights.
+- **KV cache precision** — FP16 (0.330 MB/token) or FP8 (0.165 MB/token).
 
-## Provenance & accuracy notes
+### Connectivity, switching & routing
 
-Open-model and vendor-datasheet figures are used where published;
-proprietary model sizes, alternative-architecture pricing (Cerebras,
-SambaNova) and street prices are labelled estimates. Workshop registry
-values follow the judges' workbook; known discrepancies (e.g. the leader
-guide's 988 vs 990 GB workspace) are documented in tests. All economics
-are illustrative for planning and teaching, not quotes.
+- **DLR interconnection** — Cross Connect (~0.5 ms), Metro Connect
+  (~2.5 ms waves), ServiceFabric (~8 ms SDN, global), each with its real
+  port-speed menu (10G → 800G; 800G ServiceFabric flagged pre-GA).
+- **Switching** — Quantum-X800 InfiniBand, Spectrum-X, Cisco Silicon
+  One, Cornelis Omni-Path, standard Ethernet — as east-west efficiency.
+- **Routing** — adaptive congestion-aware, standard L3, static ECMP.
+
+### Storage & CPU
+
+- **Platforms** — local NVMe, Everpure (all-flash), NetApp (AFF /
+  StorageGRID), in object or file mode.
+- **KV-cache offload / tiering** — tier cold KV to flash for +25–30%
+  effective session budget.
+- **KVA — persistent KV cache (prefix reuse)** — the storage layer as a
+  performance tier: repeated contexts stream their precomputed KV
+  tensors from flash instead of recomputing prefill. Off / 40% / 80%
+  cache-hit profiles.
+- **GPU-adjacent storage (GPUDirect)** — direct NVMe→GPU path: −10%
+  prefill, doubles the KVA streaming path, +3% training throughput.
+- **CPU platform** — standard EPYC/Xeon hosts (8 ms dispatch) or
+  Blackcore overclocked (3 ms, +12% compute cost).
+
+## The model behind the numbers
+
+- **Sessions per node** = (node VRAM − model weights) ÷ (context ×
+  MB/token), optionally boosted by KV offload. Weights = params × 2
+  bytes (FP16).
+- **Prefill** = linear term (2 FLOPs × active params per token) **plus a
+  quadratic attention term** (≈4 × layers × d_model × ctx², calibrated
+  to Llama-70B) — the reason a 110k-token prompt takes ~55 s on a single
+  H100.
+- **KVA warm path** = prompt-KV bytes streamed at ~6 GB/s per GPU shard
+  in parallel (deserialize-bound; local NVMe ≈ NFS within ~5%; ×2 with
+  GPUDirect) + 90 ms management — never slower than recompute. TTFT is
+  blended by the cache-hit rate and reported warm/cold. Calibrated to
+  published FSI benchmarks: 110k-token TTFT 54.5 s → 4.0 s (13.6×), with
+  the ~10k-token inflection point preserved.
+- **TTFT** = interconnect RTT + CPU dispatch + prefill.
+- **Economics** = compute ($/GPU-hr own-cost × hosts) + colo power
+  ($220/kW-mo at PUE 1.3) + interconnect (per product & port speed) +
+  storage services, at 35% utilisation → cost per 1M tokens vs a $3.50
+  market reference; the spread is shown as customer value, and the DLR
+  share (power + interconnect + storage colo) as value to DLR.
+- **Benchmarks** — every plan is compared against renting the same nodes
+  from a NeoCloud (illustrative list rates + 10% ancillary) and, for
+  training, hyperscaler on-demand/committed rates.
+- **Recommendations** — the engine suggests the next efficiency: FP8 KV,
+  KV offload, KVA (with the inflection-point warning when it will not
+  pay), GPUDirect, Blackcore CPUs, cheaper architectures on the same
+  workload, node consolidation, and use-case-specific guidance.
+
+## Accuracy & disclaimers
+
+Vendor-datasheet figures are used where published. Cloud frontier model
+sizes, alternative-architecture pricing (Cerebras, SambaNova) and rental
+rates are labelled planning estimates. All performance and dollar figures
+are an illustrative model for planning and demos — not quotes.
