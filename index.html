@@ -186,7 +186,7 @@
       <section class="panel">
         <div class="toolbar">
           <button id="tabPlan" class="tab-active">1 &middot; Comprehensive Planner</button>
-          <button id="tabDemo">2 &middot; Prompt &rarr; Token &rarr; Value (LHR19 / ACC4 / SIN10)</button>
+          <button id="tabDemo">2 &middot; Prompt &rarr; Token &rarr; Value (LHR19 / ACC4)</button>
         </div>
 
         <!-- ============================ TAB 1: PLANNER ============================ -->
@@ -374,12 +374,41 @@
 
         <!-- ============================ TAB 2: SIMPLE DEMO ============================ -->
         <div id="demoView" class="view" hidden>
+          <div class="journey">
+            <div class="toolbar">
+              <button id="demoGo" class="go">Go — run the journey</button>
+              <button id="demoReset" disabled>Reset</button>
+              <span id="demoStatus" class="pill">Idle</span>
+              <span id="demoClock" class="muted"></span>
+            </div>
+
+            <ol class="stages" id="stageList"></ol>
+
+            <div class="fillrow">
+              <span class="muted">Journey progress</span>
+              <span id="demoFill" class="muted"></span>
+            </div>
+            <div class="meter"><div id="demoBar" class="meter-bar"></div></div>
+
+            <div class="stats stats-5" style="margin-top: 0.75rem">
+              <div class="stat"><span id="dTokens" class="stat-value">0</span><span class="muted">Answer tokens delivered (of 528,000)</span></div>
+              <div class="stat"><span id="dPrefill" class="stat-value">0 / 1,000</span><span class="muted">Prompts prefilled</span></div>
+              <div class="stat"><span id="dStreams" class="stat-value">0</span><span class="muted">Active streams (96 tok/s each)</span></div>
+              <div class="stat"><span id="dKv" class="stat-value">0 GB</span><span class="muted" id="dKvBudget">KV in use</span></div>
+              <div class="stat"><span id="dCost" class="stat-value">$0.00</span><span class="muted">Serving cost accrued</span></div>
+            </div>
+
+            <div id="demoValue" class="notice" hidden></div>
+          </div>
+
           <div class="notice">
-            <strong>Fixed demo:</strong> B300 (8-GPU nodes) at three Digital Realty sites —
-            <strong>LHR19</strong> London &middot; <strong>ACC4</strong> Ashburn &middot;
-            <strong>SIN10</strong> Singapore. 1,000 concurrent users, 8,000-token context,
-            optimised KV cache (FP8, 0.165 MB/token), standard EPYC hosts (8 ms dispatch),
-            connected via ServiceFabric.
+            <strong>Fixed demo — optimised for lowest TTFT and maximum customer value:</strong>
+            B300 (8-GPU nodes) at two Digital Realty sites — <strong>ACC4</strong> Ashburn
+            &middot; <strong>LHR19</strong> London. 1,000 concurrent users, 8,000-token
+            context, FP8 KV cache (0.165 MB/token), Blackcore overclocked hosts (3 ms
+            dispatch), GPUDirect storage (&minus;10% prefill), one node per site via
+            ServiceFabric. Two sites instead of three cuts a third of the fixed cost while
+            two nodes still hold 3&times; the peak load — that is the value optimisation.
           </div>
 
           <h4 class="sec">The prompt — one typical user</h4>
@@ -398,65 +427,23 @@
 
           <h4 class="sec">Steady-state economics (arrivals spread through the day)</h4>
           <div id="demoStats" class="stats"></div>
-          <div class="notice" style="border-left-color: #555555">
-            <strong>Why $1.04/1M beats the $3.50 market reference:</strong> $1.04 is the direct
-            infrastructure cost of this 3-site design (compute + colo + fabric at 35%
-            utilisation); the market figure is a blended retail API price carrying provider
-            margin and idle-fleet overhead. The $2.46 spread per 1M tokens is the advantage this
-            deployment design creates — captured as customer margin, or passed on as price. It is
-            the quantity the DLR Solution Architecture team tunes with silicon choice, KV
-            optimisation and interconnect placement.
-          </div>
+          <div class="notice" id="whyBox" style="border-left-color: #555555"></div>
 
           <h4 class="sec">How the customer banks additional profit — vs a CSP for the same workload</h4>
           <div class="notice" id="profitWalk" style="border-left-color: #555555"></div>
           <div class="tablewrap"><table class="mini" id="cspTable"></table></div>
           <p class="muted" id="cspNote"></p>
 
-          <div class="journey">
-            <div class="toolbar">
-              <button id="demoGo" class="go">Go — run the journey</button>
-              <button id="demoReset" disabled>Reset</button>
-              <span id="demoStatus" class="pill">Idle</span>
-              <span id="demoClock" class="muted"></span>
-            </div>
-
-            <ol class="stages" id="stageList">
-              <li>1,000 users hit enter on a similar prompt at the same moment (8,000-token context each)</li>
-              <li>ServiceFabric routes each prompt to the nearest site (ACC4 7 ms &middot; LHR19 9 ms &middot; SIN10 12 ms)</li>
-              <li>Prefill wave — each B300 node admits &asymp;14.3 sessions/s (&asymp;114,000 prefill tok/s &divide; 8,000-token contexts); first token at 85 ms</li>
-              <li>Streaming ramp — each session streams at 96 tok/s as its prefill completes (&asymp;236 concurrent streams at peak)</li>
-              <li>Drain — the last queued user (ACC4) starts at &asymp;28 s; all 528,000 answer tokens land by &asymp;33.5 s</li>
-              <li>Value delivered — 1,000 one-page answers become customer &amp; DLR value</li>
-            </ol>
-
-            <div class="fillrow">
-              <span class="muted">Journey progress</span>
-              <span id="demoFill" class="muted"></span>
-            </div>
-            <div class="meter"><div id="demoBar" class="meter-bar"></div></div>
-
-            <div class="stats stats-5" style="margin-top: 0.75rem">
-              <div class="stat"><span id="dTokens" class="stat-value">0</span><span class="muted">Answer tokens delivered (of 528,000)</span></div>
-              <div class="stat"><span id="dPrefill" class="stat-value">0 / 1,000</span><span class="muted">Prompts prefilled</span></div>
-              <div class="stat"><span id="dStreams" class="stat-value">0</span><span class="muted">Active streams (96 tok/s each)</span></div>
-              <div class="stat"><span id="dKv" class="stat-value">0 GB</span><span class="muted">KV in use (budget 6,492 GB)</span></div>
-              <div class="stat"><span id="dCost" class="stat-value">$0.00</span><span class="muted">Serving cost accrued</span></div>
-            </div>
-
-            <div id="demoValue" class="notice" hidden></div>
-          </div>
-
-          <p class="muted" style="margin-top: 0.9rem">
+<p class="muted" style="margin-top: 0.9rem">
             Same maths as the planner: B300 node = 2,304 GB, Llama 3.3 70B weights = 140 GB, KV
-            budget 2,164 GB, FP8 KV @ 8k = 1.32 GB/user &rarr; 1,639 users max per node; one node
-            per site comfortably serves the 1,000-user global load. TTFT = fabric RTT + 8 ms CPU
-            dispatch + prefill, where prefill is compute-derived: 8 &times; 5 PFLOPS FP8 &times;
-            40% MFU &divide; 140 GFLOPs/token (70B dense) &asymp; 114,000 tok/s &rarr; 70 ms for
-            8,000 tokens. Burst maths: 114,000 &divide; 8,000 = &asymp;14.3 sessions admitted per
-            second per node; answer = 528 tokens at 96 tok/s = 5.5 s per user. The simulation
-            ignores prefill/decode contention (chunked-prefill schedulers interleave them).
-            Figures illustrative.
+            budget 2,164 GB/node, FP8 KV @ 8k = 1.32 GB/user &rarr; 1,639 users max per node; one
+            node per site holds the 1,000-user global load three times over. TTFT = fabric RTT +
+            3 ms Blackcore dispatch + prefill, where prefill is compute-derived: 8 &times; 5
+            PFLOPS FP8 &times; 40% MFU &divide; 140 GFLOPs/token &asymp; 114,000 tok/s &rarr; 70
+            ms for 8,000 tokens, &minus;10% with GPUDirect &rarr; 63 ms. Burst maths: 114,000
+            &divide; 8,000 &asymp; 14.3 sessions admitted per second per node; answer = 528
+            tokens at 96 tok/s = 5.5 s per user. The simulation ignores prefill/decode
+            contention (chunked-prefill schedulers interleave them). Figures illustrative.
           </p>
         </div>
       </section>
@@ -1165,11 +1152,14 @@
 
       // ============================ Simple demo (tab 2) =========================
       const SITES = [
-        { code: "ACC4", city: "Ashburn", rtt: 7, users: 400 },
-        { code: "LHR19", city: "London", rtt: 9, users: 350 },
-        { code: "SIN10", city: "Singapore", rtt: 12, users: 250 },
+        { code: "ACC4", city: "Ashburn", rtt: 7, users: 550 },
+        { code: "LHR19", city: "London", rtt: 9, users: 450 },
       ];
-      const DEMO_CPU_MS = 8; // standard host CPU dispatch (EPYC/Xeon)
+      // TTFT-and-value optimised fixed config: Blackcore hosts + GPUDirect.
+      const DEMO_CPU_MS = 3; // Blackcore overclocked dispatch
+      const DEMO_CPU_COST = 1.12; // Blackcore compute premium
+      const DEMO_CPU_KW = 1.08;
+      const DEMO_GPUADJ = 0.9; // GPUDirect: -10% prefill
       const DEMO = (() => {
         const g = GPUS.find((x) => x.id === "b300");
         const nodeGB = defNodeGB(g); // 2,304
@@ -1179,10 +1169,10 @@
         const nodes = SITES.length; // one per site
         const users = 1000;
         const prefTokS = prefillTokS(g, "llama70"); // ≈114,286 tok/s (8 × 5 PF FP8 × 40% MFU ÷ 140 GFLOP/tok)
-        const prefillMs = (8000 / prefTokS) * 1000; // 70 ms
+        const prefillMs = (8000 / prefTokS) * 1000 * DEMO_GPUADJ; // 63 ms with GPUDirect
         const tokensMo = users * g.decode * 3600 * HRS_MO * UTIL;
-        const compute = nodes * g.gpusPerNode * g.hr * HRS_MO;
-        const powerKW = nodes * g.gpusPerNode * g.kw * PUE;
+        const compute = nodes * g.gpusPerNode * g.hr * DEMO_CPU_COST * HRS_MO;
+        const powerKW = nodes * g.gpusPerNode * g.kw * DEMO_CPU_KW * PUE;
         const colo = powerKW * COLO_KW_MO;
         const inter = CONNS.fabric.mo * 2 * SITES.length;
         const dlr = colo + inter;
@@ -1190,7 +1180,7 @@
         const per1M = cost / (tokensMo / 1e6);
         const valueMo = (tokensMo / 1e6) * MARKET_PER_1M - cost;
         const aggTokS = users * g.decode;
-        return { g, kvUser, budget, perNode, nodes, users, prefTokS, prefillMs, tokensMo, cost, per1M, dlr, valueMo, aggTokS };
+        return { g, kvUser, budget, perNode, nodes, users, prefTokS, prefillMs, tokensMo, compute, colo, inter, cost, per1M, dlr, valueMo, aggTokS, powerKW };
       })();
 
       // Synchronized burst: all users submit a similar 8k-context prompt at t=0.
@@ -1243,7 +1233,7 @@
           "k prefill tok/s &divide; 8,000-token contexts), " +
           "so the wave takes " + nf1(Math.min(...BURST.sites.map((s) => s.wave))) + "&ndash;" +
           nf1(Math.max(...BURST.sites.map((s) => s.wave))) + " s per site while KV in use peaks at only ~" +
-          nf(BURST.peakKv) + " GB of the " + nf(DEMO.budget * 3) + " GB budget (&asymp;" +
+          nf(BURST.peakKv) + " GB of the " + nf(DEMO.budget * SITES.length) + " GB budget (&asymp;" +
           nf(BURST.peakStreams) + " concurrent streams). Arrivals spread through the day hit the steady-state figures below; " +
           "for true synchronized bursts, add nodes for prefill headroom or enable chunked prefill.";
       }
@@ -1252,19 +1242,19 @@
       function renderProfit() {
         const tokM = DEMO.tokensMo / 1e6; // millions of tokens per month
         const rev = tokM * MARKET_PER_1M;
-        const compute = DEMO.nodes * DEMO.g.gpusPerNode * DEMO.g.hr * HRS_MO;
-        const powerKW = DEMO.nodes * DEMO.g.gpusPerNode * DEMO.g.kw * PUE;
-        const colo = powerKW * COLO_KW_MO;
-        const fabric = CONNS.fabric.mo * 2 * SITES.length;
+        const compute = DEMO.compute;
+        const powerKW = DEMO.powerKW;
+        const colo = DEMO.colo;
+        const fabric = DEMO.inter;
         const profitColo = rev - DEMO.cost;
         const answerMarket = (BURST.answerTok / 1e6) * MARKET_PER_1M;
         $("profitWalk").innerHTML =
           "<strong>Monthly P&amp;L walk (at 35% utilisation):</strong> " +
           nf(tokM) + "M tokens sold at the $" + MARKET_PER_1M.toFixed(2) + "/1M market rate = <strong>" +
           usd(rev) + "/mo revenue</strong>. Costs: compute " + usd(compute) + " (" + DEMO.nodes +
-          " nodes &times; 8 &times; " + usd2(DEMO.g.hr) + "/GPU-hr &times; 730 h) + colo power " +
+          " nodes &times; 8 &times; " + usd2(DEMO.g.hr) + "/GPU-hr &times; 1.12 Blackcore &times; 730 h) + colo power " +
           usd(colo) + " (" + nf1(powerKW) + " kW &times; $" + COLO_KW_MO + "/kW-mo) + ServiceFabric " +
-          usd(fabric) + " (3 sites &times; 2 &times; $" + CONNS.fabric.mo + ") = <strong>" + usd(DEMO.cost) +
+          usd(fabric) + " (" + SITES.length + " sites &times; 2 &times; $" + CONNS.fabric.mo + ") = <strong>" + usd(DEMO.cost) +
           "/mo</strong> (" + usd2(DEMO.per1M) + "/1M). <strong>Gross profit: " + usd(profitColo) +
           "/mo — a " + Math.round((profitColo / rev) * 100) + "% margin.</strong> Per answer: a " +
           nf(BURST.answerTok) + "-token answer costs $" + BURST.costPerAnswer.toFixed(4) +
@@ -1273,7 +1263,7 @@
 
         const options = [
           { name: "DLR colo — this design", cost: DEMO.cost, self: true },
-          { name: "NeoCloud GPUaaS (rent same 3 nodes)", cost: gpuaasMo(DEMO.g, DEMO.nodes) },
+          { name: "NeoCloud GPUaaS (rent same " + DEMO.nodes + " nodes)", cost: gpuaasMo(DEMO.g, DEMO.nodes) },
           { name: "CSP IaaS — 1-yr committed", cost: DEMO.nodes * DEMO.g.gpusPerNode * CSP_RES_HR * HRS_MO },
           { name: "CSP IaaS — on-demand", cost: DEMO.nodes * DEMO.g.gpusPerNode * CSP_OD_HR * HRS_MO },
           { name: "CSP serverless API (buy tokens at market)", cost: rev },
@@ -1290,7 +1280,7 @@
         });
         $("cspTable").innerHTML = html;
         $("cspNote").textContent =
-          "Same workload (88B tokens/mo), same revenue line, only the infrastructure changes. " +
+          "Same workload (" + nf(DEMO.tokensMo / 1e9) + "B tokens/mo), same revenue line, only the infrastructure changes. " +
           "Assumptions: CSP B300-class instances at $" + CSP_OD_HR + "/GPU-hr on-demand or $" + CSP_RES_HR +
           "/GPU-hr 1-yr committed; NeoCloud at $" + RENT.b300 + "/GPU-hr + 10% ancillary; serverless API at the " +
           "$3.50/1M market rate (the provider keeps the entire spread). CSP figures exclude egress, which would " +
@@ -1313,8 +1303,24 @@
         $("demoStats").innerHTML =
           stat(usd2(DEMO.per1M), "Token cost / 1M") +
           stat("$" + MARKET_PER_1M.toFixed(2), "Market ref / 1M") +
-          stat(usd(DEMO.dlr) + "/mo", "Value to DLR (3 sites)") +
+          stat(usd(DEMO.dlr) + "/mo", "Value to DLR (" + SITES.length + " sites)") +
           stat(usd(DEMO.valueMo) + "/mo", "Customer value (margin)");
+
+        const slowest = BURST.sites.reduce((a, x) => (x.wave > a.wave ? x : a), BURST.sites[0]);
+        const bestTtftD = Math.min(...SITES.map((x) => x.rtt)) + DEMO_CPU_MS + DEMO.prefillMs;
+        $("stageList").innerHTML =
+          "<li>" + nf(DEMO.users) + " users hit enter on a similar prompt at the same moment (8,000-token context each)</li>" +
+          "<li>ServiceFabric routes each prompt to the nearest site (" + SITES.map((x) => x.code + " " + x.rtt + " ms").join(" \u00b7 ") + ")</li>" +
+          "<li>Prefill wave \u2014 each B300 node admits \u2248" + nf1(BURST.rate) + " sessions/s (\u2248" + nf(Math.round(DEMO.prefTokS / 1000)) + "k prefill tok/s \u00f7 8,000-token contexts); first token at " + nf1(bestTtftD) + " ms (Blackcore + GPUDirect)</li>" +
+          "<li>Streaming ramp \u2014 each session streams at " + DEMO.g.decode + " tok/s as its prefill completes (\u2248" + nf(Math.round(BURST.peakStreams)) + " concurrent streams at peak)</li>" +
+          "<li>Drain \u2014 the last queued user (" + slowest.code + ") starts at \u2248" + nf1(slowest.wave) + " s; all " + nf(BURST.totalOut) + " answer tokens land by \u2248" + nf1(BURST.maxDone) + " s</li>" +
+          "<li>Value delivered \u2014 " + nf(DEMO.users) + " one-page answers become customer &amp; DLR value</li>";
+        $("dKvBudget").textContent = "KV in use (budget " + nf(DEMO.budget * SITES.length) + " GB)";
+        $("whyBox").innerHTML =
+          "<strong>Why " + usd2(DEMO.per1M) + "/1M beats the $" + MARKET_PER_1M.toFixed(2) + " market reference:</strong> " +
+          usd2(DEMO.per1M) + " is the direct infrastructure cost of this " + SITES.length + "-site design (compute + colo + fabric at " +
+          Math.round(UTIL * 100) + "% utilisation); the market figure is a blended retail API price carrying provider margin and idle-fleet overhead. The " +
+          usd2(MARKET_PER_1M - DEMO.per1M) + " spread per 1M tokens is the advantage this deployment design creates \u2014 captured as customer margin, or passed on as price. It is the quantity the DLR Solution Architecture team tunes with silicon choice, KV optimisation and interconnect placement.";
       }
 
       const SIM_SPEED = 6; // 1 real second = 6 simulated seconds
@@ -1414,21 +1420,43 @@
             $("dKv").textContent = "0 GB";
             $("dCost").textContent = usd2(BURST.costBurst);
             const marketEq = (BURST.totalOut / 1e6) * MARKET_PER_1M;
+            const bestT = Math.min(...SITES.map((x) => x.rtt)) + DEMO_CPU_MS + DEMO.prefillMs;
+            const slowestS = BURST.sites.reduce((a, x) => (x.wave > a.wave ? x : a), BURST.sites[0]);
+            let proc =
+              '<table class="mini" style="margin-top:0.6rem"><tr><th>Site</th><th>Users</th><th>Context prefilled</th><th>KV written</th><th>Prefill wave</th><th>First TTFT</th><th>Answer tokens</th><th>Done by</th><th>Serving cost</th></tr>';
+            BURST.sites.forEach((x) => {
+              proc +=
+                "<tr><td>" + x.code + " \u00b7 " + x.city + "</td><td>" + nf(x.users) + "</td><td>" +
+                (x.ctxTok / 1e6).toFixed(1) + "M tok</td><td>" + nf(x.kvWrite) + " GB</td><td>" +
+                nf1(x.wave) + " s</td><td>" + nf1(x.rtt + DEMO_CPU_MS + DEMO.prefillMs) + " ms</td><td>" +
+                nf(x.outTok) + "</td><td>" + nf1(x.done) + " s</td><td>" + usd2((x.outTok / 1e6) * DEMO.per1M) + "</td></tr>";
+            });
+            proc +=
+              '<tr class="sel"><td>Total</td><td>' + nf(DEMO.users) + "</td><td>" +
+              ((DEMO.users * 8000) / 1e6).toFixed(1) + "M tok</td><td>" + nf(DEMO.users * DEMO.kvUser) +
+              " GB</td><td>&mdash;</td><td>" + nf1(bestT) + " ms</td><td>" + nf(BURST.totalOut) +
+              "</td><td>" + nf1(BURST.maxDone) + " s</td><td>" + usd2(BURST.costBurst) + "</td></tr></table>" +
+              '<table class="mini" style="margin-top:0.6rem"><tr><th colspan="2">Complete processing values</th></tr>' +
+              "<tr><td>Peak concurrent streams / KV in use</td><td>" + nf(Math.round(BURST.peakStreams)) +
+              " streams \u00b7 " + nf(BURST.peakKv) + " GB of " + nf(DEMO.budget * SITES.length) + " GB</td></tr>" +
+              "<tr><td>Aggregate decode rate</td><td>" + nf(DEMO.aggTokS) + " tok/s</td></tr>" +
+              "<tr><td>Power envelope (" + DEMO.nodes + " nodes, PUE " + PUE + ")</td><td>" + nf1(DEMO.powerKW) + " kW</td></tr>" +
+              "<tr><td>Cost per answer / market value per answer</td><td>$" + BURST.costPerAnswer.toFixed(4) +
+              " / $" + ((BURST.answerTok / 1e6) * MARKET_PER_1M).toFixed(4) + "</td></tr>" +
+              "<tr><td>Steady-state volume &amp; unit cost</td><td>" + nf(DEMO.tokensMo / 1e9) + "B tok/mo at " +
+              usd2(DEMO.per1M) + "/1M (market $" + MARKET_PER_1M.toFixed(2) + ")</td></tr>" +
+              "<tr><td>Customer value (margin)</td><td>" + usd(DEMO.valueMo) + "/mo</td></tr>" +
+              "<tr><td>Value to DLR (colo + fabric, " + SITES.length + " sites)</td><td>" + usd(DEMO.dlr) + "/mo</td></tr></table>";
             $("demoValue").hidden = false;
             $("demoValue").innerHTML =
-              "<strong>Burst complete — 1,000 similar prompts answered.</strong> " +
+              "<strong>Burst complete — " + nf(DEMO.users) + " similar prompts answered.</strong> " +
               (DEMO.users * 8000 / 1e6).toFixed(1) + "M context tokens were prefilled and " +
               nf(BURST.totalOut) + " answer tokens streamed in &asymp;" + nf1(BURST.maxDone) +
-              " s. The first answer began at " + nf1(Math.min(...BURST.sites.map((s) => s.rtt)) + DEMO_CPU_MS + DEMO.prefillMs) +
-              " ms; the last queued user (ACC4) waited &asymp;" +
-              nf1(Math.max(...BURST.sites.map((s) => s.wave))) +
-              " s, because a synchronized burst is prefill-bound (&asymp;" + nf1(BURST.rate) +
-              " sessions/s per node) rather than memory-bound (KV peaked at ~" + nf(BURST.peakKv) +
-              " GB of " + nf(DEMO.budget * 3) + " GB). Serving the entire burst cost &asymp;" +
-              usd2(BURST.costBurst) + " (vs " + usd2(marketEq) +
-              " market equivalent). Spread through the day at steady state, the same 3 nodes sustain 96,000 tok/s — " +
-              nf(DEMO.tokensMo / 1e9) + "B tokens and " + usd(DEMO.valueMo) +
-              " customer margin per month, returning " + usd(DEMO.dlr) + "/mo to DLR.";
+              " s. First answer at " + nf1(bestT) + " ms (Blackcore dispatch + GPUDirect prefill); the last queued user (" +
+              slowestS.code + ") waited &asymp;" + nf1(slowestS.wave) +
+              " s — a synchronized burst is prefill-bound (&asymp;" + nf1(BURST.rate) +
+              " sessions/s per node), not memory-bound. Serving the burst cost &asymp;" +
+              usd2(BURST.costBurst) + " vs " + usd2(marketEq) + " market equivalent." + proc;
             $("demoGo").disabled = false;
             $("demoGo").textContent = "Go — run the journey";
             $("demoReset").disabled = false;
