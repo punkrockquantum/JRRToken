@@ -1,0 +1,1525 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FLUX — AI Workload Planner</title>
+    <style>
+      /* Monochrome (black & white) theme. */
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #000000;
+        color: #f5f5f5;
+      }
+      header { padding: 1.25rem 1.5rem; border-bottom: 1px solid #333333; }
+      h1 { margin: 0 0 0.35rem; font-size: 1.4rem; letter-spacing: 0.02em; }
+      main { padding: 1.25rem 1.5rem; max-width: 1220px; }
+      .panel {
+        background: #0d0d0d;
+        border: 1px solid #333333;
+        border-radius: 10px;
+        padding: 1rem 1.25rem;
+      }
+      button {
+        border-radius: 8px;
+        border: 1px solid #555555;
+        color: #f5f5f5;
+        background: #1a1a1a;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 0.45rem 0.9rem;
+      }
+      button:hover { background: #2a2a2a; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .muted { color: #a3a3a3; font-size: 0.9rem; }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.75rem;
+      }
+      .tab-active { background: #ffffff; color: #000000; border-color: #ffffff; }
+      .tab-active:hover { background: #e5e5e5; }
+      .view { margin-top: 0.5rem; }
+      h4.sec {
+        margin: 0.9rem 0 0.3rem;
+        font-size: 0.98rem;
+        color: #f5f5f5;
+      }
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+      }
+      .field { display: flex; flex-direction: column; gap: 0.25rem; }
+      input[type="number"], select {
+        border-radius: 8px;
+        border: 1px solid #555555;
+        background: #050505;
+        color: #f5f5f5;
+        padding: 0.5rem 0.6rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        width: 100%;
+      }
+      select:disabled { opacity: 0.4; }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin: 0.25rem 0 0.75rem;
+      }
+      .stats-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .stats-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+      .prompt-quote {
+        border: 1px solid #333333;
+        border-left: 3px solid #ffffff;
+        border-radius: 8px;
+        background: #050505;
+        padding: 0.7rem 0.9rem;
+        font-style: italic;
+        line-height: 1.5;
+        margin: 0.25rem 0 0.75rem;
+      }
+      .stat {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        background: #050505;
+        border: 1px solid #333333;
+        border-radius: 8px;
+        padding: 0.6rem 0.75rem;
+      }
+      .stat-value { font-size: 1.35rem; font-weight: 700; color: #ffffff; }
+      .notice {
+        margin: 0.25rem 0 0.75rem;
+        border: 1px solid #555555;
+        border-left: 3px solid #ffffff;
+        background: #0d0d0d;
+        border-radius: 8px;
+        padding: 0.6rem 0.85rem;
+        line-height: 1.45;
+      }
+      .notice.over { background: #ffffff; color: #000000; border-color: #ffffff; }
+      table.mini {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+      }
+      table.mini th, table.mini td {
+        border: 1px solid #333333;
+        padding: 0.32rem 0.45rem;
+        text-align: left;
+        white-space: nowrap;
+      }
+      table.mini th:nth-child(n + 3), table.mini td:nth-child(n + 3) { text-align: right; }
+      tr.sel td { background: rgba(255, 255, 255, 0.1); font-weight: 700; }
+      tr.dim td { opacity: 0.45; }
+      .tablewrap { overflow-x: auto; }
+      ul.recs { margin: 0.25rem 0 0; padding-left: 1.1rem; display: grid; gap: 0.45rem; }
+      ul.recs li { line-height: 1.45; }
+      .go { background: #ffffff; color: #000000; border-color: #ffffff; }
+      .go:hover { background: #e5e5e5; }
+      .pill {
+        border: 1px solid #555555;
+        border-radius: 9999px;
+        padding: 0.15rem 0.6rem;
+        font-size: 0.8rem;
+        color: #a3a3a3;
+      }
+      .pill.live { color: #ffffff; border-color: #ffffff; }
+      .pill.done { color: #000000; background: #ffffff; border-color: #ffffff; }
+      .meter {
+        height: 10px;
+        background: #1a1a1a;
+        border: 1px solid #333333;
+        border-radius: 9999px;
+        overflow: hidden;
+        margin-top: 0.35rem;
+      }
+      .meter-bar {
+        height: 100%;
+        width: 0%;
+        background: #ffffff;
+        transition: width 60ms linear;
+      }
+      .sites {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin: 0.5rem 0 0.75rem;
+      }
+      .site {
+        background: #050505;
+        border: 1px solid #333333;
+        border-radius: 8px;
+        padding: 0.7rem 0.8rem;
+      }
+      .site h5 { margin: 0 0 0.3rem; font-size: 1rem; }
+      .site .row { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.86rem; }
+      .journey { margin-top: 0.5rem; }
+      ol.stages { margin: 0.4rem 0 0; padding-left: 1.25rem; display: grid; gap: 0.35rem; }
+      ol.stages li { color: #666666; line-height: 1.4; }
+      ol.stages li.on { color: #ffffff; font-weight: 700; }
+      ol.stages li.passed { color: #c5c5c5; }
+      .fillrow { display: flex; justify-content: space-between; margin-top: 0.5rem; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>FLUX — AI Workload Planner</h1>
+      <p class="muted">
+        A Digital Realty Solution Architecture tool for configuring the advantages of carefully
+        designed data-centre deployments: architecture, model &amp; connectivity planning across
+        NVIDIA / AMD / Cerebras / SambaNova platforms with DLR interconnection (Cross Connect &middot; Metro Connect
+        &middot; ServiceFabric), switching, routing, storage and CPU options. Economics are an
+        illustrative model, not quotes.
+      </p>
+    </header>
+
+    <main>
+      <section class="panel">
+        <div class="toolbar">
+          <button id="tabPlan" class="tab-active">1 &middot; Comprehensive Planner</button>
+          <button id="tabDemo">2 &middot; Prompt &rarr; Token &rarr; Value (LHR19 / ACC4 / SIN10)</button>
+        </div>
+
+        <!-- ============================ TAB 1: PLANNER ============================ -->
+        <div id="planView" class="view">
+          <h4 class="sec">Workload &amp; model</h4>
+          <div class="controls">
+            <label class="field">
+              <span class="muted">Use case</span>
+              <select id="cfgUsecase"></select>
+            </label>
+            <label class="field">
+              <span class="muted">Architecture</span>
+              <select id="cfgGpu"></select>
+            </label>
+            <label class="field">
+              <span class="muted">VRAM per GPU</span>
+              <select id="cfgVram"></select>
+            </label>
+            <label class="field">
+              <span class="muted">Workload</span>
+              <select id="cfgWorkload">
+                <option value="inference">Inference</option>
+                <option value="training">Training</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">Model (by name)</span>
+              <select id="cfgModel"></select>
+            </label>
+            <label class="field">
+              <span class="muted">KV cache precision</span>
+              <select id="cfgKv">
+                <option value="fp16" selected>FP16 (0.330 MB/token)</option>
+                <option value="fp8">FP8 optimised (0.165 MB/token)</option>
+              </select>
+            </label>
+            <label class="field" id="fldCtx">
+              <span class="muted">Context window (tokens)</span>
+              <input id="cfgCtx" type="number" min="256" step="256" value="8000" />
+            </label>
+            <label class="field" id="fldUsers">
+              <span class="muted">Concurrent users</span>
+              <input id="cfgUsers" type="number" min="1" step="1" value="1000" />
+            </label>
+            <label class="field" id="fldNodes" hidden>
+              <span class="muted">Nodes</span>
+              <input id="cfgNodes" type="number" min="1" step="1" value="16" />
+            </label>
+          </div>
+          <p class="muted" id="ucNote" style="margin: -0.25rem 0 0.75rem"></p>
+
+          <h4 class="sec">Connectivity, switching &amp; routing</h4>
+          <div class="controls">
+            <label class="field">
+              <span class="muted">Interconnection (DLR)</span>
+              <select id="cfgConn">
+                <option value="cross">Cross Connect — passive fibre, ~0.5 ms</option>
+                <option value="metro">Metro Connect — metro waves, ~2.5 ms</option>
+                <option value="fabric" selected>ServiceFabric — SDN global, ~8 ms</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">Port speed</span>
+              <select id="cfgSpeed"></select>
+            </label>
+            <label class="field">
+              <span class="muted">Network switching</span>
+              <select id="cfgSwitch">
+                <option value="qx800" selected>NVIDIA Quantum-X800 InfiniBand (800G)</option>
+                <option value="spectrumx">NVIDIA Spectrum-X Ethernet (800G)</option>
+                <option value="cisco">Cisco Nexus 9800 / Silicon One (800G)</option>
+                <option value="cornelis">Cornelis CN5000 Omni-Path (400G)</option>
+                <option value="stdeth">Standard Ethernet (400G)</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">Routing</span>
+              <select id="cfgRoute">
+                <option value="adaptive" selected>Adaptive congestion-aware (RoCE/IB tuned)</option>
+                <option value="std">Standard L3 (BGP / EVPN)</option>
+                <option value="ecmp">Static ECMP</option>
+              </select>
+            </label>
+          </div>
+
+          <h4 class="sec">Storage &amp; CPU</h4>
+          <div class="controls">
+            <label class="field">
+              <span class="muted">Storage platform</span>
+              <select id="cfgStorVendor">
+                <option value="local">Local NVMe only</option>
+                <option value="everpure" selected>Everpure (all-flash)</option>
+                <option value="netapp">NetApp (AFF / StorageGRID)</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">Storage mode</span>
+              <select id="cfgStorMode">
+                <option value="object" selected>Object (S3-compatible)</option>
+                <option value="file">File / NAS</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">KV-cache offload / tiering</span>
+              <select id="cfgKvOff">
+                <option value="off" selected>Off</option>
+                <option value="on">On (tier cold KV to flash)</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">KVA — persistent KV cache (prefix reuse)</span>
+              <select id="cfgKva">
+                <option value="0" selected>Off</option>
+                <option value="40">On — moderate reuse (40% cache hits)</option>
+                <option value="80">On — high reuse (80% cache hits)</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">GPU-adjacent storage (GPUDirect)</span>
+              <select id="cfgGpuAdj">
+                <option value="off" selected>Off</option>
+                <option value="on">On (direct NVMe &rarr; GPU path)</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">CPU platform</span>
+              <select id="cfgCpu">
+                <option value="std" selected>Standard (AMD EPYC / Intel Xeon)</option>
+                <option value="oc">Overclocked — Blackcore</option>
+              </select>
+            </label>
+          </div>
+
+          <div id="planStats" class="stats"></div>
+          <div id="planNotice" class="notice"></div>
+          <div class="notice" style="border-left-color: #555555">
+            <strong>Why the token cost sits below the $3.50/1M market reference:</strong> the
+            figure modelled here is the direct infrastructure cost of serving — GPUs, colo power,
+            interconnect and storage at 35% utilisation. Market API prices are retail list prices
+            that also carry provider margin, R&amp;D, idle-fleet and multi-tenancy overhead. The
+            spread between the two is the efficiency headroom a carefully designed deployment
+            creates: right-sized silicon, KV-cache optimisation and DLR interconnect placement.
+            That spread is shown as &ldquo;customer value&rdquo; — margin the customer keeps, or
+            price advantage they can pass on. FLUX exists so the Digital Realty Solution
+            Architecture team can configure and quantify that advantage per deployment.
+          </div>
+
+          <h4 class="sec">Deployment plan</h4>
+          <div id="planText" class="notice" style="border-left-color: #555555"></div>
+
+          <h4 class="sec">Benchmark — same deployment rented from a NeoCloud (GPUaaS)</h4>
+          <div id="gpuaasBox" class="notice" style="border-left-color: #555555"></div>
+
+          <h4 class="sec">Architecture comparison — same workload on every platform</h4>
+          <div class="tablewrap"><table class="mini" id="cmpTable"></table></div>
+          <p class="muted" id="cmpCaption"></p>
+
+          <h4 class="sec">Recommended additional efficiencies</h4>
+          <ul class="recs" id="recList"></ul>
+
+          <p class="muted" style="margin-top: 0.9rem">
+            Model: KV cache FP16 = 0.330 MB/token (Track A), FP8 = 0.165 MB/token. Node KV budget =
+            node VRAM &minus; model weights (FP16, params &times; 2 bytes), optionally extended by
+            KV-cache offload to flash (+30% Everpure / +25% NetApp effective budget). TTFT =
+            interconnect RTT + CPU dispatch (8 ms standard, 3 ms Blackcore) + prefill (&minus;10%
+            with GPUDirect), where prefill tok/s = node FP8 PFLOPS &times; 40% MFU &divide; 2
+            &times; <em>active</em> params — MoE models prefill on active parameters only, VRAM
+            holds total weights. Training throughput = prefill rate &times; 0.30 (&asymp;3&times;
+            FLOPs/token for fwd+bwd), scaled by interconnect, switching and routing efficiency.
+            Prefill adds a quadratic attention term (\u22484 \u00d7 layers \u00d7 d_model \u00d7
+            ctx\u00b2, Llama-70B-calibrated) \u2014 the reason 100k-token prompts take ~a minute
+            on a single GPU. KVA persistent KV cache (external flash only): cache hits stream
+            prompt KV tensors at ~6 GB/s (deserialize-bound; \u00d72 with GPUDirect) + 90 ms
+            management instead of recomputing prefill \u2014 calibrated to published FSI
+            benchmarks (110k-token TTFT 54.5 s \u2192 4.0 s, 13.6\u00d7; local \u2248 NFS within
+            ~5%). Cerebras CS-3 and SambaNova SN40L are alternative architectures sold as whole
+            systems/racks; their $/hr, pod sizing and decode rates are market estimates.
+            Utilisation 35%, PUE 1.3, colo $220/kW-mo, token market reference $3.50 per
+            1M, decimal GB. NeoCloud GPUaaS benchmark uses illustrative on-demand list rates per
+            GPU-hr plus a 10% ancillary uplift (egress, storage, support) for the same node count.
+            Cloud frontier model sizes are undisclosed &mdash; planning estimates
+            only. All performance and $ figures are illustrative for planning demos.
+          </p>
+        </div>
+
+        <!-- ============================ TAB 2: SIMPLE DEMO ============================ -->
+        <div id="demoView" class="view" hidden>
+          <div class="notice">
+            <strong>Fixed demo:</strong> B300 (8-GPU nodes) at three Digital Realty sites —
+            <strong>LHR19</strong> London &middot; <strong>ACC4</strong> Ashburn &middot;
+            <strong>SIN10</strong> Singapore. 1,000 concurrent users, 8,000-token context,
+            optimised KV cache (FP8, 0.165 MB/token), standard EPYC hosts (8 ms dispatch),
+            connected via ServiceFabric.
+          </div>
+
+          <h4 class="sec">The prompt — one typical user</h4>
+          <div class="prompt-quote">
+            &ldquo;Here&rsquo;s our 12-page supplier agreement (attached). Summarise the key
+            commercial terms and flag the three biggest risks before my 09:00 review call &mdash;
+            keep it to one page.&rdquo;
+          </div>
+          <div class="stats" id="promptStats"></div>
+
+          <div class="sites" id="siteCards"></div>
+
+          <h4 class="sec">All 1,000 users send a similar prompt at the same moment</h4>
+          <div class="tablewrap"><table class="mini" id="burstTable"></table></div>
+          <div class="notice" id="burstInsight"></div>
+
+          <h4 class="sec">Steady-state economics (arrivals spread through the day)</h4>
+          <div id="demoStats" class="stats"></div>
+          <div class="notice" style="border-left-color: #555555">
+            <strong>Why $1.04/1M beats the $3.50 market reference:</strong> $1.04 is the direct
+            infrastructure cost of this 3-site design (compute + colo + fabric at 35%
+            utilisation); the market figure is a blended retail API price carrying provider
+            margin and idle-fleet overhead. The $2.46 spread per 1M tokens is the advantage this
+            deployment design creates — captured as customer margin, or passed on as price. It is
+            the quantity the DLR Solution Architecture team tunes with silicon choice, KV
+            optimisation and interconnect placement.
+          </div>
+
+          <h4 class="sec">How the customer banks additional profit — vs a CSP for the same workload</h4>
+          <div class="notice" id="profitWalk" style="border-left-color: #555555"></div>
+          <div class="tablewrap"><table class="mini" id="cspTable"></table></div>
+          <p class="muted" id="cspNote"></p>
+
+          <div class="journey">
+            <div class="toolbar">
+              <button id="demoGo" class="go">Go — run the journey</button>
+              <button id="demoReset" disabled>Reset</button>
+              <span id="demoStatus" class="pill">Idle</span>
+              <span id="demoClock" class="muted"></span>
+            </div>
+
+            <ol class="stages" id="stageList">
+              <li>1,000 users hit enter on a similar prompt at the same moment (8,000-token context each)</li>
+              <li>ServiceFabric routes each prompt to the nearest site (ACC4 7 ms &middot; LHR19 9 ms &middot; SIN10 12 ms)</li>
+              <li>Prefill wave — each B300 node admits &asymp;14.3 sessions/s (&asymp;114,000 prefill tok/s &divide; 8,000-token contexts); first token at 85 ms</li>
+              <li>Streaming ramp — each session streams at 96 tok/s as its prefill completes (&asymp;236 concurrent streams at peak)</li>
+              <li>Drain — the last queued user (ACC4) starts at &asymp;28 s; all 528,000 answer tokens land by &asymp;33.5 s</li>
+              <li>Value delivered — 1,000 one-page answers become customer &amp; DLR value</li>
+            </ol>
+
+            <div class="fillrow">
+              <span class="muted">Journey progress</span>
+              <span id="demoFill" class="muted"></span>
+            </div>
+            <div class="meter"><div id="demoBar" class="meter-bar"></div></div>
+
+            <div class="stats stats-5" style="margin-top: 0.75rem">
+              <div class="stat"><span id="dTokens" class="stat-value">0</span><span class="muted">Answer tokens delivered (of 528,000)</span></div>
+              <div class="stat"><span id="dPrefill" class="stat-value">0 / 1,000</span><span class="muted">Prompts prefilled</span></div>
+              <div class="stat"><span id="dStreams" class="stat-value">0</span><span class="muted">Active streams (96 tok/s each)</span></div>
+              <div class="stat"><span id="dKv" class="stat-value">0 GB</span><span class="muted">KV in use (budget 6,492 GB)</span></div>
+              <div class="stat"><span id="dCost" class="stat-value">$0.00</span><span class="muted">Serving cost accrued</span></div>
+            </div>
+
+            <div id="demoValue" class="notice" hidden></div>
+          </div>
+
+          <p class="muted" style="margin-top: 0.9rem">
+            Same maths as the planner: B300 node = 2,304 GB, Llama 3.3 70B weights = 140 GB, KV
+            budget 2,164 GB, FP8 KV @ 8k = 1.32 GB/user &rarr; 1,639 users max per node; one node
+            per site comfortably serves the 1,000-user global load. TTFT = fabric RTT + 8 ms CPU
+            dispatch + prefill, where prefill is compute-derived: 8 &times; 5 PFLOPS FP8 &times;
+            40% MFU &divide; 140 GFLOPs/token (70B dense) &asymp; 114,000 tok/s &rarr; 70 ms for
+            8,000 tokens. Burst maths: 114,000 &divide; 8,000 = &asymp;14.3 sessions admitted per
+            second per node; answer = 528 tokens at 96 tok/s = 5.5 s per user. The simulation
+            ignores prefill/decode contention (chunked-prefill schedulers interleave them).
+            Figures illustrative.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      // ================= GPU catalog (illustrative planning figures) =============
+      // Each architecture offers one or more VRAM variants; nodeGB is the rounded
+      // planning figure (H200 = 1,130, consistent with Track A).
+      // pf8 = dense FP8 PFLOPS per GPU (illustrative). Prefill rate is derived from
+      // compute: tok/s = gpus × pf8 × MFU / FLOPs-per-token (2 × active params).
+      const GPUS = [
+        { id: "h100", name: "H100 (Hopper)", vendor: "NVIDIA", status: "GA", gpusPerNode: 8, pf8: 2.0, decode: 40, hr: 2.49, kw: 0.70,
+          variants: [{ label: "80 GB HBM3 (SXM)", nodeGB: 640 }, { label: "94 GB HBM3 (NVL)", nodeGB: 752 }] },
+        { id: "h200", name: "H200 (Hopper)", vendor: "NVIDIA", status: "GA", gpusPerNode: 8, pf8: 2.0, decode: 55, hr: 2.99, kw: 0.70,
+          variants: [{ label: "141 GB HBM3e", nodeGB: 1130 }] },
+        { id: "gh200", name: "GH200 Grace Hopper", vendor: "NVIDIA", status: "GA", gpusPerNode: 8, pf8: 2.0, decode: 58, hr: 3.19, kw: 0.68,
+          variants: [{ label: "144 GB HBM3e", nodeGB: 1152 }, { label: "96 GB HBM3", nodeGB: 768 }] },
+        { id: "b100", name: "B100 (Blackwell)", vendor: "NVIDIA", status: "GA", gpusPerNode: 8, pf8: 3.5, decode: 75, hr: 3.49, kw: 0.70,
+          variants: [{ label: "192 GB HBM3e", nodeGB: 1536 }] },
+        { id: "b200", name: "B200 (Blackwell)", vendor: "NVIDIA", status: "GA", gpusPerNode: 8, pf8: 4.5, decode: 85, hr: 3.99, kw: 1.00,
+          variants: [{ label: "192 GB HBM3e", nodeGB: 1536 }] },
+        { id: "b300", name: "B300 (Blackwell Ultra)", vendor: "NVIDIA", status: "GA", gpusPerNode: 8, pf8: 5.0, decode: 96, hr: 4.49, kw: 1.10,
+          variants: [{ label: "288 GB HBM3e", nodeGB: 2304 }] },
+        { id: "gb300", name: "GB300 NVL72 (rack)", vendor: "NVIDIA", status: "GA", gpusPerNode: 72, pf8: 5.0, decode: 105, hr: 4.99, kw: 1.40,
+          variants: [{ label: "288 GB HBM3e ×72", nodeGB: 20736 }] },
+        { id: "spark", name: "DGX Spark (GB10)", vendor: "NVIDIA", status: "GA", gpusPerNode: 1, pf8: 0.25, decode: 6, hr: 0.35, kw: 0.17,
+          variants: [{ label: "128 GB unified LPDDR5x", nodeGB: 128 }] },
+        { id: "rtx6000", name: "RTX PRO 6000 (Blackwell)", vendor: "NVIDIA", status: "GA", gpusPerNode: 8, pf8: 1.0, decode: 30, hr: 1.25, kw: 0.60,
+          variants: [{ label: "96 GB GDDR7", nodeGB: 768 }, { label: "48 GB GDDR6 (Ada)", nodeGB: 384 }] },
+        { id: "rubin", name: "Vera Rubin NVL144", vendor: "NVIDIA", status: "Roadmap", gpusPerNode: 72, pf8: 8.0, decode: 130, hr: 5.99, kw: 1.60,
+          variants: [{ label: "288 GB HBM4 ×72", nodeGB: 20736 }] },
+        { id: "mi300x", name: "MI300X", vendor: "AMD", status: "GA", gpusPerNode: 8, pf8: 2.6, decode: 50, hr: 2.29, kw: 0.75,
+          variants: [{ label: "192 GB HBM3", nodeGB: 1536 }] },
+        { id: "mi325x", name: "MI325X", vendor: "AMD", status: "GA", gpusPerNode: 8, pf8: 2.6, decode: 60, hr: 2.79, kw: 1.00,
+          variants: [{ label: "256 GB HBM3e", nodeGB: 2048 }] },
+        { id: "mi355x", name: "MI355X (CDNA 4)", vendor: "AMD", status: "GA", gpusPerNode: 8, pf8: 5.2, decode: 88, hr: 3.79, kw: 1.40,
+          variants: [{ label: "288 GB HBM3e", nodeGB: 2304 }] },
+        { id: "helios", name: "Helios (MI400 rack)", vendor: "AMD", status: "Roadmap", gpusPerNode: 72, pf8: 7.5, decode: 125, hr: 5.49, kw: 1.50,
+          variants: [{ label: "432 GB HBM4 ×72", nodeGB: 31104 }] },
+        // Alternative architectures — sold as whole systems/racks at market.
+        // CS-3: one wafer per system, ~23 kW, internal water loop; a 70B FP16
+        // model shards across a 4-system pod. decode = published ~2,000 tok/s
+        // per stream on 70B-class; hr = est. $2.5M/system amortised.
+        { id: "cs3", name: "Cerebras CS-3 (4-system pod)", vendor: "Cerebras", status: "GA", gpusPerNode: 4, pf8: 20.0, decode: 2000, hr: 71.0, kw: 23.0,
+          variants: [{ label: "44 GB on-wafer SRAM ×4 (pod)", nodeGB: 176 }] },
+        // SN40L DataScale: 8 RDUs/node, 2 nodes per ~10 kW air-cooled rack;
+        // HBM tier sized here (DDR tier holds model banks, not live KV).
+        { id: "sn40l", name: "SambaNova SN40L (DataScale)", vendor: "SambaNova", status: "GA", gpusPerNode: 8, pf8: 1.3, decode: 450, hr: 3.19, kw: 0.35,
+          variants: [{ label: "64 GB HBM ×8 + 12 TB DDR tier", nodeGB: 512 }] },
+      ];
+
+      // =============== Model catalog by name (weights = FP16 GB) ================
+      // Cloud frontier sizes are undisclosed — planning estimates (est.).
+      const MODEL_GROUPS = [
+        { label: "Cloud frontier (proprietary — sizes are planning estimates)", items: [
+          { id: "fable", label: "Claude Fable (Anthropic) — est. 2T", gb: 4000, act: 240, est: true },
+          { id: "opus45", label: "Claude Opus 4.5 (Anthropic) — est. 2T", gb: 4000, act: 240, est: true },
+          { id: "sonnet45", label: "Claude Sonnet 4.5 (Anthropic) — est. 400B", gb: 800, act: 100, est: true },
+          { id: "gpt52", label: "GPT-5.2 (OpenAI) — est. 1.8T", gb: 3600, act: 220, est: true },
+          { id: "gpt5mini", label: "GPT-5 mini (OpenAI) — est. 200B", gb: 400, act: 60, est: true },
+          { id: "gem3pro", label: "Gemini 3 Pro (Google) — est. 1.5T", gb: 3000, act: 200, est: true },
+          { id: "gem3flash", label: "Gemini 3 Flash (Google) — est. 150B", gb: 300, act: 50, est: true },
+          { id: "grok4", label: "Grok 4 (xAI) — est. 1.7T", gb: 3400, act: 220, est: true },
+        ]},
+        { label: "Emerging / next-gen (announced or expected — sizes are planning estimates)", items: [
+          { id: "kimik3", label: "Kimi 3 (Moonshot) — est. 2T MoE", gb: 4000, act: 100, emg: true },
+          { id: "dsv4", label: "DeepSeek-V4 / R2 — est. 1.5T MoE", gb: 3000, act: 80, emg: true },
+          { id: "llama4beh", label: "Llama 4 Behemoth (Meta) — est. 2T MoE", gb: 4000, act: 576, emg: true },
+          { id: "qwen35max", label: "Qwen3.5-Max (Alibaba) — est. 1T MoE", gb: 2000, act: 80, emg: true },
+          { id: "glm5", label: "GLM-5 (Zhipu) — est. 700B MoE", gb: 1400, act: 80, emg: true },
+          { id: "mistrall3", label: "Mistral Large 3 — est. 250B dense", gb: 500, emg: true },
+        ]},
+        { label: "Open weight", items: [
+          { id: "kimik2", label: "Kimi K2 (Moonshot) — 1T MoE (32B active)", gb: 2000, act: 64 },
+          { id: "minimaxm2", label: "MiniMax-M2 — 230B MoE (10B active)", gb: 460, act: 20 },
+          { id: "qwen3next", label: "Qwen3-Next 80B-A3B (Alibaba)", gb: 160, act: 6 },
+          { id: "dsv3", label: "DeepSeek-V3 / R1 — 671B MoE (37B active)", gb: 1342, act: 74 },
+          { id: "qwen3coder", label: "Qwen3-Coder 480B-A35B (Alibaba)", gb: 960, act: 70 },
+          { id: "llama405", label: "Llama 3.1 405B (Meta)", gb: 810 },
+          { id: "pixtral", label: "Pixtral Large 124B (Mistral, multimodal)", gb: 248 },
+          { id: "commanda", label: "Command A 111B (Cohere)", gb: 222 },
+          { id: "nemotron", label: "Llama Nemotron Super 49B (NVIDIA)", gb: 98 },
+          { id: "llama4mav", label: "Llama 4 Maverick — 400B MoE (17B active)", gb: 800, act: 34 },
+          { id: "glm45", label: "GLM-4.5 (Zhipu) — 355B MoE (32B active)", gb: 710, act: 64 },
+          { id: "qwen3235", label: "Qwen3 235B-A22B (Alibaba)", gb: 470, act: 44 },
+          { id: "mistrall2", label: "Mistral Large 2 — 123B", gb: 246 },
+          { id: "gptoss120", label: "gpt-oss-120b (OpenAI, 5B active)", gb: 240, act: 10 },
+          { id: "llama4scout", label: "Llama 4 Scout — 109B MoE (17B active)", gb: 218, act: 34 },
+          { id: "llama70", label: "Llama 3.3 70B (Meta)", gb: 140, def: true },
+          { id: "qwen332", label: "Qwen3 32B (Alibaba)", gb: 64 },
+        ]},
+        { label: "Local / small open models", items: [
+          { id: "gemma27", label: "Gemma 3 27B (Google)", gb: 54 },
+          { id: "mistralsmall", label: "Mistral Small 3.2 — 24B", gb: 48 },
+          { id: "magistral", label: "Magistral Small 24B (Mistral, reasoning)", gb: 48 },
+          { id: "devstral", label: "Devstral Small 24B (Mistral, coding)", gb: 48 },
+          { id: "ministral8", label: "Ministral 8B (Mistral, edge)", gb: 16 },
+          { id: "gptoss20", label: "gpt-oss-20b (OpenAI, 4B active)", gb: 40, act: 7 },
+          { id: "phi4", label: "Phi-4 14B (Microsoft)", gb: 28 },
+          { id: "qwen38", label: "Qwen3 8B (Alibaba)", gb: 16 },
+          { id: "llama8", label: "Llama 3.1 8B (Meta)", gb: 16 },
+        ]},
+      ];
+      const MODELS_BY_ID = {};
+      MODEL_GROUPS.forEach((grp) => grp.items.forEach((m) => (MODELS_BY_ID[m.id] = m)));
+
+      // ============ Connectivity: accurate speeds per DLR product ===============
+      const CONNS = {
+        cross: { label: "Cross Connect", rtt: 0.5, mo: 350, eff: 1.0, note: "passive fibre, same facility — speed set by optics" },
+        metro: { label: "Metro Connect", rtt: 2.5, mo: 2500, eff: 0.92, note: "metro DWDM waves between DLR DCs" },
+        fabric: { label: "ServiceFabric", rtt: 8, mo: 900, eff: 0.85, note: "SDN virtual circuits, global on-demand" },
+      };
+      // Per-connection available port speeds (mult scales monthly interconnect cost).
+      const CONN_SPEEDS = {
+        cross: [
+          { id: "g10", label: "10G (LR optics)", mult: 0.5 },
+          { id: "g100", label: "100G (QSFP28)", mult: 1 },
+          { id: "g400", label: "400G (QSFP-DD)", mult: 2.2 },
+          { id: "g800", label: "800G (OSFP)", mult: 3.8 },
+        ],
+        metro: [
+          { id: "g10", label: "10G wave", mult: 0.6 },
+          { id: "g100", label: "100G wave", mult: 1 },
+          { id: "g400", label: "400G wave", mult: 2.5 },
+        ],
+        fabric: [
+          { id: "g10", label: "10G VC", mult: 0.6 },
+          { id: "g50", label: "50G VC", mult: 0.8 },
+          { id: "g100", label: "100G VC", mult: 1 },
+          { id: "g400", label: "400G VC", mult: 2.6 },
+          { id: "g800", label: "800G VC — pre-GA", mult: 4.5, preGA: true },
+        ],
+      };
+
+      // =================== Switching, routing, storage, CPU =====================
+      const SWITCHES = {
+        qx800: { label: "NVIDIA Quantum-X800 InfiniBand (800G)", eff: 1.0 },
+        spectrumx: { label: "NVIDIA Spectrum-X Ethernet (800G)", eff: 0.97 },
+        cisco: { label: "Cisco Nexus 9800 / Silicon One (800G)", eff: 0.95 },
+        cornelis: { label: "Cornelis CN5000 Omni-Path (400G)", eff: 0.98 },
+        stdeth: { label: "Standard Ethernet (400G)", eff: 0.90 },
+      };
+      const ROUTES = {
+        adaptive: { label: "Adaptive congestion-aware", eff: 1.0 },
+        std: { label: "Standard L3 (BGP/EVPN)", eff: 0.97 },
+        ecmp: { label: "Static ECMP", eff: 0.94 },
+      };
+      const STORAGE = {
+        local: { label: "Local NVMe only", baseMo: 0, kvBoost: 0, external: false },
+        everpure: { label: "Everpure (all-flash)", baseMo: 6000, kvBoost: 0.30, external: true },
+        netapp: { label: "NetApp (AFF / StorageGRID)", baseMo: 5200, kvBoost: 0.25, external: true },
+      };
+      const CPUS = {
+        std: { label: "Standard (EPYC / Xeon)", ms: 8, costMult: 1.0, kwMult: 1.0 },
+        oc: { label: "Blackcore overclocked", ms: 3, costMult: 1.12, kwMult: 1.08 },
+      };
+
+      // ============================== Use cases =================================
+      // Each use case presets the planner; everything stays editable afterwards.
+      const USECASES = {
+        custom: { label: "Custom / manual", desc: "", preset: null },
+        drug: {
+          label: "Life Science — Drug Discovery",
+          desc: "Molecular screening and protein-structure inference at batch scale — long scientific contexts with GPUDirect dataset streaming. Switch workload to Training for fine-tuning campaigns.",
+          preset: { workload: "inference", gpu: "b300", model: "llama70", kv: "fp8", ctx: 16000, users: 2000, conn: "cross", speed: "g400", storVendor: "everpure", storMode: "object", kvOff: "on", kva: "80", gpuAdj: "on", cpu: "std" },
+        },
+        fraud: {
+          label: "Financial Services — Fraud Detection",
+          desc: "Real-time transaction scoring — TTFT-critical: compact model, short context, Blackcore overclocked CPUs and Cross Connect for minimum latency.",
+          preset: { workload: "inference", gpu: "b300", model: "qwen332", kv: "fp8", ctx: 2048, users: 5000, conn: "cross", speed: "g100", storVendor: "everpure", storMode: "file", kvOff: "off", gpuAdj: "on", cpu: "oc" },
+        },
+        backbone: {
+          label: "AI Model Inference — Network Backbone",
+          desc: "High-volume token serving across metros over ServiceFabric — cost per 1M tokens is the primary KPI; KV offload keeps sessions per node high.",
+          preset: { workload: "inference", gpu: "b300", model: "llama70", kv: "fp8", ctx: 8000, users: 20000, conn: "fabric", speed: "g400", storVendor: "everpure", storMode: "object", kvOff: "on", kva: "40", gpuAdj: "off", cpu: "std" },
+        },
+        robotics: {
+          label: "AI Inference — Robotics",
+          desc: "Edge control loops near the line — compact model on GPU-dense edge nodes, short context, local NVMe, latency first.",
+          preset: { workload: "inference", gpu: "rtx6000", model: "qwen38", kv: "fp8", ctx: 1024, users: 200, conn: "cross", speed: "g10", storVendor: "local", cpu: "oc" },
+        },
+        cv: {
+          label: "Computer Vision — Inference",
+          desc: "Vision-language inference over camera and image streams — each frame is only 1\u20132k visual tokens, so per-stream throughput matters more than long context; image archives live on object storage.",
+          preset: { workload: "inference", gpu: "rtx6000", model: "gemma27", kv: "fp8", ctx: 2048, users: 3000, conn: "metro", speed: "g100", storVendor: "netapp", storMode: "object", kvOff: "off", gpuAdj: "on", cpu: "std" },
+          rec: { t: "Frame batching", b: "vision contexts are short (1\u20132k tokens per frame) — batch multiple camera frames per prefill pass and keep the image archive on object storage; long-context LLM sizing does not apply here." },
+        },
+        mfg: {
+          label: "Manufacturing — Inference",
+          desc: "Factory-floor inference — visual inspection, predictive maintenance and operator copilots, with deterministic latency into plant OT systems over Cross Connect.",
+          preset: { workload: "inference", gpu: "b200", model: "qwen332", kv: "fp8", ctx: 4096, users: 1500, conn: "cross", speed: "g100", storVendor: "everpure", storMode: "file", kvOff: "off", gpuAdj: "on", cpu: "std" },
+          rec: { t: "Deterministic latency", b: "keep inspection and control-adjacent models pinned near the line — Cross Connect into the plant OT network avoids the jitter that shared IP paths introduce." },
+        },
+        av: {
+          label: "Self-Driving Cars — Edge / IoT",
+          desc: "Autonomous-vehicle support — safety-critical driving loops run on-device in the vehicle; metro-edge nodes serve fleet IoT telemetry, map and model distribution, and remote assistance where every millisecond counts.",
+          preset: { workload: "inference", gpu: "rtx6000", model: "qwen38", kv: "fp8", ctx: 1024, users: 10000, conn: "cross", speed: "g100", storVendor: "local", cpu: "oc" },
+          rec: { t: "On-device first", b: "never put the safety loop on the network — vehicles carry their own compute (DGX Spark-class on-board). Size these metro-edge nodes for telemetry ingest, OTA model distribution and teleoperation only, and replicate per metro so fleet RTT stays in single-digit ms." },
+        },
+        hub: {
+          label: "AI Training — Regional Hub (10 MW+)",
+          desc: "Campus-scale training hub with a 10 MW+ power envelope — rack-scale systems, InfiniBand east-west, phased power commitments with DLR.",
+          preset: { workload: "training", gpu: "gb300", nodes: 80, model: "llama405", conn: "cross", speed: "g800", switch: "qx800", route: "adaptive", storVendor: "everpure", storMode: "object", kvOff: "off", gpuAdj: "on", cpu: "std" },
+        },
+        neocloud: {
+          label: "AI Inference NeoCloud — GPUaaS",
+          desc: "Multi-tenant GPU-as-a-Service — maximise sessions per node (FP8 KV + flash offload) with on-demand ServiceFabric for tenant onboarding.",
+          preset: { workload: "inference", gpu: "b200", model: "llama70", kv: "fp8", ctx: 8000, users: 50000, conn: "fabric", speed: "g400", storVendor: "everpure", storMode: "object", kvOff: "on", kva: "40", gpuAdj: "off", cpu: "std" },
+        },
+      };
+
+      const MARKET_PER_1M = 3.5;
+      const UTIL = 0.35;
+      const MFU_PREFILL = 0.4; // achievable fraction of peak FP8 compute during prefill
+      const TRAIN_FACTOR = 0.3; // training ≈ 3× FLOPs/token (fwd+bwd) at similar MFU
+
+      // NeoCloud GPUaaS on-demand rental $/GPU-hr (illustrative list rates) and
+      // ancillary uplift (egress, storage, support) for the rented equivalent.
+      const RENT = { h100: 4.49, h200: 5.49, gh200: 5.69, b100: 6.49, b200: 7.49, b300: 8.49, gb300: 9.49, spark: 0.79, rtx6000: 2.49, rubin: 11.99, mi300x: 3.99, mi325x: 4.99, mi355x: 6.99, helios: 10.99, cs3: 95.0, sn40l: 7.99 };
+      const GPUAAS_ANCILLARY = 1.1;
+      function gpuaasMo(g, nodes) {
+        return nodes * g.gpusPerNode * (RENT[g.id] || g.hr * 1.8) * 730 * GPUAAS_ANCILLARY;
+      }
+      // CSP (hyperscaler) IaaS rates for B300-class instances, $/GPU-hr (illustrative).
+      const CSP_OD_HR = 12.99; // on-demand
+      const CSP_RES_HR = 7.79; // 1-year committed (~40% discount)
+
+      // Prefill tok/s per node, derived from compute. FLOPs/token = 2 × active
+      // params, and (active params B × 2 bytes) = act GB, so GFLOPs/token = actGb.
+      function prefillTokS(g, modelId) {
+        const m = MODELS_BY_ID[modelId];
+        const actGb = m.act || m.gb;
+        return (g.gpusPerNode * g.pf8 * MFU_PREFILL * 1e6) / actGb;
+      }
+      const COLO_KW_MO = 220;
+      const PUE = 1.3;
+      const HRS_MO = 730;
+      const STOR_KVOFF_MO = 1500;
+      const STOR_KVA_MO = 1800; // KVA persistent-KV service on external flash
+      const KVA_STREAM_GBS = 6; // per GPU shard, deserialize-bound; local NVMe ~= NFS (~5% apart)
+      const KVA_OVERHEAD_MS = 90; // hash lookup + scheduler dispatch
+      const ATTN_LD = 9360; // layers x d_model per active-B param (Llama-70B calibrated)
+      const STOR_GPUADJ_MO = 1200;
+      const STOR_DLR_COLO_MO = 800; // extra colo revenue when external storage racks land
+
+      const $ = (id) => document.getElementById(id);
+      const nf = (n) => Math.round(n).toLocaleString("en-US");
+      const nf1 = (n) => (Math.round(n * 10) / 10).toLocaleString("en-US", { maximumFractionDigits: 1 });
+      const usd = (n) => "$" + Math.round(n).toLocaleString("en-US");
+      const usd2 = (n) => "$" + n.toFixed(2);
+      const usdSmart = (n) => "$" + (Math.abs(n) >= 0.1 ? n.toFixed(2) : n.toFixed(3));
+      const ms = (n) => nf1(n) + " ms";
+      const fmtPow = (kW) => (kW >= 1000 ? (kW / 1000).toFixed(1) + " MW" : nf1(kW) + " kW");
+      const KVMB = { fp16: 0.33, fp8: 0.165 };
+      const KVLBL = { fp16: "FP16", fp8: "FP8" };
+
+      // ============================== Config ====================================
+      function readCfg() {
+        return {
+          usecase: $("cfgUsecase").value,
+          gpu: $("cfgGpu").value,
+          vramIdx: parseInt($("cfgVram").value, 10) || 0,
+          workload: $("cfgWorkload").value,
+          conn: $("cfgConn").value,
+          speed: $("cfgSpeed").value,
+          switch: $("cfgSwitch").value,
+          route: $("cfgRoute").value,
+          storVendor: $("cfgStorVendor").value,
+          storMode: $("cfgStorMode").value,
+          kvOff: $("cfgKvOff").value === "on",
+          kva: parseInt($("cfgKva").value, 10) || 0,
+          gpuAdj: $("cfgGpuAdj").value === "on",
+          cpu: $("cfgCpu").value,
+          model: $("cfgModel").value,
+          kv: $("cfgKv").value,
+          ctx: Math.max(1, parseInt($("cfgCtx").value, 10) || 8000),
+          users: Math.max(1, parseInt($("cfgUsers").value, 10) || 1000),
+          nodes: Math.max(1, parseInt($("cfgNodes").value, 10) || 16),
+        };
+      }
+      function speedOf(cfg) {
+        const list = CONN_SPEEDS[cfg.conn];
+        return list.find((s) => s.id === cfg.speed) || list.find((s) => s.mult === 1) || list[0];
+      }
+      function storageOf(cfg) {
+        const s = STORAGE[cfg.storVendor];
+        const kvOff = cfg.kvOff && s.external;
+        const gpuAdj = cfg.gpuAdj && s.external;
+        const kvaPct = s.external ? cfg.kva || 0 : 0; // shared arrays = cluster-wide cache
+        let mo = s.baseMo;
+        if (mo > 0 && cfg.storMode === "object") mo *= 0.8;
+        if (kvOff) mo += STOR_KVOFF_MO;
+        if (gpuAdj) mo += STOR_GPUADJ_MO;
+        if (kvaPct > 0) mo += STOR_KVA_MO;
+        return { ...s, kvOff, gpuAdj, kvaPct, mo };
+      }
+
+      // ============================== Model =====================================
+      function inferCalc(cfg, g, nodeGB) {
+        const conn = CONNS[cfg.conn];
+        const stor = storageOf(cfg);
+        const cpu = CPUS[cfg.cpu];
+        const weights = MODELS_BY_ID[cfg.model].gb;
+        const kvUser = (cfg.ctx * KVMB[cfg.kv]) / 1000;
+        const rawBudget = nodeGB - weights;
+        if (rawBudget < kvUser) return { ok: false, g, nodeGB, reason: "model weights exceed node VRAM" };
+        const budget = rawBudget * (1 + (stor.kvOff ? stor.kvBoost : 0));
+        const perNode = Math.floor(budget / kvUser);
+        const nodes = Math.ceil(cfg.users / perNode);
+        // Prefill: linear term (2 FLOPs x active params/token) + quadratic
+        // attention term (~4 x layers x d_model x ctx^2) - the reason 100k-token
+        // prompts take ~a minute on a single GPU.
+        const mAct = (MODELS_BY_ID[cfg.model].act || MODELS_BY_ID[cfg.model].gb) / 2; // active params, B
+        const nodePF = g.gpusPerNode * g.pf8 * MFU_PREFILL; // effective PFLOPS
+        const linMs = (cfg.ctx / prefillTokS(g, cfg.model)) * 1000;
+        const quadMs = ((4 * ATTN_LD * mAct * cfg.ctx * cfg.ctx) / (nodePF * 1e15)) * 1000;
+        const coldPrefillMs = (linMs + quadMs) * (stor.gpuAdj ? 0.9 : 1);
+        // KVA: a cache hit streams the prompt's KV tensors from flash instead
+        // of recomputing them (never slower than recompute - min() guards).
+        // KV shards stream in parallel across the node's tensor-parallel GPUs.
+        const kvaStream = KVA_STREAM_GBS * g.gpusPerNode * (stor.gpuAdj ? 2 : 1); // GDS doubles the path
+        const warmPrefillMs = Math.min(
+          coldPrefillMs,
+          ((cfg.ctx * KVMB[cfg.kv]) / 1000 / kvaStream) * 1000 + KVA_OVERHEAD_MS
+        );
+        const kvaPct = stor.kvaPct || 0;
+        const prefillMs = coldPrefillMs * (1 - kvaPct / 100) + warmPrefillMs * (kvaPct / 100);
+        const ttft = conn.rtt + cpu.ms + prefillMs;
+        const ttftCold = conn.rtt + cpu.ms + coldPrefillMs;
+        const ttftWarm = conn.rtt + cpu.ms + warmPrefillMs;
+        const tokensMo = cfg.users * g.decode * 3600 * HRS_MO * UTIL;
+        const compute = nodes * g.gpusPerNode * g.hr * cpu.costMult * HRS_MO;
+        const powerKW = nodes * g.gpusPerNode * g.kw * cpu.kwMult * PUE;
+        const inter = conn.mo * 2 * speedOf(cfg).mult;
+        const dlr = powerKW * COLO_KW_MO + inter + (stor.external ? STOR_DLR_COLO_MO : 0);
+        const cost = compute + dlr + stor.mo;
+        const per1M = cost / (tokensMo / 1e6);
+        const value = (tokensMo / 1e6) * MARKET_PER_1M - cost;
+        return { ok: true, g, nodeGB, kvUser, budget, perNode, nodes, ttft, ttftCold, ttftWarm, kvaPct, prefillMs, tokensMo, compute, dlr, storMo: stor.mo, cost, per1M, value, powerKW };
+      }
+
+      function trainCalc(cfg, g, nodeGB) {
+        const conn = CONNS[cfg.conn];
+        const stor = storageOf(cfg);
+        const cpu = CPUS[cfg.cpu];
+        const weights = MODELS_BY_ID[cfg.model].gb;
+        if (nodeGB * cfg.nodes < weights * 3) return { ok: false, g, nodeGB, reason: "cluster VRAM too small for model + optimizer states" };
+        const eff = conn.eff * SWITCHES[cfg.switch].eff * ROUTES[cfg.route].eff * (stor.gpuAdj ? 1.03 : 1);
+        const thru = prefillTokS(g, cfg.model) * cfg.nodes * TRAIN_FACTOR * eff;
+        const tokensMo = thru * 3600 * HRS_MO * 0.95; // 95% duty cycle
+        const computeMo = cfg.nodes * g.gpusPerNode * g.hr * cpu.costMult * HRS_MO;
+        const powerKW = cfg.nodes * g.gpusPerNode * g.kw * cpu.kwMult * PUE;
+        const dlrMo = powerKW * COLO_KW_MO + conn.mo * 2 * speedOf(cfg).mult + (stor.external ? STOR_DLR_COLO_MO : 0);
+        const costMo = computeMo + dlrMo + stor.mo;
+        const per1M = costMo / (tokensMo / 1e6);
+        return { ok: true, g, nodeGB, eff, thru, tokensMo, computeMo, dlrMo, costMo, per1M, powerKW };
+      }
+
+      const defNodeGB = (g) => g.variants[0].nodeGB;
+
+      // ============================ Planner render ==============================
+      function renderPlanner() {
+        const cfg = readCfg();
+        const g = GPUS.find((x) => x.id === cfg.gpu);
+        const nodeGB = (g.variants[cfg.vramIdx] || g.variants[0]).nodeGB;
+        const conn = CONNS[cfg.conn];
+        const spd = speedOf(cfg);
+        const training = cfg.workload === "training";
+        $("fldUsers").hidden = training;
+        $("fldCtx").hidden = training;
+        $("fldNodes").hidden = !training;
+        $("ucNote").textContent = USECASES[cfg.usecase] ? USECASES[cfg.usecase].desc : "";
+        const stor = storageOf(cfg);
+        $("cfgStorMode").disabled = !stor.external;
+        $("cfgKvOff").disabled = !stor.external;
+        $("cfgKva").disabled = !stor.external;
+        $("cfgGpuAdj").disabled = !stor.external;
+
+        const statsEl = $("planStats");
+        const noticeEl = $("planNotice");
+        const planEl = $("planText");
+        const recEl = $("recList");
+        const mdl = MODELS_BY_ID[cfg.model];
+        const preGA = spd.preGA
+          ? " <strong>Note:</strong> 800G ServiceFabric is not yet GA — pre-GA availability only."
+          : "";
+        const estNote = mdl.est
+          ? " Model size is a planning estimate (weights not public)."
+          : mdl.emg
+            ? " Emerging model — size is a planning estimate until weights ship."
+            : "";
+
+        if (!training) {
+          const r = inferCalc(cfg, g, nodeGB);
+          if (!r.ok) {
+            statsEl.innerHTML = "";
+            noticeEl.className = "notice over";
+            noticeEl.innerHTML =
+              "<strong>&#10007; Not feasible.</strong> " + g.name + ": " + r.reason + " (" +
+              nf(nodeGB) + " GB node vs " + nf(mdl.gb) + " GB weights for " + mdl.label +
+              "). Pick a larger platform / VRAM variant, shard, or choose a smaller model.";
+            planEl.textContent = "No plan — configuration infeasible.";
+          } else {
+            noticeEl.className = "notice";
+            statsEl.className = "stats";
+            statsEl.innerHTML =
+              stat(ms(r.ttft), r.kvaPct > 0
+                ? "TTFT blended \u00b7 warm " + ms(r.ttftWarm) + " / cold " + ms(r.ttftCold) + " (" + r.kvaPct + "% KVA hits)"
+                : "TTFT (" + conn.label + " + " + CPUS[cfg.cpu].label.split(" ")[0] + " CPU)") +
+              stat(usd2(r.per1M), "Token cost / 1M") +
+              stat(usd(r.dlr) + "/mo", "Value to DLR") +
+              stat(usd(r.value) + "/mo", "Customer value (margin)");
+            noticeEl.innerHTML =
+              "<strong>&#10003; Feasible.</strong> " + nf(r.nodes) + " &times; " + g.name +
+              " node(s) (" + nf(nodeGB) + " GB each) &middot; " + nf(r.perNode) +
+              " users/node max" + (stor.kvOff ? " (incl. KV offload boost)" : "") +
+              " &middot; KV " + r.kvUser.toFixed(2) + " GB/user &middot; " +
+              nf(r.tokensMo / 1e9) + "B tokens/mo at " + Math.round(UTIL * 100) + "% util." +
+              (r.kvaPct > 0
+                ? " KVA: " + r.kvaPct + "% of requests stream cached KV from flash instead of recomputing prefill (warm TTFT " + ms(r.ttftWarm) + " vs cold " + ms(r.ttftCold) + ")."
+                : "") +
+              preGA + estNote;
+            planEl.innerHTML =
+              "<strong>Plan:</strong> Deploy " + nf(r.nodes) + " &times; " + g.name + " node(s) (" +
+              nf(r.nodes * g.gpusPerNode) + " GPUs, " + nf1(r.powerKW) + " kW with PUE " + PUE +
+              ", " + CPUS[cfg.cpu].label + " hosts) in a DLR campus, switched on " +
+              SWITCHES[cfg.switch].label + " with " + ROUTES[cfg.route].label.toLowerCase() +
+              " routing. Connect via " + conn.label + " (" + spd.label + ", " + conn.note +
+              "). Storage: " + stor.label +
+              (stor.external ? " — " + cfg.storMode + (stor.kvOff ? ", KV offload" : "") + (stor.gpuAdj ? ", GPUDirect" : "") : "") +
+              ". Serve " + nf(cfg.users) + " concurrent sessions of " + mdl.label + " at " +
+              nf(cfg.ctx) + "-token context, " + KVLBL[cfg.kv] + " KV. Economics: compute " +
+              usd(r.compute) + "/mo + storage " + usd(r.storMo) + "/mo + DLR " + usd(r.dlr) +
+              "/mo &rarr; " + usd2(r.per1M) + " per 1M tokens vs $" + MARKET_PER_1M.toFixed(2) +
+              " market &rarr; " + usd(r.value) + "/mo customer margin.";
+          }
+          if (!r.ok) {
+            $("gpuaasBox").textContent = "No benchmark — configuration infeasible.";
+          } else {
+            const rentMo = gpuaasMo(g, r.nodes);
+            const rentPer1M = rentMo / (r.tokensMo / 1e6);
+            const sav = rentMo - r.cost;
+            const pct = Math.round((sav / rentMo) * 100);
+            $("gpuaasBox").innerHTML =
+              "Renting the same " + nf(r.nodes) + " &times; " + g.name + " node(s) on-demand from a NeoCloud (" +
+              usd2(RENT[g.id] || g.hr * 1.8) + "/GPU-hr list + 10% ancillary for egress/storage/support) costs <strong>" +
+              usd(rentMo) + "/mo</strong> vs <strong>" + usd(r.cost) + "/mo</strong> for this DLR colo design — " +
+              (sav >= 0
+                ? "<strong>" + usd(sav) + "/mo (" + pct + "%) in favour of the colo build</strong>"
+                : "<strong>" + usd(-sav) + "/mo in favour of GPUaaS</strong>") +
+              ". Token cost: " + usdSmart(rentPer1M) + " vs " + usdSmart(r.per1M) +
+              " per 1M. The colo design also keeps data gravity and DLR interconnect adjacency " +
+              "(Cross Connect / ServiceFabric) that rented GPUaaS capacity does not offer; GPUaaS wins on " +
+              "zero commitment and burst elasticity.";
+          }
+          renderCompareInfer(cfg, g, nodeGB);
+          renderRecsInfer(cfg, g, nodeGB, recEl);
+        } else {
+          const r = trainCalc(cfg, g, nodeGB);
+          if (!r.ok) {
+            statsEl.innerHTML = "";
+            noticeEl.className = "notice over";
+            noticeEl.innerHTML = "<strong>&#10007; Not feasible.</strong> " + g.name + ": " + r.reason + ". Add nodes or pick a larger platform.";
+            planEl.textContent = "No plan — configuration infeasible.";
+          } else {
+            noticeEl.className = "notice";
+            const baseH = trainCalc(cfg, GPUS[0], defNodeGB(GPUS[0]));
+            const custVal = baseH.ok ? (r.tokensMo / 1e6) * baseH.per1M - r.costMo : 0;
+            statsEl.className = "stats stats-5";
+            statsEl.innerHTML =
+              stat(nf(r.thru / 1000) + "k tok/s", "Cluster throughput (eff " + Math.round(r.eff * 100) + "%)") +
+              stat(usdSmart(r.per1M), "Cost per 1M training tokens") +
+              stat(usd(r.costMo) + "/mo", "Cluster cost") +
+              stat(usd(r.dlrMo) + "/mo", "Value to DLR") +
+              stat(usd(custVal) + "/mo", "Customer value ($ saved vs H100)");
+            noticeEl.innerHTML =
+              "<strong>&#10003; Feasible.</strong> " + nf(cfg.nodes) + " &times; " + g.name +
+              " nodes (" + nf(cfg.nodes * g.gpusPerNode) + " GPUs, " + fmtPow(r.powerKW) +
+              ") &middot; east-west efficiency " + Math.round(r.eff * 100) + "% (" + conn.label +
+              " &times; " + SWITCHES[cfg.switch].label + " &times; " + ROUTES[cfg.route].label +
+              ") &middot; trains " + nf1(r.tokensMo / 1e12) + "T tokens/mo at 95% duty." +
+              preGA + estNote;
+            planEl.innerHTML =
+              "<strong>Plan:</strong> Stand up a " + nf(cfg.nodes) + "-node " + g.name +
+              " training cluster (" + fmtPow(r.powerKW) + ", " + CPUS[cfg.cpu].label +
+              " hosts) in one DLR campus on " + SWITCHES[cfg.switch].label + " with " +
+              ROUTES[cfg.route].label.toLowerCase() + " routing; interconnect via " + conn.label +
+              " (" + spd.label + "). Storage: " + stor.label +
+              (stor.gpuAdj ? " with GPUDirect (+3% throughput)" : "") + ". Training " + mdl.label +
+              " at " + nf(r.thru / 1000) + "k tok/s (" + nf1(r.tokensMo / 1e12) +
+              "T tokens/mo) for " + usd(r.costMo) + "/mo (" + usdSmart(r.per1M) + " per 1M tokens).";
+          }
+          if (!r.ok) {
+            $("gpuaasBox").textContent = "No benchmark — configuration infeasible.";
+          } else {
+            const rentMo = gpuaasMo(g, cfg.nodes);
+            const rentPer1M = rentMo / (r.tokensMo / 1e6);
+            const sav = rentMo - r.costMo;
+            const pct = Math.round((sav / rentMo) * 100);
+            $("gpuaasBox").innerHTML =
+              "Renting the same " + nf(cfg.nodes) + " &times; " + g.name + " training nodes on-demand from a NeoCloud (" +
+              usd2(RENT[g.id] || g.hr * 1.8) + "/GPU-hr list + 10% ancillary) costs <strong>" + usd(rentMo) +
+              "/mo</strong> vs <strong>" + usd(r.costMo) + "/mo</strong> for this DLR colo design — " +
+              (sav >= 0
+                ? "<strong>" + usd(sav) + "/mo (" + pct + "%) in favour of the colo build</strong>"
+                : "<strong>" + usd(-sav) + "/mo in favour of GPUaaS</strong>") +
+              ". Training tokens: " + usdSmart(rentPer1M) + " vs " + usdSmart(r.per1M) +
+              " per 1M. Long-running training clusters are the strongest colo case — sustained utilisation " +
+              "amortises the build, while GPUaaS list rates price in idle-fleet risk; rented capacity remains " +
+              "useful for short bursts and evaluation runs.";
+          }
+          renderCompareTrain(cfg, g);
+          renderRecsTrain(cfg, g, nodeGB, recEl);
+        }
+      }
+
+      function stat(v, l) {
+        return '<div class="stat"><span class="stat-value">' + v + '</span><span class="muted">' + l + "</span></div>";
+      }
+
+      function renderCompareInfer(cfg, sel, selNodeGB) {
+        let html =
+          "<tr><th>Architecture</th><th>Status</th><th>Node VRAM</th><th>Users/node</th><th>Nodes</th><th>TTFT</th><th>$ / 1M tok</th><th>DLR $/mo</th><th>Customer $/mo</th></tr>";
+        GPUS.forEach((g) => {
+          const nodeGB = g.id === sel.id ? selNodeGB : defNodeGB(g);
+          const r = inferCalc(cfg, g, nodeGB);
+          const cls = g.id === sel.id ? "sel" : r.ok ? "" : "dim";
+          html += '<tr class="' + cls + '"><td>' + g.name + " (" + g.vendor + ")</td><td>" + g.status + "</td>";
+          if (r.ok) {
+            html +=
+              "<td>" + nf(nodeGB) + " GB</td><td>" + nf(r.perNode) + "</td><td>" + nf(r.nodes) +
+              "</td><td>" + ms(r.ttft) + "</td><td>" + usd2(r.per1M) + "</td><td>" + usd(r.dlr) +
+              "</td><td>" + usd(r.value) + "</td>";
+          } else {
+            html += "<td>" + nf(nodeGB) + ' GB</td><td colspan="6">insufficient VRAM for ' + MODELS_BY_ID[cfg.model].label + " — shard or upsize</td>";
+          }
+          html += "</tr>";
+        });
+        $("cmpTable").innerHTML = html;
+        $("cmpCaption").textContent =
+          "Inference: " + nf(cfg.users) + " users · " + nf(cfg.ctx) + "-token context · " +
+          MODELS_BY_ID[cfg.model].label + " · " + KVLBL[cfg.kv] + " KV · " + CONNS[cfg.conn].label +
+          " " + speedOf(cfg).label + " · " + STORAGE[cfg.storVendor].label + " · " +
+          CPUS[cfg.cpu].label + ". Highlighted row = your selection.";
+      }
+
+      function renderCompareTrain(cfg, sel) {
+        const base = trainCalc(cfg, GPUS[0], defNodeGB(GPUS[0])); // H100 baseline
+        let html =
+          "<tr><th>Architecture</th><th>Status</th><th>Cluster tok/s</th><th>Tokens/mo</th><th>Cost $/mo</th><th>$ / 1M tok</th><th>DLR $/mo</th><th>Customer value $/mo</th></tr>";
+        GPUS.forEach((g) => {
+          const r = trainCalc(cfg, g, defNodeGB(g));
+          const cls = g.id === sel.id ? "sel" : r.ok ? "" : "dim";
+          html += '<tr class="' + cls + '"><td>' + g.name + " (" + g.vendor + ")</td><td>" + g.status + "</td>";
+          if (r.ok) {
+            const custVal = base.ok ? (r.tokensMo / 1e6) * base.per1M - r.costMo : 0;
+            html +=
+              "<td>" + nf(r.thru / 1000) + "k</td><td>" + nf1(r.tokensMo / 1e12) + "T</td><td>" + usd(r.costMo) +
+              "</td><td>" + usdSmart(r.per1M) + "</td><td>" + usd(r.dlrMo) + "</td><td>" +
+              usd(custVal) + "</td>";
+          } else {
+            html += '<td colspan="6">' + r.reason + "</td>";
+          }
+          html += "</tr>";
+        });
+        $("cmpTable").innerHTML = html;
+        $("cmpCaption").textContent =
+          "Training: " + nf(cfg.nodes) + " nodes · " + MODELS_BY_ID[cfg.model].label + " · " +
+          CONNS[cfg.conn].label + " × " + SWITCHES[cfg.switch].label + " × " + ROUTES[cfg.route].label +
+          ". Customer value = $ saved per month vs training the same token volume on H100. Highlighted row = your selection.";
+      }
+
+      function li(title, body) {
+        return "<li><strong>" + title + "</strong> — " + body + "</li>";
+      }
+
+      function renderRecsInfer(cfg, g, nodeGB, el) {
+        const recs = [];
+        const cur = inferCalc(cfg, g, nodeGB);
+        const spd = speedOf(cfg);
+        if (spd.preGA)
+          recs.push(li("800G ServiceFabric is pre-GA", "validate availability and timeline with DLR before committing; 2 &times; 400G VC LAG is the GA-equivalent today."));
+        if (MODELS_BY_ID[cfg.model].est)
+          recs.push(li("Proprietary model selected", MODELS_BY_ID[cfg.model].label +
+            " weights are not public — this sizing is an estimate. For self-hosted deployment use an open-weight equivalent (Kimi K2, DeepSeek-V3, Qwen3 235B)."));
+        if (MODELS_BY_ID[cfg.model].emg)
+          recs.push(li("Emerging model selected", MODELS_BY_ID[cfg.model].label +
+            " is announced/expected but weights have not shipped — re-validate VRAM sizing and users/node against the released checkpoint before committing capacity; keep the shipping generation (Kimi K2, DeepSeek-V3, Llama 4 Maverick) as the fallback plan."));
+        if (cur.ok && cfg.kv === "fp16") {
+          const alt = inferCalc({ ...cfg, kv: "fp8" }, g, nodeGB);
+          if (alt.ok)
+            recs.push(li("Quantise KV cache to FP8", nf(cur.perNode) + " &rarr; " + nf(alt.perNode) +
+              " users/node (2&times;), token cost " + usd2(cur.per1M) + " &rarr; " + usd2(alt.per1M) +
+              " (&minus;" + Math.round((1 - alt.per1M / cur.per1M) * 100) + "%)."));
+        }
+        if (cur.ok && !cfg.kvOff && STORAGE[cfg.storVendor].external) {
+          const alt = inferCalc({ ...cfg, kvOff: true }, g, nodeGB);
+          if (alt.ok && alt.per1M < cur.per1M)
+            recs.push(li("Enable KV-cache offload to " + STORAGE[cfg.storVendor].label,
+              "+" + Math.round(STORAGE[cfg.storVendor].kvBoost * 100) + "% effective KV budget: " +
+              nf(cur.perNode) + " &rarr; " + nf(alt.perNode) + " users/node, " + usd2(cur.per1M) +
+              " &rarr; " + usd2(alt.per1M) + " per 1M."));
+        }
+        if (cur.ok && !cfg.gpuAdj && STORAGE[cfg.storVendor].external) {
+          const alt = inferCalc({ ...cfg, gpuAdj: true }, g, nodeGB);
+          recs.push(li("Enable GPU-adjacent storage (GPUDirect)", "prefill drops 10%: TTFT " +
+            ms(cur.ttft) + " &rarr; " + ms(alt.ttft) + " for +" + usd(STOR_GPUADJ_MO) + "/mo."));
+        }
+        if (cur.ok && cfg.cpu === "std") {
+          const alt = inferCalc({ ...cfg, cpu: "oc" }, g, nodeGB);
+          recs.push(li("Blackcore overclocked CPUs", "dispatch 8 ms &rarr; 3 ms: TTFT " + ms(cur.ttft) +
+            " &rarr; " + ms(alt.ttft) + "; compute cost +12% (" + usd2(cur.per1M) + " &rarr; " +
+            usd2(alt.per1M) + " per 1M) — best for latency-sensitive workloads."));
+        }
+        if (cur.ok) {
+          let best = null;
+          GPUS.forEach((x) => {
+            const r = inferCalc(cfg, x, x.id === g.id ? nodeGB : defNodeGB(x));
+            if (r.ok && (!best || r.per1M < best.per1M)) best = r;
+          });
+          if (best && best.g.id !== g.id && best.per1M < cur.per1M * 0.95)
+            recs.push(li("Consider " + best.g.name, "lowest token cost in this comparison: " + usd2(best.per1M) +
+              "/1M vs " + usd2(cur.per1M) + " (&minus;" + Math.round((1 - best.per1M / cur.per1M) * 100) +
+              "%), TTFT " + ms(best.ttft) + (best.g.status === "Roadmap" ? " (roadmap platform — plan capacity ahead)" : "") + "."));
+          const slack = cur.perNode * cur.nodes - cfg.users;
+          if (cur.nodes > 1 && slack > cur.perNode * 0.5)
+            recs.push(li("Consolidate nodes", "capacity slack of " + nf(slack) + " sessions — " +
+              nf(Math.ceil(cfg.users / cur.perNode)) + " node(s) suffice if load is pooled behind ServiceFabric."));
+          if (slack < cur.perNode * 0.05)
+            recs.push(li("Thin headroom", "less than 5% session headroom — add a node, enable FP8 KV, or turn on KV offload before peak."));
+        }
+        if (cfg.conn === "cross")
+          recs.push(li("Add ServiceFabric alongside Cross Connect", "keeps intra-campus latency at 0.5 ms while adding on-demand global reach and burst routes for new regions."));
+        if (cfg.conn === "fabric" && cur.ok && cur.ttft > 100)
+          recs.push(li("Terminate closer to users", "ServiceFabric RTT dominates TTFT — replicate nodes into user metros (see the LHR19/ACC4/SIN10 demo tab)."));
+        if (cur.ok && cfg.kva === 0 && STORAGE[cfg.storVendor].external) {
+          const alt = inferCalc({ ...cfg, kva: 80 }, g, nodeGB);
+          if (alt.ok && alt.ttft < cur.ttft * 0.85)
+            recs.push(li("Enable KVA persistent KV cache", "reused contexts stream cached KV tensors from flash instead of recomputing prefill: TTFT " +
+              ms(cur.ttft) + " \u2192 " + ms(alt.ttft) + " at 80% cache hits for +" + usd(STOR_KVA_MO) +
+              "/mo. Published FSI benchmarks: 110k-token TTFT 54.5 s \u2192 4.0 s (13.6\u00d7); local NVMe and NFS perform within ~5%."));
+        }
+        if (cur.ok && cfg.kva > 0 && cur.ttftWarm >= cur.ttftCold * 0.8)
+          recs.push(li("KVA below the inflection point", "at " + nf(cfg.ctx) +
+            "-token contexts on this platform, recompute is roughly as fast as streaming cached KV \u2014 the cache pays off above ~10k tokens (or on frontier-size models); consider switching it off to save " + usd(STOR_KVA_MO) + "/mo."));
+        if (cfg.ctx >= 32768)
+          recs.push(li("Long-context strategy", "at " + nf(cfg.ctx) + " tokens use paged KV + FP8 + flash offload and prefer HBM-dense racks (GB300 NVL72 / Helios) to hold users/node up."));
+        if (["spark", "rtx6000"].includes(cfg.gpu) && !["robotics", "cv", "av"].includes(cfg.usecase))
+          recs.push(li("Platform fit", g.name + " suits edge/dev or light inference; move production concurrency to B300-class or rack-scale systems."));
+        const uc = USECASES[cfg.usecase];
+        if (uc && uc.rec) recs.push(li(uc.rec.t, uc.rec.b));
+        el.innerHTML = recs.length ? recs.join("") : "<li>No further efficiencies found for this configuration.</li>";
+      }
+
+      function renderRecsTrain(cfg, g, nodeGB, el) {
+        const recs = [];
+        const cur = trainCalc(cfg, g, nodeGB);
+        const spd = speedOf(cfg);
+        if (spd.preGA)
+          recs.push(li("800G ServiceFabric is pre-GA", "validate availability and timeline with DLR before committing; 2 &times; 400G VC LAG is the GA-equivalent today."));
+        if (cfg.conn !== "cross" && cur.ok) {
+          const alt = trainCalc({ ...cfg, conn: "cross" }, g, nodeGB);
+          recs.push(li("Use Cross Connect for east-west", "interconnect efficiency " +
+            Math.round(CONNS[cfg.conn].eff * 100) + "% &rarr; 100%: " + usdSmart(cur.per1M) + " &rarr; " +
+            usdSmart(alt.per1M) + " per 1M tokens (+" + nf1((alt.tokensMo - cur.tokensMo) / 1e12) +
+            "T tokens/mo). Keep ServiceFabric for data ingest only."));
+        }
+        if (cur.ok && ["stdeth", "cisco"].includes(cfg.switch)) {
+          const alt = trainCalc({ ...cfg, switch: "qx800" }, g, nodeGB);
+          recs.push(li("Upgrade switching to Quantum-X800 InfiniBand (or Cornelis CN5000)",
+            "fabric efficiency " + Math.round(SWITCHES[cfg.switch].eff * 100) + "% &rarr; 100%: " +
+            usdSmart(cur.per1M) + " &rarr; " + usdSmart(alt.per1M) + " per 1M tokens at the same monthly cost."));
+        }
+        if (cur.ok && cfg.route !== "adaptive") {
+          const alt = trainCalc({ ...cfg, route: "adaptive" }, g, nodeGB);
+          recs.push(li("Adaptive routing", ROUTES[cfg.route].label + " &rarr; congestion-aware: " +
+            usdSmart(cur.per1M) + " &rarr; " + usdSmart(alt.per1M) + " per 1M tokens."));
+        }
+        if (cur.ok && !cfg.gpuAdj && STORAGE[cfg.storVendor].external) {
+          const alt = trainCalc({ ...cfg, gpuAdj: true }, g, nodeGB);
+          recs.push(li("GPU-adjacent storage (GPUDirect)", "checkpoint/data path off the CPU: +3% throughput, " +
+            usdSmart(cur.per1M) + " &rarr; " + usdSmart(alt.per1M) + " per 1M tokens."));
+        }
+        if (cur.ok && cur.powerKW >= 10000)
+          recs.push(li("Regional-hub scale (" + fmtPow(cur.powerKW) + ")", "10 MW+ envelope — phase power commitments with DLR, plan liquid cooling, and stage delivery across halls."));
+        if (cfg.cpu === "oc")
+          recs.push(li("Overclocked CPUs add little to training", "Blackcore helps latency-sensitive inference; for training the +12% host cost rarely pays back — consider standard EPYC/Xeon."));
+        if (cur.ok) {
+          let best = null;
+          GPUS.forEach((x) => {
+            const r = trainCalc(cfg, x, defNodeGB(x));
+            if (r.ok && (!best || r.per1M < best.per1M)) best = r;
+          });
+          if (best && best.g.id !== g.id && best.per1M < cur.per1M * 0.95)
+            recs.push(li("Consider " + best.g.name, "cheapest training tokens in this comparison: " + usdSmart(best.per1M) +
+              " vs " + usdSmart(cur.per1M) + " per 1M (&minus;" + Math.round((1 - best.per1M / cur.per1M) * 100) + "%)" +
+              (best.g.status === "Roadmap" ? " (roadmap platform)" : "") + "."));
+        }
+        if (["spark", "rtx6000"].includes(cfg.gpu))
+          recs.push(li("Platform fit", g.name + " is not a training platform — select H200/B300-class or rack-scale systems."));
+        const uc = USECASES[cfg.usecase];
+        if (uc && uc.rec) recs.push(li(uc.rec.t, uc.rec.b));
+        el.innerHTML = recs.length ? recs.join("") : "<li>No further efficiencies found for this configuration.</li>";
+      }
+
+      // ============================ Simple demo (tab 2) =========================
+      const SITES = [
+        { code: "ACC4", city: "Ashburn", rtt: 7, users: 400 },
+        { code: "LHR19", city: "London", rtt: 9, users: 350 },
+        { code: "SIN10", city: "Singapore", rtt: 12, users: 250 },
+      ];
+      const DEMO_CPU_MS = 8; // standard host CPU dispatch (EPYC/Xeon)
+      const DEMO = (() => {
+        const g = GPUS.find((x) => x.id === "b300");
+        const nodeGB = defNodeGB(g); // 2,304
+        const kvUser = (8000 * KVMB.fp8) / 1000; // 1.32 GB
+        const budget = nodeGB - MODELS_BY_ID.llama70.gb; // 2,164 GB
+        const perNode = Math.floor(budget / kvUser); // 1,639
+        const nodes = SITES.length; // one per site
+        const users = 1000;
+        const prefTokS = prefillTokS(g, "llama70"); // ≈114,286 tok/s (8 × 5 PF FP8 × 40% MFU ÷ 140 GFLOP/tok)
+        const prefillMs = (8000 / prefTokS) * 1000; // 70 ms
+        const tokensMo = users * g.decode * 3600 * HRS_MO * UTIL;
+        const compute = nodes * g.gpusPerNode * g.hr * HRS_MO;
+        const powerKW = nodes * g.gpusPerNode * g.kw * PUE;
+        const colo = powerKW * COLO_KW_MO;
+        const inter = CONNS.fabric.mo * 2 * SITES.length;
+        const dlr = colo + inter;
+        const cost = compute + dlr;
+        const per1M = cost / (tokensMo / 1e6);
+        const valueMo = (tokensMo / 1e6) * MARKET_PER_1M - cost;
+        const aggTokS = users * g.decode;
+        return { g, kvUser, budget, perNode, nodes, users, prefTokS, prefillMs, tokensMo, cost, per1M, dlr, valueMo, aggTokS };
+      })();
+
+      // Synchronized burst: all users submit a similar 8k-context prompt at t=0.
+      const BURST = (() => {
+        const rate = DEMO.prefTokS / 8000; // sessions/s a node can prefill ≈ 14.3
+        const answerTok = 528; // ~one-page answer
+        const answerSec = answerTok / DEMO.g.decode; // 5.5 s at 96 tok/s
+        const sites = SITES.map((s) => ({
+          ...s,
+          wave: s.users / rate,
+          done: s.users / rate + answerSec,
+          ctxTok: s.users * 8000,
+          kvWrite: s.users * DEMO.kvUser,
+          outTok: s.users * answerTok,
+        }));
+        const totalOut = DEMO.users * answerTok;
+        const peakStreams = sites.reduce((a, s) => a + Math.min(s.users, rate * answerSec), 0);
+        const peakKv = peakStreams * DEMO.kvUser;
+        const maxDone = Math.max(...sites.map((s) => s.done));
+        const costBurst = (totalOut / 1e6) * DEMO.per1M;
+        const costPerAnswer = (answerTok / 1e6) * DEMO.per1M;
+        return { rate, answerTok, answerSec, sites, totalOut, peakStreams, peakKv, maxDone, costBurst, costPerAnswer };
+      })();
+
+      function renderBurstStatics() {
+        $("promptStats").innerHTML =
+          stat("8,000 tokens", "Context — prompt + attached document") +
+          stat(DEMO.kvUser.toFixed(2) + " GB", "KV cache per session (FP8, optimised)") +
+          stat("~" + nf(BURST.answerTok) + " tok · " + nf1(BURST.answerSec) + " s", "Answer length & stream time at 96 tok/s") +
+          stat("$" + BURST.costPerAnswer.toFixed(4), "Serving cost per answer (" + usd2(DEMO.per1M) + "/1M)");
+        let html =
+          "<tr><th>Site</th><th>Users</th><th>Context to prefill</th><th>KV written</th><th>Prefill wave</th><th>First TTFT</th><th>Last TTFT</th><th>Answer tokens</th><th>All answers by</th></tr>";
+        BURST.sites.forEach((s) => {
+          html +=
+            "<tr><td>" + s.code + " · " + s.city + "</td><td>" + nf(s.users) + "</td><td>" +
+            (s.ctxTok / 1e6).toFixed(1) + "M tok</td><td>" + nf(s.kvWrite) + " GB</td><td>" +
+            nf1(s.wave) + " s</td><td>" + nf1(s.rtt + DEMO_CPU_MS + DEMO.prefillMs) + " ms</td><td>" +
+            nf1(s.wave) + " s</td><td>" + nf(s.outTok) + "</td><td>" + nf1(s.done) + " s</td></tr>";
+        });
+        const bestTtft = Math.min(...BURST.sites.map((s) => s.rtt)) + DEMO_CPU_MS + DEMO.prefillMs;
+        html +=
+          '<tr class="sel"><td>Total</td><td>' + nf(DEMO.users) + "</td><td>" +
+          (DEMO.users * 8000 / 1e6).toFixed(1) + "M tok</td><td>" + nf(DEMO.users * DEMO.kvUser) +
+          " GB</td><td>&mdash;</td><td>" + nf1(bestTtft) + " ms</td><td>" + nf1(Math.max(...BURST.sites.map((s) => s.wave))) +
+          " s</td><td>" + nf(BURST.totalOut) + "</td><td>" + nf1(BURST.maxDone) + " s</td></tr>";
+        $("burstTable").innerHTML = html;
+        $("burstInsight").innerHTML =
+          "<strong>Burst insight:</strong> a synchronized burst is <strong>prefill-bound, not memory-bound</strong>. " +
+          "Each B300 node admits &asymp;" + nf1(BURST.rate) + " sessions/s (&asymp;" + nf(DEMO.prefTokS / 1000) +
+          "k prefill tok/s &divide; 8,000-token contexts), " +
+          "so the wave takes " + nf1(Math.min(...BURST.sites.map((s) => s.wave))) + "&ndash;" +
+          nf1(Math.max(...BURST.sites.map((s) => s.wave))) + " s per site while KV in use peaks at only ~" +
+          nf(BURST.peakKv) + " GB of the " + nf(DEMO.budget * 3) + " GB budget (&asymp;" +
+          nf(BURST.peakStreams) + " concurrent streams). Arrivals spread through the day hit the steady-state figures below; " +
+          "for true synchronized bursts, add nodes for prefill headroom or enable chunked prefill.";
+      }
+
+      // Customer P&L walk and CSP/NeoCloud comparison for the fixed 3-site design.
+      function renderProfit() {
+        const tokM = DEMO.tokensMo / 1e6; // millions of tokens per month
+        const rev = tokM * MARKET_PER_1M;
+        const compute = DEMO.nodes * DEMO.g.gpusPerNode * DEMO.g.hr * HRS_MO;
+        const powerKW = DEMO.nodes * DEMO.g.gpusPerNode * DEMO.g.kw * PUE;
+        const colo = powerKW * COLO_KW_MO;
+        const fabric = CONNS.fabric.mo * 2 * SITES.length;
+        const profitColo = rev - DEMO.cost;
+        const answerMarket = (BURST.answerTok / 1e6) * MARKET_PER_1M;
+        $("profitWalk").innerHTML =
+          "<strong>Monthly P&amp;L walk (at 35% utilisation):</strong> " +
+          nf(tokM) + "M tokens sold at the $" + MARKET_PER_1M.toFixed(2) + "/1M market rate = <strong>" +
+          usd(rev) + "/mo revenue</strong>. Costs: compute " + usd(compute) + " (" + DEMO.nodes +
+          " nodes &times; 8 &times; " + usd2(DEMO.g.hr) + "/GPU-hr &times; 730 h) + colo power " +
+          usd(colo) + " (" + nf1(powerKW) + " kW &times; $" + COLO_KW_MO + "/kW-mo) + ServiceFabric " +
+          usd(fabric) + " (3 sites &times; 2 &times; $" + CONNS.fabric.mo + ") = <strong>" + usd(DEMO.cost) +
+          "/mo</strong> (" + usd2(DEMO.per1M) + "/1M). <strong>Gross profit: " + usd(profitColo) +
+          "/mo — a " + Math.round((profitColo / rev) * 100) + "% margin.</strong> Per answer: a " +
+          nf(BURST.answerTok) + "-token answer costs $" + BURST.costPerAnswer.toFixed(4) +
+          " to serve and is worth $" + answerMarket.toFixed(4) + " at market — $" +
+          (answerMarket - BURST.costPerAnswer).toFixed(4) + " of additional profit on every single answer.";
+
+        const options = [
+          { name: "DLR colo — this design", cost: DEMO.cost, self: true },
+          { name: "NeoCloud GPUaaS (rent same 3 nodes)", cost: gpuaasMo(DEMO.g, DEMO.nodes) },
+          { name: "CSP IaaS — 1-yr committed", cost: DEMO.nodes * DEMO.g.gpusPerNode * CSP_RES_HR * HRS_MO },
+          { name: "CSP IaaS — on-demand", cost: DEMO.nodes * DEMO.g.gpusPerNode * CSP_OD_HR * HRS_MO },
+          { name: "CSP serverless API (buy tokens at market)", cost: rev },
+        ];
+        let html =
+          "<tr><th>How the workload runs</th><th>Infra cost $/mo</th><th>$ / 1M tok</th><th>Gross profit $/mo</th><th>Margin</th><th>Colo advantage $/mo</th></tr>";
+        options.forEach((o) => {
+          const profit = rev - o.cost;
+          const adv = profitColo - profit;
+          html +=
+            '<tr class="' + (o.self ? "sel" : "") + '"><td>' + o.name + "</td><td>" + usd(o.cost) +
+            "</td><td>" + usd2(o.cost / tokM) + "</td><td>" + usd(profit) + "</td><td>" +
+            Math.round((profit / rev) * 100) + "%</td><td>" + (o.self ? "&mdash;" : "+" + usd(adv)) + "</td></tr>";
+        });
+        $("cspTable").innerHTML = html;
+        $("cspNote").textContent =
+          "Same workload (88B tokens/mo), same revenue line, only the infrastructure changes. " +
+          "Assumptions: CSP B300-class instances at $" + CSP_OD_HR + "/GPU-hr on-demand or $" + CSP_RES_HR +
+          "/GPU-hr 1-yr committed; NeoCloud at $" + RENT.b300 + "/GPU-hr + 10% ancillary; serverless API at the " +
+          "$3.50/1M market rate (the provider keeps the entire spread). CSP figures exclude egress, which would " +
+          "widen the gap further. The colo advantage comes from owning utilisation: no idle-fleet premium, " +
+          "no provider margin, plus DLR interconnect adjacency. All rates illustrative.";
+      }
+
+      function renderDemoStatics() {
+        $("siteCards").innerHTML = SITES.map((s) => {
+          const ttft = s.rtt + DEMO_CPU_MS + DEMO.prefillMs;
+          return (
+            '<div class="site"><h5>' + s.code + " &middot; " + s.city + "</h5>" +
+            '<div class="row"><span class="muted">Users routed</span><span>' + nf(s.users) + "</span></div>" +
+            '<div class="row"><span class="muted">B300 nodes</span><span>1 (capacity ' + nf(DEMO.perNode) + ")</span></div>" +
+            '<div class="row"><span class="muted">Fabric RTT</span><span>' + s.rtt + " ms</span></div>" +
+            '<div class="row"><span class="muted">TTFT</span><span>' + nf1(ttft) + " ms</span></div>" +
+            '<div class="row"><span class="muted">KV in use</span><span>' + nf(s.users * DEMO.kvUser) + " GB / " + nf(DEMO.budget) + "</span></div></div>"
+          );
+        }).join("");
+        $("demoStats").innerHTML =
+          stat(usd2(DEMO.per1M), "Token cost / 1M") +
+          stat("$" + MARKET_PER_1M.toFixed(2), "Market ref / 1M") +
+          stat(usd(DEMO.dlr) + "/mo", "Value to DLR (3 sites)") +
+          stat(usd(DEMO.valueMo) + "/mo", "Customer value (margin)");
+      }
+
+      const SIM_SPEED = 6; // 1 real second = 6 simulated seconds
+      const ROUTE_REAL = 1.2; // seconds of real time for submit + routing stages
+      let demoTimer = null;
+      let demoStart = 0;
+
+      function setStage(i) {
+        const lis = $("stageList").children;
+        for (let k = 0; k < lis.length; k++) {
+          lis[k].className = k < i ? "passed" : k === i ? "on" : "";
+        }
+      }
+
+      function demoIdle() {
+        if (demoTimer) { clearInterval(demoTimer); demoTimer = null; }
+        setStage(-1);
+        $("demoStatus").textContent = "Idle";
+        $("demoStatus").className = "pill";
+        $("demoClock").textContent = "";
+        $("demoBar").style.width = "0%";
+        $("demoFill").textContent = "";
+        $("dTokens").textContent = "0";
+        $("dPrefill").textContent = "0 / 1,000";
+        $("dStreams").textContent = "0";
+        $("dKv").textContent = "0 GB";
+        $("dCost").textContent = "$0.00";
+        $("demoValue").hidden = true;
+        $("demoGo").disabled = false;
+        $("demoGo").textContent = "Go — run the journey";
+        $("demoReset").disabled = true;
+      }
+
+      // Exact tokens streamed by simT for one site: completed users contribute the
+      // full answer; in-flight users (prefilled within the last answerSec) contribute
+      // decode × elapsed. Prefill admissions are uniform at BURST.rate sessions/s.
+      function siteTokens(s, simT) {
+        const rate = BURST.rate;
+        const done = simT > BURST.answerSec ? Math.min(s.users, rate * (simT - BURST.answerSec)) : 0;
+        const a = Math.max(0, simT - BURST.answerSec);
+        const b = Math.min(simT, s.users / rate);
+        let inflight = 0;
+        if (b > a) inflight = (rate * DEMO.g.decode * ((simT - a) ** 2 - (simT - b) ** 2)) / 2;
+        return Math.min(s.outTok, done * BURST.answerTok + inflight);
+      }
+
+      function runDemo() {
+        demoIdle();
+        $("demoGo").disabled = true;
+        $("demoGo").textContent = "Running…";
+        $("demoStatus").textContent = "Live";
+        $("demoStatus").className = "pill live";
+        demoStart = performance.now();
+
+        demoTimer = setInterval(() => {
+          const realT = performance.now() - demoStart; // ms
+          const simT = Math.max(0, realT / 1000 - ROUTE_REAL) * SIM_SPEED;
+
+          let pref = 0, active = 0, tokens = 0;
+          BURST.sites.forEach((s) => {
+            const p = Math.min(s.users, BURST.rate * simT);
+            const c = simT > BURST.answerSec ? Math.min(s.users, BURST.rate * (simT - BURST.answerSec)) : 0;
+            pref += p;
+            active += Math.max(0, p - c);
+            tokens += siteTokens(s, simT);
+          });
+
+          let idx;
+          if (realT < 600) idx = 0;
+          else if (realT < ROUTE_REAL * 1000) idx = 1;
+          else if (pref < DEMO.users * 0.5) idx = 2;
+          else if (pref < DEMO.users) idx = 3;
+          else if (tokens < BURST.totalOut - 1) idx = 4;
+          else idx = 5;
+          setStage(idx);
+
+          $("demoBar").style.width = Math.min(100, (tokens / BURST.totalOut) * 100) + "%";
+          $("demoClock").textContent =
+            simT > 0 ? "t = " + nf1(simT) + " s (simulated, " + SIM_SPEED + "\u00d7 compressed)" : nf(realT) + " ms";
+          $("demoFill").textContent = "stage " + (idx + 1) + " of 6";
+          $("dTokens").textContent = nf(tokens);
+          $("dPrefill").textContent = nf(pref) + " / 1,000";
+          $("dStreams").textContent = nf(active);
+          $("dKv").textContent = nf(active * DEMO.kvUser) + " GB";
+          $("dCost").textContent = usd2((tokens / 1e6) * DEMO.per1M);
+
+          if (simT >= BURST.maxDone) {
+            clearInterval(demoTimer);
+            demoTimer = null;
+            setStage(5);
+            $("demoStatus").textContent = "Complete";
+            $("demoStatus").className = "pill done";
+            $("demoBar").style.width = "100%";
+            $("dTokens").textContent = nf(BURST.totalOut);
+            $("dPrefill").textContent = "1,000 / 1,000";
+            $("dStreams").textContent = "0";
+            $("dKv").textContent = "0 GB";
+            $("dCost").textContent = usd2(BURST.costBurst);
+            const marketEq = (BURST.totalOut / 1e6) * MARKET_PER_1M;
+            $("demoValue").hidden = false;
+            $("demoValue").innerHTML =
+              "<strong>Burst complete — 1,000 similar prompts answered.</strong> " +
+              (DEMO.users * 8000 / 1e6).toFixed(1) + "M context tokens were prefilled and " +
+              nf(BURST.totalOut) + " answer tokens streamed in &asymp;" + nf1(BURST.maxDone) +
+              " s. The first answer began at " + nf1(Math.min(...BURST.sites.map((s) => s.rtt)) + DEMO_CPU_MS + DEMO.prefillMs) +
+              " ms; the last queued user (ACC4) waited &asymp;" +
+              nf1(Math.max(...BURST.sites.map((s) => s.wave))) +
+              " s, because a synchronized burst is prefill-bound (&asymp;" + nf1(BURST.rate) +
+              " sessions/s per node) rather than memory-bound (KV peaked at ~" + nf(BURST.peakKv) +
+              " GB of " + nf(DEMO.budget * 3) + " GB). Serving the entire burst cost &asymp;" +
+              usd2(BURST.costBurst) + " (vs " + usd2(marketEq) +
+              " market equivalent). Spread through the day at steady state, the same 3 nodes sustain 96,000 tok/s — " +
+              nf(DEMO.tokensMo / 1e9) + "B tokens and " + usd(DEMO.valueMo) +
+              " customer margin per month, returning " + usd(DEMO.dlr) + "/mo to DLR.";
+            $("demoGo").disabled = false;
+            $("demoGo").textContent = "Go — run the journey";
+            $("demoReset").disabled = false;
+          }
+        }, 60);
+      }
+
+      // ================================ Wiring ==================================
+      function setTab(which) {
+        const plan = which === "plan";
+        $("planView").hidden = !plan;
+        $("demoView").hidden = plan;
+        $("tabPlan").classList.toggle("tab-active", plan);
+        $("tabDemo").classList.toggle("tab-active", !plan);
+      }
+      $("tabPlan").addEventListener("click", () => setTab("plan"));
+      $("tabDemo").addEventListener("click", () => setTab("demo"));
+
+      $("cfgGpu").innerHTML = GPUS.map(
+        (g) => '<option value="' + g.id + '"' + (g.id === "b300" ? " selected" : "") + ">" +
+          g.vendor + " " + g.name + (g.status === "Roadmap" ? " (roadmap)" : "") + "</option>"
+      ).join("");
+
+      $("cfgModel").innerHTML = MODEL_GROUPS.map(
+        (grp) => '<optgroup label="' + grp.label + '">' +
+          grp.items.map((m) => '<option value="' + m.id + '"' + (m.def ? " selected" : "") + ">" + m.label + " — " + nf(m.gb) + " GB</option>").join("") +
+          "</optgroup>"
+      ).join("");
+
+      function fillVramOptions() {
+        const g = GPUS.find((x) => x.id === $("cfgGpu").value);
+        $("cfgVram").innerHTML = g.variants.map(
+          (v, i) => '<option value="' + i + '">' + v.label + " (node " + nf(v.nodeGB) + " GB)</option>"
+        ).join("");
+      }
+      function fillSpeedOptions() {
+        const conn = $("cfgConn").value;
+        const prev = $("cfgSpeed").value;
+        $("cfgSpeed").innerHTML = CONN_SPEEDS[conn].map(
+          (s) => '<option value="' + s.id + '"' + (s.id === (prev || "g100") ? " selected" : "") + ">" + s.label + "</option>"
+        ).join("");
+        if (!CONN_SPEEDS[conn].some((s) => s.id === $("cfgSpeed").value)) $("cfgSpeed").value = "g100";
+      }
+
+      $("cfgUsecase").innerHTML = Object.entries(USECASES).map(
+        ([id, u]) => '<option value="' + id + '">' + u.label + "</option>"
+      ).join("");
+
+      function applyUseCase(id) {
+        const p = USECASES[id] && USECASES[id].preset;
+        if (!p) { renderPlanner(); return; }
+        if (p.gpu) { $("cfgGpu").value = p.gpu; fillVramOptions(); }
+        if (p.workload) $("cfgWorkload").value = p.workload;
+        if (p.conn) { $("cfgConn").value = p.conn; fillSpeedOptions(); }
+        if (p.speed) $("cfgSpeed").value = p.speed;
+        if (p.switch) $("cfgSwitch").value = p.switch;
+        if (p.route) $("cfgRoute").value = p.route;
+        if (p.storVendor) $("cfgStorVendor").value = p.storVendor;
+        if (p.storMode) $("cfgStorMode").value = p.storMode;
+        if (p.kvOff) $("cfgKvOff").value = p.kvOff;
+        $("cfgKva").value = p.kva || "0";
+        if (p.gpuAdj) $("cfgGpuAdj").value = p.gpuAdj;
+        if (p.cpu) $("cfgCpu").value = p.cpu;
+        if (p.model) $("cfgModel").value = p.model;
+        if (p.kv) $("cfgKv").value = p.kv;
+        if (p.ctx) $("cfgCtx").value = p.ctx;
+        if (p.users) $("cfgUsers").value = p.users;
+        if (p.nodes) $("cfgNodes").value = p.nodes;
+        renderPlanner();
+      }
+      $("cfgUsecase").addEventListener("change", () => applyUseCase($("cfgUsecase").value));
+
+      $("cfgGpu").addEventListener("change", () => { fillVramOptions(); renderPlanner(); });
+      $("cfgConn").addEventListener("change", () => { fillSpeedOptions(); renderPlanner(); });
+      ["cfgVram", "cfgWorkload", "cfgSpeed", "cfgSwitch", "cfgRoute", "cfgStorVendor", "cfgStorMode", "cfgKvOff", "cfgKva", "cfgGpuAdj", "cfgCpu", "cfgModel", "cfgKv"].forEach((id) =>
+        $(id).addEventListener("change", renderPlanner)
+      );
+      ["cfgCtx", "cfgUsers", "cfgNodes"].forEach((id) =>
+        $(id).addEventListener("input", renderPlanner)
+      );
+
+      $("demoGo").addEventListener("click", runDemo);
+      $("demoReset").addEventListener("click", demoIdle);
+
+      fillVramOptions();
+      fillSpeedOptions();
+      renderPlanner();
+      renderDemoStatics();
+      renderBurstStatics();
+      renderProfit();
+      demoIdle();
+    </script>
+  </body>
+</html>
