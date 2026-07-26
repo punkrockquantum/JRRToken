@@ -1,8 +1,12 @@
-# JRRToken — AI Infrastructure Planning & Workshop Suite
+# Fellowship of the Token — AI Infrastructure Teaching & Planning Suite
 
-Three related tools for teaching and planning AI infrastructure: how
-prompts become tokens, how architecture choices drive tokenomics, and how
-to configure and price real deployments.
+The complete collection: three related tools for teaching and planning AI
+infrastructure — how prompts become tokens, how architecture choices
+drive tokenomics, and how to configure and price real deployments.
+
+> The FLUX planner also lives standalone in the
+> [JRRToken](https://github.com/punkrockquantum/JRRToken) repo; this
+> repository preserves the entire suite.
 
 | App | Where | Run | Port |
 | --- | --- | --- | --- |
