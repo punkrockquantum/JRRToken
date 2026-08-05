@@ -216,6 +216,14 @@
               <span class="muted">Model (by name)</span>
               <select id="cfgModel"></select>
             </label>
+            <label class="field" id="fldCustP" hidden>
+              <span class="muted">Custom model size (B params)</span>
+              <input id="cfgCustParams" type="number" min="0.5" step="0.5" value="70" />
+            </label>
+            <label class="field" id="fldCustA" hidden>
+              <span class="muted">Active params (B, MoE — blank = dense)</span>
+              <input id="cfgCustActive" type="number" min="0" step="0.5" placeholder="dense" />
+            </label>
             <label class="field">
               <span class="muted">KV cache precision</span>
               <select id="cfgKv">
@@ -499,6 +507,9 @@
       // =============== Model catalog by name (weights = FP16 GB) ================
       // Cloud frontier sizes are undisclosed — planning estimates (est.).
       const MODEL_GROUPS = [
+        { label: "Custom", items: [
+          { id: "custommodel", label: "Custom model — define parameters", gb: 140, cust: true },
+        ]},
         { label: "Cloud frontier (proprietary — sizes are planning estimates)", items: [
           { id: "fable", label: "Claude Fable (Anthropic) — est. 2T", gb: 4000, act: 240, est: true },
           { id: "opus45", label: "Claude Opus 4.5 (Anthropic) — est. 2T", gb: 4000, act: 240, est: true },
@@ -703,6 +714,14 @@
 
       // ============================== Config ====================================
       function readCfg() {
+        const cp = Math.max(0.5, parseFloat($("cfgCustParams").value) || 70);
+        const caRaw = parseFloat($("cfgCustActive").value);
+        const ca = caRaw > 0 ? Math.min(caRaw, cp) : 0;
+        const cm = MODELS_BY_ID.custommodel;
+        cm.gb = Math.round(cp * 2); // FP16 weights = params x 2 bytes
+        if (ca > 0) cm.act = Math.round(ca * 2);
+        else delete cm.act;
+        cm.label = "Custom — " + cp + "B " + (ca > 0 ? "MoE (" + ca + "B active)" : "dense");
         return {
           usecase: $("cfgUsecase").value,
           gpu: $("cfgGpu").value,
@@ -816,6 +835,13 @@
         $("fldUsers").hidden = training;
         $("fldCtx").hidden = training;
         $("fldNodes").hidden = !training;
+        const isCust = cfg.model === "custommodel";
+        $("fldCustP").hidden = !isCust;
+        $("fldCustA").hidden = !isCust;
+        if (isCust) {
+          const opt = $("cfgModel").querySelector('option[value="custommodel"]');
+          if (opt) opt.textContent = MODELS_BY_ID.custommodel.label + " — " + nf(MODELS_BY_ID.custommodel.gb) + " GB";
+        }
         $("ucNote").textContent = USECASES[cfg.usecase] ? USECASES[cfg.usecase].desc : "";
         const stor = storageOf(cfg);
         $("cfgStorMode").disabled = !stor.external;
@@ -831,11 +857,14 @@
         const preGA = spd.preGA
           ? " <strong>Note:</strong> 800G ServiceFabric is not yet GA — pre-GA availability only."
           : "";
-        const estNote = mdl.est
-          ? " Model size is a planning estimate (weights not public)."
-          : mdl.emg
-            ? " Emerging model — size is a planning estimate until weights ship."
-            : "";
+        const estNote = mdl.cust
+          ? " Custom model: " + nf(mdl.gb) + " GB FP16 weights" +
+            (mdl.act ? ", " + nf(mdl.act / 2) + "B active — MoE prefills on active parameters only." : ", dense — every parameter works on every token.")
+          : mdl.est
+            ? " Model size is a planning estimate (weights not public)."
+            : mdl.emg
+              ? " Emerging model — size is a planning estimate until weights ship."
+              : "";
 
         if (!training) {
           const r = inferCalc(cfg, g, nodeGB);
@@ -1534,7 +1563,7 @@
       ["cfgVram", "cfgWorkload", "cfgSpeed", "cfgSwitch", "cfgRoute", "cfgStorVendor", "cfgStorMode", "cfgKvOff", "cfgKva", "cfgGpuAdj", "cfgCpu", "cfgModel", "cfgKv"].forEach((id) =>
         $(id).addEventListener("change", renderPlanner)
       );
-      ["cfgCtx", "cfgUsers", "cfgNodes"].forEach((id) =>
+      ["cfgCtx", "cfgUsers", "cfgNodes", "cfgCustParams", "cfgCustActive"].forEach((id) =>
         $(id).addEventListener("input", renderPlanner)
       );
 
