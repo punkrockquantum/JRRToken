@@ -125,6 +125,7 @@
       ul.recs li { line-height: 1.45; }
       .go { background: #ffffff; color: #000000; border-color: #ffffff; }
       .go:hover { background: #e5e5e5; }
+      .plan-btn { padding: 0.2rem 0.55rem; font-size: 0.78rem; white-space: nowrap; }
       .pill {
         border: 1px solid #555555;
         border-radius: 9999px;
@@ -187,6 +188,7 @@
         <div class="toolbar">
           <button id="tabPlan" class="tab-active">1 &middot; Comprehensive Planner</button>
           <button id="tabDemo">2 &middot; Prompt &rarr; Token &rarr; Value (LHR19 / ACC4)</button>
+          <button id="tabDeploy">3 &middot; Deploy &amp; Simulate</button>
         </div>
 
         <!-- ============================ TAB 1: PLANNER ============================ -->
@@ -452,6 +454,73 @@
             &divide; 8,000 &asymp; 14.3 sessions admitted per second per node; answer = 528
             tokens at 96 tok/s = 5.5 s per user. The simulation ignores prefill/decode
             contention (chunked-prefill schedulers interleave them). Figures illustrative.
+          </p>
+        </div>
+        <!-- ============================ TAB 3: DEPLOY ============================ -->
+        <div id="deployView" class="view" hidden>
+          <div id="depContext" class="notice" style="border-left-color: #555555">
+            Configure the planner in tab 1, then press &ldquo;Plan deployment&rdquo; on any viable
+            row of the architecture comparison to hand a design over to this console.
+          </div>
+
+          <h4 class="sec">Deployment choices</h4>
+          <div class="controls">
+            <label class="field">
+              <span class="muted">Where are the users?</span>
+              <select id="depRegion"></select>
+            </label>
+            <label class="field">
+              <span class="muted">OEM / system builder</span>
+              <select id="depOem"></select>
+            </label>
+            <label class="field">
+              <span class="muted">Cooling (as available for the design)</span>
+              <select id="depCooling"></select>
+            </label>
+            <label class="field">
+              <span class="muted">Interconnection</span>
+              <select id="depConn"></select>
+            </label>
+          </div>
+          <p class="muted" id="depAvail" style="margin: -0.25rem 0 0.75rem"></p>
+
+          <div class="sites" id="depSites"></div>
+          <div id="depStats" class="stats"></div>
+          <div id="depNotice" class="notice"></div>
+
+          <div class="journey">
+            <div class="toolbar">
+              <button id="depGo" class="go">Submit — run the deployment</button>
+              <button id="depReset" disabled>Reset</button>
+              <span id="depStatus" class="pill">Idle</span>
+              <span id="depClock" class="muted"></span>
+            </div>
+            <ol class="stages" id="depStages"></ol>
+            <div class="fillrow">
+              <span class="muted">Deployment progress</span>
+              <span id="depFill" class="muted"></span>
+            </div>
+            <div class="meter"><div id="depBar" class="meter-bar"></div></div>
+            <div class="stats stats-5" style="margin-top: 0.75rem">
+              <div class="stat"><span id="pTokens" class="stat-value">0</span><span class="muted" id="pTokensLbl">Tokens delivered</span></div>
+              <div class="stat"><span id="pPrefill" class="stat-value">0</span><span class="muted" id="pPrefillLbl">Prompts prefilled</span></div>
+              <div class="stat"><span id="pStreams" class="stat-value">0</span><span class="muted" id="pStreamsLbl">Active streams</span></div>
+              <div class="stat"><span id="pKv" class="stat-value">0 GB</span><span class="muted" id="pKvLbl">KV in use</span></div>
+              <div class="stat"><span id="pCost" class="stat-value">$0.00</span><span class="muted">Cost accrued</span></div>
+            </div>
+            <div id="depValue" class="notice" hidden></div>
+          </div>
+
+          <p class="muted" style="margin-top: 0.9rem">
+            Same physics as the planner, with deployment modifiers. Cooling sets PUE and
+            sustained clocks: DLC holds 100% clocks at PUE 1.13 (+$18/kW-mo colo premium); air
+            on &ge;1 kW GPUs derates sustained clocks &minus;8% at PUE 1.42; rack-scale NVL
+            systems are DLC-only; CS-3 carries an internal water loop; SN40L DataScale racks
+            are air-designed at 10 kW. A DLC design landing at a site without liquid runs
+            air-cooled at &minus;8%. OEM sets the hardware $/hr multiplier and lead time.
+            Sites carry regional colo multipliers, last-mile RTT, ServiceFabric and DLC
+            availability. Users split evenly across the region&rsquo;s sites; training
+            concentrates in the region&rsquo;s first campus. All figures illustrative.
           </p>
         </div>
       </section>
@@ -996,7 +1065,7 @@
 
       function renderCompareInfer(cfg, sel, selNodeGB) {
         let html =
-          "<tr><th>Architecture</th><th>Status</th><th>Node VRAM</th><th>Users/node</th><th>Nodes</th><th>TTFT</th><th>$ / 1M tok</th><th>DLR $/mo</th><th>Customer $/mo</th></tr>";
+          "<tr><th>Architecture</th><th>Status</th><th>Node VRAM</th><th>Users/node</th><th>Nodes</th><th>TTFT</th><th>$ / 1M tok</th><th>DLR $/mo</th><th>Customer $/mo</th><th></th></tr>";
         GPUS.forEach((g) => {
           const nodeGB = g.id === sel.id ? selNodeGB : defNodeGB(g);
           const r = inferCalc(cfg, g, nodeGB);
@@ -1006,9 +1075,10 @@
             html +=
               "<td>" + nf(nodeGB) + " GB</td><td>" + nf(r.perNode) + "</td><td>" + nf(r.nodes) +
               "</td><td>" + ms(r.ttft) + "</td><td>" + usd2(r.per1M) + "</td><td>" + usd(r.dlr) +
-              "</td><td>" + usd(r.value) + "</td>";
+              "</td><td>" + usd(r.value) +
+              '</td><td><button class="plan-btn" data-gpu="' + g.id + '">Plan deployment</button></td>';
           } else {
-            html += "<td>" + nf(nodeGB) + ' GB</td><td colspan="6">insufficient VRAM for ' + MODELS_BY_ID[cfg.model].label + " — shard or upsize</td>";
+            html += "<td>" + nf(nodeGB) + ' GB</td><td colspan="7">insufficient VRAM for ' + MODELS_BY_ID[cfg.model].label + " — shard or upsize</td>";
           }
           html += "</tr>";
         });
@@ -1023,7 +1093,7 @@
       function renderCompareTrain(cfg, sel) {
         const base = trainCalc(cfg, GPUS[0], defNodeGB(GPUS[0])); // H100 baseline
         let html =
-          "<tr><th>Architecture</th><th>Status</th><th>Cluster tok/s</th><th>Tokens/mo</th><th>Cost $/mo</th><th>$ / 1M tok</th><th>DLR $/mo</th><th>Customer value $/mo</th></tr>";
+          "<tr><th>Architecture</th><th>Status</th><th>Cluster tok/s</th><th>Tokens/mo</th><th>Cost $/mo</th><th>$ / 1M tok</th><th>DLR $/mo</th><th>Customer value $/mo</th><th></th></tr>";
         GPUS.forEach((g) => {
           const r = trainCalc(cfg, g, defNodeGB(g));
           const cls = g.id === sel.id ? "sel" : r.ok ? "" : "dim";
@@ -1033,9 +1103,10 @@
             html +=
               "<td>" + nf(r.thru / 1000) + "k</td><td>" + nf1(r.tokensMo / 1e12) + "T</td><td>" + usd(r.costMo) +
               "</td><td>" + usdSmart(r.per1M) + "</td><td>" + usd(r.dlrMo) + "</td><td>" +
-              usd(custVal) + "</td>";
+              usd(custVal) +
+              '</td><td><button class="plan-btn" data-gpu="' + g.id + '">Plan deployment</button></td>';
           } else {
-            html += '<td colspan="6">' + r.reason + "</td>";
+            html += '<td colspan="7">' + r.reason + "</td>";
           }
           html += "</tr>";
         });
@@ -1493,16 +1564,484 @@
         }, 60);
       }
 
+      // ===================== Deploy & simulate (tab 3) ==========================
+      // DLR site catalog: last-mile RTT from regional users (ms), ServiceFabric
+      // and direct-liquid availability, regional colo $ multiplier.
+      const DEP_SITES = {
+        acc4: { code: "ACC4", city: "Ashburn", rtt: 6, fabric: true, liquid: true, colo: 1.0 },
+        jfk10: { code: "JFK10", city: "New York", rtt: 4, fabric: true, liquid: false, colo: 1.25 },
+        iah10: { code: "IAH10", city: "Houston", rtt: 7, fabric: true, liquid: true, colo: 0.95 },
+        lhr19: { code: "LHR19", city: "London", rtt: 5, fabric: true, liquid: true, colo: 1.2 },
+        ams11: { code: "AMS11", city: "Amsterdam", rtt: 6, fabric: true, liquid: true, colo: 1.1 },
+        cph3: { code: "CPH3", city: "Copenhagen", rtt: 8, fabric: false, liquid: true, colo: 0.9 },
+        sin11: { code: "SIN11", city: "Singapore", rtt: 6, fabric: true, liquid: true, colo: 1.3 },
+        nrt10: { code: "NRT10", city: "Tokyo", rtt: 5, fabric: true, liquid: true, colo: 1.35 },
+      };
+      const REGIONS = {
+        namEast: { label: "North America — East (ACC4 Ashburn · JFK10 New York)", sites: ["acc4", "jfk10"] },
+        namSouth: { label: "North America — South (IAH10 Houston)", sites: ["iah10"] },
+        emeaWest: { label: "Europe — West (LHR19 London · AMS11 Amsterdam)", sites: ["lhr19", "ams11"] },
+        nordics: { label: "Europe — Nordics (CPH3 Copenhagen)", sites: ["cph3"] },
+        apac: { label: "APAC (SIN11 Singapore · NRT10 Tokyo)", sites: ["sin11", "nrt10"] },
+        global: { label: "Global user base (ACC4 · LHR19 · SIN11 · NRT10)", sites: ["acc4", "lhr19", "sin11", "nrt10"] },
+      };
+      const OEMS = {
+        hpe: { label: "HPE — Cray XD / ProLiant", mult: 1.0, lead: 10, vendors: ["NVIDIA", "AMD"] },
+        dell: { label: "Dell — PowerEdge XE", mult: 0.98, lead: 8, vendors: ["NVIDIA", "AMD"] },
+        smc: { label: "Supermicro — GPU SuperServer", mult: 0.93, lead: 6, vendors: ["NVIDIA", "AMD"] },
+        lenovo: { label: "Lenovo — ThinkSystem SR", mult: 0.97, lead: 9, vendors: ["NVIDIA", "AMD"] },
+        cerebras: { label: "Cerebras direct — CS-3 systems", mult: 1.0, lead: 16, vendors: ["Cerebras"] },
+        sambanova: { label: "SambaNova direct — DataScale racks", mult: 1.0, lead: 12, vendors: ["SambaNova"] },
+      };
+      // A DLC design landing at a site without liquid runs air-cooled at -8% clocks.
+      const AIR_FALLBACK = 0.92;
+      function coolingOptionsFor(g) {
+        if (g.id === "cs3")
+          return [{ id: "internal", label: "Internal water loop (built into CS-3)", pue: 1.2, factor: 1.0, coloAdd: 0 }];
+        if (g.id === "sn40l")
+          return [{ id: "air", label: "Air — 10 kW DataScale racks (as designed)", pue: 1.35, factor: 1.0, coloAdd: 0 }];
+        const dlc = { id: "dlc", label: "Direct liquid (DLC) — PUE 1.13, full clocks", pue: 1.13, factor: 1.0, coloAdd: 18 };
+        if (g.gpusPerNode >= 72) return [dlc]; // NVL72 / Helios rack-scale is liquid-only
+        if (g.kw >= 1.0)
+          return [dlc, { id: "air", label: "Air + rear-door HX — sustained clocks −8%, PUE 1.42", pue: 1.42, factor: AIR_FALLBACK, coloAdd: 0 }];
+        return [
+          { id: "air", label: "Air (rear-door ready) — PUE 1.35", pue: 1.35, factor: 0.97, coloAdd: 0 },
+          dlc,
+        ];
+      }
+
+      let DEPLOY = null; // { cfg, g, nodeGB } — design handed over from the planner
+      let DEP = null; // computed deployment (deployCalc result)
+      let depTimer = null;
+      let depStart = 0;
+
+      function planDeployment(gpuId) {
+        const cfg = readCfg();
+        const g = GPUS.find((x) => x.id === gpuId);
+        if (!g) return;
+        const nodeGB = gpuId === cfg.gpu ? (g.variants[cfg.vramIdx] || g.variants[0]).nodeGB : defNodeGB(g);
+        DEPLOY = { cfg, g, nodeGB };
+        fillDeployControls();
+        setTab("deploy");
+        renderDeploy();
+      }
+      function ensureDeploy() {
+        if (!DEPLOY) planDeployment(readCfg().gpu);
+        else renderDeploy();
+      }
+
+      function fillDeployControls() {
+        const prevR = $("depRegion").value;
+        $("depRegion").innerHTML = Object.entries(REGIONS).map(
+          ([id, r]) => '<option value="' + id + '">' + r.label + "</option>"
+        ).join("");
+        if (REGIONS[prevR]) $("depRegion").value = prevR;
+        const g = DEPLOY.g;
+        $("depOem").innerHTML = Object.entries(OEMS)
+          .filter(([, o]) => o.vendors.includes(g.vendor))
+          .map(([id, o]) => '<option value="' + id + '">' + o.label + "</option>")
+          .join("");
+        const cools = coolingOptionsFor(g);
+        $("depCooling").innerHTML = cools.map(
+          (c, i) => '<option value="' + c.id + '"' + (i === 0 ? " selected" : "") + ">" + c.label + "</option>"
+        ).join("");
+        $("depCooling").disabled = cools.length === 1;
+        fillDepConn();
+      }
+      function fillDepConn() {
+        const region = REGIONS[$("depRegion").value] || REGIONS.namEast;
+        const sites = region.sites.map((id) => DEP_SITES[id]);
+        const allFabric = sites.every((x) => x.fabric);
+        const single = sites.length === 1;
+        const prev = $("depConn").value;
+        const opts = [
+          { id: "fabric", label: "ServiceFabric — SDN on-demand" + (allFabric ? "" : " (not at all sites)"), dis: !allFabric },
+          { id: "metro", label: "Metro Connect — DWDM waves", dis: false },
+          { id: "cross", label: "Cross Connect — single-site designs", dis: !single },
+        ];
+        $("depConn").innerHTML = opts.map(
+          (o) => '<option value="' + o.id + '"' + (o.dis ? " disabled" : "") + ">" + o.label + "</option>"
+        ).join("");
+        const pick = (opts.find((o) => o.id === prev && !o.dis) || opts.find((o) => !o.dis)).id;
+        $("depConn").value = pick;
+      }
+
+      function deployCalc() {
+        const { cfg, g, nodeGB } = DEPLOY;
+        const region = REGIONS[$("depRegion").value] || REGIONS.namEast;
+        const sitesRaw = region.sites.map((id) => DEP_SITES[id]);
+        const oem = OEMS[$("depOem").value] || OEMS.hpe;
+        const cools = coolingOptionsFor(g);
+        const cool = cools.find((c) => c.id === $("depCooling").value) || cools[0];
+        const conn = CONNS[$("depConn").value] || CONNS.metro;
+        const cpu = CPUS[cfg.cpu];
+        const stor = storageOf(cfg);
+        const mdl = MODELS_BY_ID[cfg.model];
+        const training = cfg.workload === "training";
+        const siteFactor = (x) => (cool.id === "dlc" && !x.liquid ? AIR_FALLBACK : cool.factor);
+
+        if (training) {
+          const site = sitesRaw[0]; // training concentrates in one campus
+          const f = siteFactor(site);
+          if (nodeGB * cfg.nodes < mdl.gb * 3)
+            return { ok: false, training: true, reason: "cluster VRAM too small for model + optimizer states — add nodes in the planner" };
+          const eff = conn.eff * SWITCHES[cfg.switch].eff * ROUTES[cfg.route].eff * (stor.gpuAdj ? 1.03 : 1) * f;
+          const thru = prefillTokS(g, cfg.model) * cfg.nodes * TRAIN_FACTOR * eff;
+          const tokensMo = thru * 3600 * HRS_MO * 0.95;
+          const gpus = cfg.nodes * g.gpusPerNode;
+          const powerKW = gpus * g.kw * cpu.kwMult * cool.pue;
+          const compute = gpus * g.hr * cpu.costMult * oem.mult * HRS_MO;
+          const colo = powerKW * (COLO_KW_MO * site.colo + cool.coloAdd);
+          const inter = conn.mo * 2 * speedOf(cfg).mult;
+          const dlr = colo + inter + (stor.external ? STOR_DLR_COLO_MO : 0);
+          const cost = compute + dlr + stor.mo;
+          const per1M = cost / (tokensMo / 1e6);
+          const baseH = trainCalc(cfg, GPUS[0], defNodeGB(GPUS[0]));
+          const value = baseH.ok ? (tokensMo / 1e6) * baseH.per1M - cost : 0;
+          const rentMo = gpuaasMo(g, cfg.nodes);
+          return { ok: true, training: true, region, sites: [site], site, f, eff, thru, tokensMo, nodes: cfg.nodes, gpus, powerKW, compute, colo, inter, dlr, cost, per1M, value, rentMo, cool, oem, conn };
+        }
+
+        const kvUser = (cfg.ctx * KVMB[cfg.kv]) / 1000;
+        if (nodeGB - mdl.gb < kvUser)
+          return { ok: false, training: false, reason: "model weights exceed node VRAM on " + g.name + " — pick another architecture in the planner" };
+        const budget = (nodeGB - mdl.gb) * (1 + (stor.kvOff ? stor.kvBoost : 0));
+        const perNode = Math.floor(budget / kvUser);
+        const per = Math.floor(cfg.users / sitesRaw.length);
+        const mAct = (mdl.act || mdl.gb) / 2;
+        const nodePF = g.gpusPerNode * g.pf8 * MFU_PREFILL;
+        const linMs0 = (cfg.ctx / prefillTokS(g, cfg.model)) * 1000;
+        const quadMs0 = ((4 * ATTN_LD * mAct * cfg.ctx * cfg.ctx) / (nodePF * 1e15)) * 1000;
+        const kvaStream = KVA_STREAM_GBS * g.gpusPerNode * (stor.gpuAdj ? 2 : 1);
+        const kvaPct = stor.kvaPct || 0;
+        const answerTok = Math.max(128, Math.min(2048, Math.round(cfg.ctx * 0.066)));
+        const S = sitesRaw.map((x, i) => {
+          const users = i === 0 ? cfg.users - per * (sitesRaw.length - 1) : per;
+          const f = siteFactor(x);
+          const cold = ((linMs0 + quadMs0) / f) * (stor.gpuAdj ? 0.9 : 1);
+          const warm = Math.min(cold, ((cfg.ctx * KVMB[cfg.kv]) / 1000 / kvaStream) * 1000 + KVA_OVERHEAD_MS);
+          const prefillMs = cold * (1 - kvaPct / 100) + warm * (kvaPct / 100);
+          const ttft = x.rtt + conn.rtt + cpu.ms + prefillMs;
+          const nodes = Math.max(1, Math.ceil(users / perNode));
+          const rate = ((prefillTokS(g, cfg.model) * f) / cfg.ctx) * nodes;
+          const decode = g.decode * f;
+          const answerSec = answerTok / decode;
+          const wave = users / rate;
+          return { ...x, users, f, prefillMs, ttft, nodes, rate, decode, answerSec, wave, done: wave + answerSec, outTok: users * answerTok, kvWrite: users * kvUser, ctxTok: users * cfg.ctx };
+        });
+        const totalNodes = S.reduce((a, x) => a + x.nodes, 0);
+        const coloRate = S.reduce((a, x) => a + x.nodes * (COLO_KW_MO * x.colo + cool.coloAdd), 0) / totalNodes;
+        const powerKW = totalNodes * g.gpusPerNode * g.kw * cpu.kwMult * cool.pue;
+        const compute = totalNodes * g.gpusPerNode * g.hr * cpu.costMult * oem.mult * HRS_MO;
+        const colo = powerKW * coloRate;
+        const inter = conn.mo * 2 * speedOf(cfg).mult * S.length;
+        const dlr = colo + inter + (stor.external ? STOR_DLR_COLO_MO : 0);
+        const cost = compute + dlr + stor.mo;
+        const decodeAvg = S.reduce((a, x) => a + x.users * x.decode, 0) / cfg.users;
+        const tokensMo = cfg.users * decodeAvg * 3600 * HRS_MO * UTIL;
+        const per1M = cost / (tokensMo / 1e6);
+        const value = (tokensMo / 1e6) * MARKET_PER_1M - cost;
+        const totalOut = S.reduce((a, x) => a + x.outTok, 0);
+        const maxDone = Math.max.apply(null, S.map((x) => x.done));
+        const bestTtft = Math.min.apply(null, S.map((x) => x.ttft));
+        return { ok: true, training: false, region, sites: S, users: cfg.users, ctx: cfg.ctx, kvUser, perNode, budget, totalNodes, powerKW, compute, colo, inter, dlr, cost, tokensMo, per1M, value, answerTok, totalOut, maxDone, bestTtft, cool, oem, conn };
+      }
+
+      function renderDeploy() {
+        if (!DEPLOY) return;
+        const { cfg, g, nodeGB } = DEPLOY;
+        const mdl = MODELS_BY_ID[cfg.model];
+        const training = cfg.workload === "training";
+        fillDepConn();
+        const d = deployCalc();
+        DEP = d;
+        $("depContext").innerHTML =
+          "<strong>Design handed over from the planner:</strong> " + g.vendor + " " + g.name +
+          " (" + nf(nodeGB) + " GB node) &middot; " + mdl.label + " &middot; " +
+          (training
+            ? nf(cfg.nodes) + " training nodes"
+            : nf(cfg.users) + " concurrent users &middot; " + nf(cfg.ctx) + "-token context &middot; " + KVLBL[cfg.kv] + " KV") +
+          " &middot; " + STORAGE[cfg.storVendor].label + " &middot; " + CPUS[cfg.cpu].label +
+          " hosts. Adjust the planner in tab 1 and press &ldquo;Plan deployment&rdquo; again to hand over a new design.";
+        const notes = [];
+        if (d.ok) {
+          if (d.cool.id === "dlc") {
+            const noLiq = d.sites.filter((x) => !x.liquid);
+            if (noLiq.length)
+              notes.push("DLC is not available at " + noLiq.map((x) => x.code).join(", ") + " — those sites run air-cooled at −8% sustained clocks.");
+          }
+          if (d.cool.id === "internal") notes.push("CS-3 systems carry their own water loop — facility cooling choice does not apply.");
+          if (g.gpusPerNode >= 72) notes.push(g.name + " is a rack-scale liquid-only system.");
+          notes.push("OEM: " + d.oem.label + " (hardware ×" + d.oem.mult.toFixed(2) + ", ~" + d.oem.lead + "-week lead).");
+          if (training) notes.push("Training concentrates in one campus — " + d.site.code + " " + d.site.city + ".");
+        }
+        $("depAvail").textContent = notes.join(" ");
+        const stats = $("depStats");
+        const noticeEl = $("depNotice");
+        if (!d.ok) {
+          stats.innerHTML = "";
+          $("depSites").innerHTML = "";
+          $("depStages").innerHTML = "";
+          noticeEl.className = "notice over";
+          noticeEl.innerHTML = "<strong>&#10007; Not deployable.</strong> " + d.reason + ".";
+          depSimIdle();
+          return;
+        }
+        noticeEl.className = "notice";
+        if (training) {
+          $("depSites").innerHTML =
+            '<div class="site"><h5>' + d.site.code + " &middot; " + d.site.city + "</h5>" +
+            '<div class="row"><span class="muted">Nodes</span><span>' + nf(d.nodes) + " (" + nf(d.gpus) + " GPUs)</span></div>" +
+            '<div class="row"><span class="muted">Cooling</span><span>' + d.cool.label.split(" — ")[0] + " (PUE " + d.cool.pue + ")</span></div>" +
+            '<div class="row"><span class="muted">Power envelope</span><span>' + fmtPow(d.powerKW) + "</span></div>" +
+            '<div class="row"><span class="muted">Cluster throughput</span><span>' + nf(d.thru / 1000) + "k tok/s</span></div>" +
+            '<div class="row"><span class="muted">East-west efficiency</span><span>' + Math.round(d.eff * 100) + "%</span></div></div>";
+          stats.className = "stats stats-5";
+          stats.innerHTML =
+            stat(nf(d.thru / 1000) + "k tok/s", "Cluster throughput (cooling ×" + d.f.toFixed(2) + ")") +
+            stat(nf1(d.tokensMo / 1e12) + "T", "Training tokens / month") +
+            stat(usdSmart(d.per1M), "Cost / 1M training tokens") +
+            stat(usd(d.dlr) + "/mo", "Value to DLR") +
+            stat(usd(d.value) + "/mo", "Customer value vs H100");
+          noticeEl.innerHTML =
+            "<strong>&#10003; Deployable.</strong> " + nf(d.nodes) + " &times; " + g.name + " nodes from " + d.oem.label +
+            " land at " + d.site.code + " on " + d.cool.label.split(" — ")[0].toLowerCase() + " cooling; east-west on " +
+            SWITCHES[cfg.switch].label + ", interconnect " + d.conn.label + ". Submit to simulate one month of training.";
+          $("depStages").innerHTML =
+            "<li>Racks land at " + d.site.code + " (" + d.oem.label + ", ~" + d.oem.lead + "-week lead) and power on at " + fmtPow(d.powerKW) + "</li>" +
+            "<li>Cluster bring-up — " + SWITCHES[cfg.switch].label + " east-west, " + ROUTES[cfg.route].label.toLowerCase() + " routing</li>" +
+            "<li>Data staging from " + STORAGE[cfg.storVendor].label + (storageOf(cfg).gpuAdj ? " over GPUDirect" : "") + "</li>" +
+            "<li>Training ramp to " + nf(d.thru / 1000) + "k tok/s (" + Math.round(d.eff * 100) + "% east-west efficiency, cooling ×" + d.f.toFixed(2) + ")</li>" +
+            "<li>Steady state — 95% duty cycle through the month</li>" +
+            "<li>Value delivered — " + nf1(d.tokensMo / 1e12) + "T tokens/mo at " + usdSmart(d.per1M) + " per 1M</li>";
+        } else {
+          $("depSites").innerHTML = d.sites.map((x) =>
+            '<div class="site"><h5>' + x.code + " &middot; " + x.city + "</h5>" +
+            '<div class="row"><span class="muted">Users routed</span><span>' + nf(x.users) + "</span></div>" +
+            '<div class="row"><span class="muted">Nodes</span><span>' + nf(x.nodes) + " (cap " + nf(d.perNode * x.nodes) + ")</span></div>" +
+            '<div class="row"><span class="muted">Cooling</span><span>' + (d.cool.id === "dlc" && !x.liquid ? "Air fallback (−8%)" : d.cool.label.split(" — ")[0]) + "</span></div>" +
+            '<div class="row"><span class="muted">TTFT</span><span>' + ms(x.ttft) + "</span></div>" +
+            '<div class="row"><span class="muted">Admission</span><span>' + nf1(x.rate) + " sessions/s</span></div>" +
+            '<div class="row"><span class="muted">KV write</span><span>' + nf(x.kvWrite) + " GB</span></div></div>"
+          ).join("");
+          stats.className = "stats stats-5";
+          stats.innerHTML =
+            stat(ms(d.bestTtft), "Best TTFT (last-mile + " + d.conn.label + " + prefill)") +
+            stat(usd2(d.per1M), "Token cost / 1M") +
+            stat(nf(d.totalNodes) + " nodes", d.sites.length + " site(s) · " + fmtPow(d.powerKW)) +
+            stat(usd(d.dlr) + "/mo", "Value to DLR") +
+            stat(usd(d.value) + "/mo", "Customer value (margin)");
+          noticeEl.innerHTML =
+            "<strong>&#10003; Deployable.</strong> " + nf(d.totalNodes) + " &times; " + g.name + " node(s) from " + d.oem.label +
+            " across " + d.sites.map((x) => x.code).join(" · ") + " on " + d.conn.label +
+            ". Submit to simulate all " + nf(d.users) + " users sending a " + nf(d.ctx) + "-token prompt at the same moment.";
+          $("depStages").innerHTML =
+            "<li>" + nf(d.users) + " users hit enter at the same moment (" + nf(d.ctx) + "-token context each)</li>" +
+            "<li>" + d.conn.label + " routes each prompt to the nearest site (" + d.sites.map((x) => x.code + " " + x.rtt + " ms").join(" · ") + ")</li>" +
+            "<li>Prefill wave — " + d.sites.map((x) => x.code + " ≈" + nf1(x.rate) + "/s").join(" · ") + "; first token at " + ms(d.bestTtft) + "</li>" +
+            "<li>Streaming — each session decodes at " + nf(d.sites[0].decode) + " tok/s" + (d.sites.some((x) => x.f < 1) ? " (cooling-derated where air)" : "") + "</li>" +
+            "<li>Drain — last queued user starts at ≈" + nf1(Math.max.apply(null, d.sites.map((x) => x.wave))) + " s; all " + nf(d.totalOut) + " answer tokens by ≈" + nf1(d.maxDone) + " s</li>" +
+            "<li>Value delivered — " + nf(d.users) + " answers become customer &amp; DLR value</li>";
+        }
+        depSimIdle();
+      }
+
+      function setDepStage(i) {
+        const lis = $("depStages").children;
+        for (let k = 0; k < lis.length; k++) lis[k].className = k < i ? "passed" : k === i ? "on" : "";
+      }
+      function depSimIdle() {
+        if (depTimer) { clearInterval(depTimer); depTimer = null; }
+        setDepStage(-1);
+        $("depStatus").textContent = "Idle";
+        $("depStatus").className = "pill";
+        $("depClock").textContent = "";
+        $("depBar").style.width = "0%";
+        $("depFill").textContent = "";
+        const ok = DEP && DEP.ok;
+        const tr = ok && DEP.training;
+        $("pTokensLbl").textContent = tr ? "Training tokens processed" : "Answer tokens delivered" + (ok ? " (of " + nf(DEP.totalOut) + ")" : "");
+        $("pPrefillLbl").textContent = tr ? "GPU-hours burned" : "Prompts prefilled" + (ok ? " (of " + nf(DEP.users) + ")" : "");
+        $("pStreamsLbl").textContent = tr ? "Cluster throughput (tok/s)" : "Active streams";
+        $("pKvLbl").textContent = tr ? "Energy drawn (MWh at PUE)" : "KV in use";
+        $("pTokens").textContent = "0";
+        $("pPrefill").textContent = "0";
+        $("pStreams").textContent = "0";
+        $("pKv").textContent = tr ? "0" : "0 GB";
+        $("pCost").textContent = "$0.00";
+        $("depValue").hidden = true;
+        $("depGo").disabled = !ok;
+        $("depGo").textContent = "Submit — run the deployment";
+        $("depReset").disabled = true;
+      }
+
+      // Exact tokens streamed by simT for one site (same closed form as tab 2,
+      // generalised to per-site admission rate and cooling-derated decode).
+      function depSiteTokens(x, simT, answerTok) {
+        const done = simT > x.answerSec ? Math.min(x.users, x.rate * (simT - x.answerSec)) : 0;
+        const a = Math.max(0, simT - x.answerSec);
+        const b = Math.min(simT, x.users / x.rate);
+        let inflight = 0;
+        if (b > a) inflight = (x.rate * x.decode * ((simT - a) ** 2 - (simT - b) ** 2)) / 2;
+        return Math.min(x.outTok, done * answerTok + inflight);
+      }
+
+      const DEP_ROUTE_REAL = 1.2; // real seconds for submit + routing stages
+      function runDeploySim() {
+        renderDeploy(); // recompute with the latest dropdown choices
+        if (!DEP || !DEP.ok) return;
+        const d = DEP;
+        $("depGo").disabled = true;
+        $("depGo").textContent = "Running…";
+        $("depStatus").textContent = "Live";
+        $("depStatus").className = "pill live";
+        depStart = performance.now();
+
+        if (d.training) {
+          const REAL_S = 14; // one simulated month in 14 real seconds
+          depTimer = setInterval(() => {
+            const p = Math.min(1, (performance.now() - depStart) / 1000 / REAL_S);
+            const simH = p * HRS_MO;
+            const ramp = p < 0.2 ? 0 : p < 0.35 ? (p - 0.2) / 0.15 : 1;
+            const tokens = d.tokensMo * Math.max(0, p - 0.2) / 0.8;
+            const idx = p < 0.06 ? 0 : p < 0.13 ? 1 : p < 0.2 ? 2 : p < 0.35 ? 3 : p < 1 ? 4 : 5;
+            setDepStage(idx);
+            $("depBar").style.width = p * 100 + "%";
+            $("depClock").textContent = "t = " + nf(simH) + " h of " + HRS_MO + " h (simulated month)";
+            $("depFill").textContent = "stage " + (idx + 1) + " of 6";
+            $("pTokens").textContent = nf1(tokens / 1e12) + "T";
+            $("pPrefill").textContent = nf(d.gpus * simH);
+            $("pStreams").textContent = nf(d.thru * ramp);
+            $("pKv").textContent = nf((d.powerKW * simH) / 1000);
+            $("pCost").textContent = usd(d.cost * p);
+            if (p >= 1) finishTraining(d);
+          }, 60);
+        } else {
+          const speed = Math.max(1, d.maxDone / 10); // whole burst in ~10 real seconds
+          depTimer = setInterval(() => {
+            const realT = performance.now() - depStart;
+            const simT = Math.max(0, realT / 1000 - DEP_ROUTE_REAL) * speed;
+            let pref = 0, active = 0, tokens = 0;
+            d.sites.forEach((x) => {
+              const pDone = Math.min(x.users, x.rate * simT);
+              const cDone = simT > x.answerSec ? Math.min(x.users, x.rate * (simT - x.answerSec)) : 0;
+              pref += pDone;
+              active += Math.max(0, pDone - cDone);
+              tokens += depSiteTokens(x, simT, d.answerTok);
+            });
+            let idx;
+            if (realT < 600) idx = 0;
+            else if (realT < DEP_ROUTE_REAL * 1000) idx = 1;
+            else if (pref < d.users * 0.5) idx = 2;
+            else if (pref < d.users) idx = 3;
+            else if (tokens < d.totalOut - 1) idx = 4;
+            else idx = 5;
+            setDepStage(idx);
+            $("depBar").style.width = Math.min(100, (tokens / d.totalOut) * 100) + "%";
+            $("depClock").textContent = simT > 0 ? "t = " + nf1(simT) + " s (simulated, " + nf1(speed) + "× compressed)" : nf(realT) + " ms";
+            $("depFill").textContent = "stage " + (idx + 1) + " of 6";
+            $("pTokens").textContent = nf(tokens);
+            $("pPrefill").textContent = nf(pref);
+            $("pStreams").textContent = nf(active);
+            $("pKv").textContent = nf(active * d.kvUser) + " GB";
+            $("pCost").textContent = usd2((tokens / 1e6) * d.per1M);
+            if (simT >= d.maxDone) finishInference(d);
+          }, 60);
+        }
+      }
+
+      function finishInference(d) {
+        clearInterval(depTimer);
+        depTimer = null;
+        setDepStage(5);
+        $("depStatus").textContent = "Complete";
+        $("depStatus").className = "pill done";
+        $("depBar").style.width = "100%";
+        $("pTokens").textContent = nf(d.totalOut);
+        $("pPrefill").textContent = nf(d.users);
+        $("pStreams").textContent = "0";
+        $("pKv").textContent = "0 GB";
+        const burstCost = (d.totalOut / 1e6) * d.per1M;
+        $("pCost").textContent = usd2(burstCost);
+        const marketEq = (d.totalOut / 1e6) * MARKET_PER_1M;
+        let proc =
+          '<table class="mini" style="margin-top:0.6rem"><tr><th>Site</th><th>Users</th><th>Nodes</th><th>Context prefilled</th><th>KV written</th><th>First TTFT</th><th>Prefill wave</th><th>Answer tokens</th><th>Done by</th></tr>';
+        d.sites.forEach((x) => {
+          proc +=
+            "<tr><td>" + x.code + " · " + x.city + "</td><td>" + nf(x.users) + "</td><td>" + nf(x.nodes) + "</td><td>" +
+            (x.ctxTok / 1e6).toFixed(1) + "M tok</td><td>" + nf(x.kvWrite) + " GB</td><td>" + ms(x.ttft) + "</td><td>" +
+            nf1(x.wave) + " s</td><td>" + nf(x.outTok) + "</td><td>" + nf1(x.done) + " s</td></tr>";
+        });
+        proc +=
+          "</table>" +
+          '<table class="mini" style="margin-top:0.6rem"><tr><th colspan="2">Complete customer value — this deployment</th></tr>' +
+          "<tr><td>Monthly volume at " + Math.round(UTIL * 100) + "% utilisation</td><td>" + nf(d.tokensMo / 1e9) + "B tokens/mo</td></tr>" +
+          "<tr><td>Token cost vs market</td><td>" + usd2(d.per1M) + " vs $" + MARKET_PER_1M.toFixed(2) + " per 1M</td></tr>" +
+          "<tr><td><strong>Customer value (margin)</strong></td><td><strong>" + usd(d.value) + "/mo</strong></td></tr>" +
+          "<tr><td>Value to DLR (colo + interconnect)</td><td>" + usd(d.dlr) + "/mo</td></tr>" +
+          "<tr><td>Monthly infrastructure cost</td><td>" + usd(d.cost) + " (compute " + usd(d.compute) + " + DLR " + usd(d.dlr) + " + storage " + usd(d.cost - d.compute - d.dlr) + ")</td></tr>" +
+          "<tr><td>This burst — cost vs market value</td><td>" + usd2(burstCost) + " vs " + usd2(marketEq) + "</td></tr>" +
+          "<tr><td>Deployment</td><td>" + d.oem.label + " · " + d.cool.label.split(" — ")[0] + " · " + d.conn.label + " · " + d.region.label + "</td></tr></table>";
+        $("depValue").hidden = false;
+        $("depValue").innerHTML =
+          "<strong>Deployment complete — " + nf(d.users) + " prompts answered.</strong> First token at " + ms(d.bestTtft) +
+          "; the whole burst drained in ≈" + nf1(d.maxDone) + " s. At the latency this design achieves, the deployment turns into " +
+          nf(d.tokensMo / 1e9) + "B tokens a month worth " + usd((d.tokensMo / 1e6) * MARKET_PER_1M) + " at market — " +
+          usd(d.value) + "/mo of that is customer value after " + usd(d.cost) + "/mo of infrastructure." + proc;
+        $("depGo").disabled = false;
+        $("depGo").textContent = "Submit — run the deployment";
+        $("depReset").disabled = false;
+      }
+
+      function finishTraining(d) {
+        clearInterval(depTimer);
+        depTimer = null;
+        setDepStage(5);
+        $("depStatus").textContent = "Complete";
+        $("depStatus").className = "pill done";
+        $("depBar").style.width = "100%";
+        $("pTokens").textContent = nf1(d.tokensMo / 1e12) + "T";
+        $("pPrefill").textContent = nf(d.gpus * HRS_MO);
+        $("pStreams").textContent = nf(d.thru);
+        $("pKv").textContent = nf((d.powerKW * HRS_MO) / 1000);
+        $("pCost").textContent = usd(d.cost);
+        const proc =
+          '<table class="mini" style="margin-top:0.6rem"><tr><th colspan="2">Complete customer value — one month of training</th></tr>' +
+          "<tr><td>Tokens trained</td><td>" + nf1(d.tokensMo / 1e12) + "T at " + nf(d.thru / 1000) + "k tok/s (95% duty)</td></tr>" +
+          "<tr><td>Cost per 1M training tokens</td><td>" + usdSmart(d.per1M) + "</td></tr>" +
+          "<tr><td>Monthly cluster cost</td><td>" + usd(d.cost) + " (compute " + usd(d.compute) + " + DLR " + usd(d.dlr) + " + storage " + usd(d.cost - d.compute - d.dlr) + ")</td></tr>" +
+          "<tr><td><strong>Customer value vs H100 baseline</strong></td><td><strong>" + usd(d.value) + "/mo saved</strong></td></tr>" +
+          "<tr><td>vs renting the same nodes (NeoCloud)</td><td>" + usd(d.rentMo) + "/mo — " +
+          (d.rentMo > d.cost ? usd(d.rentMo - d.cost) + "/mo in favour of this colo build" : usd(d.cost - d.rentMo) + "/mo in favour of GPUaaS") + "</td></tr>" +
+          "<tr><td>Value to DLR (colo + interconnect)</td><td>" + usd(d.dlr) + "/mo</td></tr>" +
+          "<tr><td>Energy drawn</td><td>" + nf((d.powerKW * HRS_MO) / 1000) + " MWh (PUE " + d.cool.pue + ", cooling ×" + d.f.toFixed(2) + " clocks)</td></tr>" +
+          "<tr><td>Deployment</td><td>" + d.oem.label + " · " + d.cool.label.split(" — ")[0] + " · " + d.conn.label + " · " + d.site.code + " " + d.site.city + "</td></tr></table>";
+        $("depValue").hidden = false;
+        $("depValue").innerHTML =
+          "<strong>Training month complete.</strong> " + nf(d.nodes) + " × " + DEPLOY.g.name + " nodes at " + d.site.code +
+          " processed " + nf1(d.tokensMo / 1e12) + "T tokens for " + usd(d.cost) + " — " + usdSmart(d.per1M) +
+          " per 1M tokens, " + usd(d.value) + "/mo better than the same tokens on an H100 baseline." + proc;
+        $("depGo").disabled = false;
+        $("depGo").textContent = "Submit — run the deployment";
+        $("depReset").disabled = false;
+      }
+
       // ================================ Wiring ==================================
       function setTab(which) {
-        const plan = which === "plan";
-        $("planView").hidden = !plan;
-        $("demoView").hidden = plan;
-        $("tabPlan").classList.toggle("tab-active", plan);
-        $("tabDemo").classList.toggle("tab-active", !plan);
+        $("planView").hidden = which !== "plan";
+        $("demoView").hidden = which !== "demo";
+        $("deployView").hidden = which !== "deploy";
+        $("tabPlan").classList.toggle("tab-active", which === "plan");
+        $("tabDemo").classList.toggle("tab-active", which === "demo");
+        $("tabDeploy").classList.toggle("tab-active", which === "deploy");
       }
       $("tabPlan").addEventListener("click", () => setTab("plan"));
       $("tabDemo").addEventListener("click", () => setTab("demo"));
+      $("tabDeploy").addEventListener("click", () => { setTab("deploy"); ensureDeploy(); });
+      $("cmpTable").addEventListener("click", (e) => {
+        const b = e.target.closest ? e.target.closest("button[data-gpu]") : null;
+        if (b) planDeployment(b.getAttribute("data-gpu"));
+      });
 
       $("cfgGpu").innerHTML = GPUS.map(
         (g) => '<option value="' + g.id + '"' + (g.id === "b300" ? " selected" : "") + ">" +
@@ -1569,6 +2108,11 @@
 
       $("demoGo").addEventListener("click", runDemo);
       $("demoReset").addEventListener("click", demoIdle);
+
+      $("depRegion").addEventListener("change", () => { fillDepConn(); renderDeploy(); });
+      ["depOem", "depCooling", "depConn"].forEach((id) => $(id).addEventListener("change", renderDeploy));
+      $("depGo").addEventListener("click", runDeploySim);
+      $("depReset").addEventListener("click", depSimIdle);
 
       fillVramOptions();
       fillSpeedOptions();
