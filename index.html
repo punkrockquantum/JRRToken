@@ -218,6 +218,17 @@
               <span class="muted">Model (by name)</span>
               <select id="cfgModel"></select>
             </label>
+            <label class="field">
+              <span class="muted">Weights precision</span>
+              <select id="cfgWprec">
+                <option value="fp32">FP32 (4 B/param)</option>
+                <option value="fp16" selected>BF16 / FP16 (2 B/param)</option>
+                <option value="fp8">FP8 (1 B/param)</option>
+                <option value="int8">INT8 (1 B/param)</option>
+                <option value="fp6">FP6 (0.75 B/param)</option>
+                <option value="fp4">FP4 / NVFP4 (0.5 B/param)</option>
+              </select>
+            </label>
             <label class="field" id="fldCustP" hidden>
               <span class="muted">Custom model size (B params)</span>
               <input id="cfgCustParams" type="number" min="0.5" step="0.5" value="70" />
@@ -231,6 +242,7 @@
               <select id="cfgKv">
                 <option value="fp16" selected>FP16 (0.330 MB/token)</option>
                 <option value="fp8">FP8 optimised (0.165 MB/token)</option>
+                <option value="fp4">FP4 experimental (0.0825 MB/token)</option>
               </select>
             </label>
             <label class="field" id="fldCtx">
@@ -282,7 +294,7 @@
             </label>
           </div>
 
-          <h4 class="sec">Storage &amp; CPU</h4>
+          <h4 class="sec">Storage &amp; host silicon (CPU / DPU / QPU)</h4>
           <div class="controls">
             <label class="field">
               <span class="muted">Storage platform</span>
@@ -324,11 +336,66 @@
             <label class="field">
               <span class="muted">CPU platform</span>
               <select id="cfgCpu">
-                <option value="std" selected>Standard (AMD EPYC / Intel Xeon)</option>
-                <option value="oc">Overclocked — Blackcore</option>
+                <option value="xeon6" selected>Intel Xeon 6 (Granite Rapids)</option>
+                <option value="epyc">AMD EPYC 9005 (Turin)</option>
+                <option value="grace">NVIDIA Grace (Arm)</option>
+                <option value="ampere">Ampere AmpereOne</option>
+                <option value="oc">Blackcore overclocked</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">DPU — network/storage offload</span>
+              <select id="cfgDpu">
+                <option value="none" selected>None</option>
+                <option value="bf3">NVIDIA BlueField-3</option>
+                <option value="pensando">AMD Pensando Salina 400</option>
+                <option value="ipu">Intel IPU E2100</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">QPU — hybrid quantum sidecar</span>
+              <select id="cfgQpu">
+                <option value="none" selected>None</option>
+                <option value="heron">IBM Quantum Heron</option>
+                <option value="willow">Google Willow</option>
+                <option value="ionq">IonQ Forte Enterprise</option>
+                <option value="rigetti">Rigetti Ankaa-3</option>
               </select>
             </label>
           </div>
+
+          <h4 class="sec">Scheduler, power &amp; targets (SLURM)</h4>
+          <div class="controls">
+            <label class="field">
+              <span class="muted">SLURM power capping</span>
+              <select id="cfgPcap">
+                <option value="none" selected>None — full TDP</option>
+                <option value="cap85">85% power cap (≈93% perf)</option>
+                <option value="cap70">70% power cap (≈85% perf)</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">SLURM scheduling (training duty)</span>
+              <select id="cfgSched">
+                <option value="gang">Gang + topology-aware (97%)</option>
+                <option value="std" selected>Default backfill (95%)</option>
+                <option value="fifo">Naive FIFO (90%)</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">TTFT target (ms, optional)</span>
+              <input id="cfgTtftTarget" type="number" min="0" step="10" placeholder="none" />
+            </label>
+            <label class="field">
+              <span class="muted">Monthly budget ($, optional)</span>
+              <input id="cfgBudget" type="number" min="0" step="1000" placeholder="none" />
+            </label>
+          </div>
+          <div class="toolbar">
+            <button id="optBtn" class="go">Optimise infrastructure</button>
+            <span class="muted">Fill in the workload (model, users, context) and optional targets — the tool picks everything else.</span>
+          </div>
+          <div id="optResult" class="notice" hidden></div>
 
           <div id="planStats" class="stats"></div>
           <div id="planNotice" class="notice"></div>
@@ -374,7 +441,22 @@
             benchmarks (110k-token TTFT 54.5 s \u2192 4.0 s, 13.6\u00d7; local \u2248 NFS within
             ~5%). Cerebras CS-3 and SambaNova SN40L are alternative architectures sold as whole
             systems/racks; their $/hr, pod sizing and decode rates are market estimates.
-            Utilisation 35%, PUE 1.3, colo $220/kW-mo, token market reference $3.50 per
+            Weights precision scales weights GB from the FP16 baseline (FP32 2&times;,
+            FP8/INT8 0.5&times;, FP6 0.375&times;, FP4 0.25&times;) and prefill compute (FP16
+            executes mixed-precision on FP8 tensor cores = today&rsquo;s baseline; FP32 halves
+            it, FP6 1.5&times; and FP4 2&times; on Blackwell-class / MI355X / rack-scale
+            platforms &mdash; Hopper, CDNA&nbsp;3 and dataflow systems cap at FP8, and the
+            planner clamps honestly per platform). KV cache: FP16 0.330 / FP8 0.165 / FP4
+            0.0825 MB/token. DPUs (BlueField-3, Pensando Salina 400, IPU E2100) offload
+            network + storage: &minus;1&ndash;2 ms dispatch, +1.5&ndash;2% training fabric
+            efficiency, $170&ndash;220/node-mo. QPU sidecars (Heron, Willow, Forte, Ankaa-3)
+            are hybrid quantum-classical research adjacency &mdash; colo + cross connect value
+            to DLR and a monthly cost, with no effect on token serving. SLURM power caps scale
+            kW and sustained clocks (85% power &asymp; 93% perf, 70% &asymp; 85%); SLURM
+            scheduling sets training duty cycle (gang + topology-aware 97%, default backfill
+            95%, naive FIFO 90%). The optimiser grid-searches these catalogs for the feasible
+            configuration with the highest customer value under optional TTFT and budget
+            targets. Utilisation 35%, PUE 1.3, colo $220/kW-mo, token market reference $3.50 per
             1M, decimal GB. NeoCloud GPUaaS benchmark uses illustrative on-demand list rates per
             GPU-hr plus a 10% ancillary uplift (egress, storage, support) for the same node count.
             Cloud frontier model sizes are undisclosed &mdash; planning estimates
@@ -699,8 +781,61 @@
         netapp: { label: "NetApp (AFF / StorageGRID)", baseMo: 5200, kvBoost: 0.25, external: true },
       };
       const CPUS = {
-        std: { label: "Standard (EPYC / Xeon)", ms: 8, costMult: 1.0, kwMult: 1.0 },
-        oc: { label: "Blackcore overclocked", ms: 3, costMult: 1.12, kwMult: 1.08 },
+        xeon6: { label: "Intel Xeon 6 (Granite Rapids)", ms: 8, costMult: 1.0, kwMult: 1.0, note: "mainstream host — highest core counts, MRDIMM bandwidth" },
+        epyc: { label: "AMD EPYC 9005 (Turin)", ms: 7, costMult: 1.0, kwMult: 0.97, note: "Zen 5 — strong perf/W, PCIe Gen5 lanes" },
+        grace: { label: "NVIDIA Grace (Arm)", ms: 6, costMult: 1.05, kwMult: 0.9, note: "NVLink-C2C coherent host — best with NVIDIA pods" },
+        ampere: { label: "Ampere AmpereOne", ms: 9, costMult: 0.95, kwMult: 0.92, note: "Arm efficiency play — cheapest watts per host" },
+        oc: { label: "Blackcore overclocked", ms: 3, costMult: 1.12, kwMult: 1.08, note: "latency-tuned x86 — 3 ms dispatch" },
+      };
+      CPUS.std = CPUS.xeon6; // legacy alias for older presets/links
+
+      // DPUs offload network + storage handling from the host CPU.
+      const DPUS = {
+        none: { label: "None", ms: 0, eff: 1.0, mo: 0 },
+        bf3: { label: "NVIDIA BlueField-3", ms: 2, eff: 1.02, mo: 220 },
+        pensando: { label: "AMD Pensando Salina 400", ms: 1.5, eff: 1.02, mo: 200 },
+        ipu: { label: "Intel IPU E2100", ms: 1, eff: 1.015, mo: 170 },
+      };
+      // QPUs: hybrid quantum-classical sidecars adjacent to the AI pod. They do
+      // NOT accelerate LLM token serving - they are research adjacency that adds
+      // colo + interconnect value to DLR and a monthly cost to the customer.
+      const QPUS = {
+        none: { label: "None", mo: 0, kw: 0 },
+        heron: { label: "IBM Quantum Heron", mo: 120000, kw: 25 },
+        willow: { label: "Google Willow", mo: 150000, kw: 30 },
+        ionq: { label: "IonQ Forte Enterprise", mo: 90000, kw: 12 },
+        rigetti: { label: "Rigetti Ankaa-3", mo: 60000, kw: 15 },
+      };
+
+      // Weights precision: wMult scales weights GB from the FP16 baseline;
+      // cMult scales prefill compute vs today's FP8-tensor-core baseline
+      // (FP16 weights already execute prefill in mixed-precision FP8 = 1.0).
+      const WPREC = {
+        fp32: { label: "FP32 (4 B/param)", wMult: 2.0, cMult: 0.5 },
+        fp16: { label: "BF16 / FP16 (2 B/param)", wMult: 1.0, cMult: 1.0 },
+        fp8: { label: "FP8 (1 B/param)", wMult: 0.5, cMult: 1.0 },
+        int8: { label: "INT8 (1 B/param)", wMult: 0.5, cMult: 1.0, lossy: true },
+        fp6: { label: "FP6 (0.75 B/param)", wMult: 0.375, cMult: 1.5, lossy: true },
+        fp4: { label: "FP4 / NVFP4 (0.5 B/param)", wMult: 0.25, cMult: 2.0, lossy: true },
+      };
+      // FP4/FP6 need Blackwell-class, MI355X (CDNA 4) or rack-scale silicon;
+      // Hopper / CDNA 3 / wafer-dataflow platforms cap at FP8.
+      const FP4_PLATFORMS = ["b100", "b200", "b300", "gb300", "rubin", "rtx6000", "spark", "mi355x", "helios"];
+      function precAllowed(g, id) {
+        if (id === "fp4" || id === "fp6") return FP4_PLATFORMS.includes(g.id);
+        return true;
+      }
+
+      // SLURM power management + scheduling.
+      const PCAPS = {
+        none: { label: "None — full TDP", kw: 1.0, perf: 1.0 },
+        cap85: { label: "SLURM cap — 85% power (≈93% perf)", kw: 0.85, perf: 0.93 },
+        cap70: { label: "SLURM cap — 70% power (≈85% perf)", kw: 0.7, perf: 0.85 },
+      };
+      const SCHEDS = {
+        gang: { label: "SLURM gang + topology-aware (97% duty)", duty: 0.97 },
+        std: { label: "SLURM default backfill (95% duty)", duty: 0.95 },
+        fifo: { label: "Naive FIFO (90% duty)", duty: 0.9 },
       };
 
       // ============================== Use cases =================================
@@ -710,7 +845,7 @@
         drug: {
           label: "Life Science — Drug Discovery",
           desc: "Molecular screening and protein-structure inference at batch scale — long scientific contexts with GPUDirect dataset streaming. Switch workload to Training for fine-tuning campaigns.",
-          preset: { workload: "inference", gpu: "b300", model: "llama70", kv: "fp8", ctx: 16000, users: 2000, conn: "cross", speed: "g400", storVendor: "everpure", storMode: "object", kvOff: "on", kva: "80", gpuAdj: "on", cpu: "std" },
+          preset: { workload: "inference", gpu: "b300", model: "llama70", kv: "fp8", ctx: 16000, users: 2000, conn: "cross", speed: "g400", storVendor: "everpure", storMode: "object", kvOff: "on", kva: "80", gpuAdj: "on", cpu: "xeon6" },
         },
         fraud: {
           label: "Financial Services — Fraud Detection",
@@ -720,7 +855,7 @@
         backbone: {
           label: "AI Model Inference — Network Backbone",
           desc: "High-volume token serving across metros over ServiceFabric — cost per 1M tokens is the primary KPI; KV offload keeps sessions per node high.",
-          preset: { workload: "inference", gpu: "b300", model: "llama70", kv: "fp8", ctx: 8000, users: 20000, conn: "fabric", speed: "g400", storVendor: "everpure", storMode: "object", kvOff: "on", kva: "40", gpuAdj: "off", cpu: "std" },
+          preset: { workload: "inference", gpu: "b300", model: "llama70", kv: "fp8", ctx: 8000, users: 20000, conn: "fabric", speed: "g400", storVendor: "everpure", storMode: "object", kvOff: "on", kva: "40", gpuAdj: "off", cpu: "xeon6" },
         },
         robotics: {
           label: "AI Inference — Robotics",
@@ -730,13 +865,13 @@
         cv: {
           label: "Computer Vision — Inference",
           desc: "Vision-language inference over camera and image streams — each frame is only 1\u20132k visual tokens, so per-stream throughput matters more than long context; image archives live on object storage.",
-          preset: { workload: "inference", gpu: "rtx6000", model: "gemma27", kv: "fp8", ctx: 2048, users: 3000, conn: "metro", speed: "g100", storVendor: "netapp", storMode: "object", kvOff: "off", gpuAdj: "on", cpu: "std" },
+          preset: { workload: "inference", gpu: "rtx6000", model: "gemma27", kv: "fp8", ctx: 2048, users: 3000, conn: "metro", speed: "g100", storVendor: "netapp", storMode: "object", kvOff: "off", gpuAdj: "on", cpu: "xeon6" },
           rec: { t: "Frame batching", b: "vision contexts are short (1\u20132k tokens per frame) — batch multiple camera frames per prefill pass and keep the image archive on object storage; long-context LLM sizing does not apply here." },
         },
         mfg: {
           label: "Manufacturing — Inference",
           desc: "Factory-floor inference — visual inspection, predictive maintenance and operator copilots, with deterministic latency into plant OT systems over Cross Connect.",
-          preset: { workload: "inference", gpu: "b200", model: "qwen332", kv: "fp8", ctx: 4096, users: 1500, conn: "cross", speed: "g100", storVendor: "everpure", storMode: "file", kvOff: "off", gpuAdj: "on", cpu: "std" },
+          preset: { workload: "inference", gpu: "b200", model: "qwen332", kv: "fp8", ctx: 4096, users: 1500, conn: "cross", speed: "g100", storVendor: "everpure", storMode: "file", kvOff: "off", gpuAdj: "on", cpu: "xeon6" },
           rec: { t: "Deterministic latency", b: "keep inspection and control-adjacent models pinned near the line — Cross Connect into the plant OT network avoids the jitter that shared IP paths introduce." },
         },
         av: {
@@ -748,12 +883,12 @@
         hub: {
           label: "AI Training — Regional Hub (10 MW+)",
           desc: "Campus-scale training hub with a 10 MW+ power envelope — rack-scale systems, InfiniBand east-west, phased power commitments with DLR.",
-          preset: { workload: "training", gpu: "gb300", nodes: 80, model: "llama405", conn: "cross", speed: "g800", switch: "qx800", route: "adaptive", storVendor: "everpure", storMode: "object", kvOff: "off", gpuAdj: "on", cpu: "std" },
+          preset: { workload: "training", gpu: "gb300", nodes: 80, model: "llama405", conn: "cross", speed: "g800", switch: "qx800", route: "adaptive", storVendor: "everpure", storMode: "object", kvOff: "off", gpuAdj: "on", cpu: "xeon6" },
         },
         neocloud: {
           label: "AI Inference NeoCloud — GPUaaS",
           desc: "Multi-tenant GPU-as-a-Service — maximise sessions per node (FP8 KV + flash offload) with on-demand ServiceFabric for tenant onboarding.",
-          preset: { workload: "inference", gpu: "b200", model: "llama70", kv: "fp8", ctx: 8000, users: 50000, conn: "fabric", speed: "g400", storVendor: "everpure", storMode: "object", kvOff: "on", kva: "40", gpuAdj: "off", cpu: "std" },
+          preset: { workload: "inference", gpu: "b200", model: "llama70", kv: "fp8", ctx: 8000, users: 50000, conn: "fabric", speed: "g400", storVendor: "everpure", storMode: "object", kvOff: "on", kva: "40", gpuAdj: "off", cpu: "xeon6" },
         },
       };
 
@@ -799,8 +934,8 @@
       const usdSmart = (n) => "$" + (Math.abs(n) >= 0.1 ? n.toFixed(2) : n.toFixed(3));
       const ms = (n) => nf1(n) + " ms";
       const fmtPow = (kW) => (kW >= 1000 ? (kW / 1000).toFixed(1) + " MW" : nf1(kW) + " kW");
-      const KVMB = { fp16: 0.33, fp8: 0.165 };
-      const KVLBL = { fp16: "FP16", fp8: "FP8" };
+      const KVMB = { fp16: 0.33, fp8: 0.165, fp4: 0.0825 };
+      const KVLBL = { fp16: "FP16", fp8: "FP8", fp4: "FP4" };
 
       // ============================== Config ====================================
       function readCfg() {
@@ -826,7 +961,12 @@
           kvOff: $("cfgKvOff").value === "on",
           kva: parseInt($("cfgKva").value, 10) || 0,
           gpuAdj: $("cfgGpuAdj").value === "on",
-          cpu: $("cfgCpu").value,
+          cpu: $("cfgCpu").value || "xeon6",
+          dpu: $("cfgDpu").value || "none",
+          qpu: $("cfgQpu").value || "none",
+          wprec: $("cfgWprec").value || "fp16",
+          pcap: $("cfgPcap").value || "none",
+          sched: $("cfgSched").value || "std",
           model: $("cfgModel").value,
           kv: $("cfgKv").value,
           ctx: Math.max(1, parseInt($("cfgCtx").value, 10) || 8000),
@@ -855,8 +995,14 @@
       function inferCalc(cfg, g, nodeGB) {
         const conn = CONNS[cfg.conn];
         const stor = storageOf(cfg);
-        const cpu = CPUS[cfg.cpu];
-        const weights = MODELS_BY_ID[cfg.model].gb;
+        const cpu = CPUS[cfg.cpu] || CPUS.xeon6;
+        const dpu = DPUS[cfg.dpu] || DPUS.none;
+        const qpu = QPUS[cfg.qpu] || QPUS.none;
+        const cap = PCAPS[cfg.pcap] || PCAPS.none;
+        const wpId = precAllowed(g, cfg.wprec) ? cfg.wprec || "fp16" : "fp8"; // honest per-platform clamp
+        const wp = WPREC[wpId] || WPREC.fp16;
+        const dispatchMs = Math.max(1, cpu.ms - dpu.ms);
+        const weights = MODELS_BY_ID[cfg.model].gb * wp.wMult;
         const kvUser = (cfg.ctx * KVMB[cfg.kv]) / 1000;
         const rawBudget = nodeGB - weights;
         if (rawBudget < kvUser) return { ok: false, g, nodeGB, reason: "model weights exceed node VRAM" };
@@ -867,8 +1013,8 @@
         // attention term (~4 x layers x d_model x ctx^2) - the reason 100k-token
         // prompts take ~a minute on a single GPU.
         const mAct = (MODELS_BY_ID[cfg.model].act || MODELS_BY_ID[cfg.model].gb) / 2; // active params, B
-        const nodePF = g.gpusPerNode * g.pf8 * MFU_PREFILL; // effective PFLOPS
-        const linMs = (cfg.ctx / prefillTokS(g, cfg.model)) * 1000;
+        const nodePF = g.gpusPerNode * g.pf8 * MFU_PREFILL * wp.cMult * cap.perf; // effective PFLOPS
+        const linMs = (cfg.ctx / (prefillTokS(g, cfg.model) * wp.cMult * cap.perf)) * 1000;
         const quadMs = ((4 * ATTN_LD * mAct * cfg.ctx * cfg.ctx) / (nodePF * 1e15)) * 1000;
         const coldPrefillMs = (linMs + quadMs) * (stor.gpuAdj ? 0.9 : 1);
         // KVA: a cache hit streams the prompt's KV tensors from flash instead
@@ -881,35 +1027,41 @@
         );
         const kvaPct = stor.kvaPct || 0;
         const prefillMs = coldPrefillMs * (1 - kvaPct / 100) + warmPrefillMs * (kvaPct / 100);
-        const ttft = conn.rtt + cpu.ms + prefillMs;
-        const ttftCold = conn.rtt + cpu.ms + coldPrefillMs;
-        const ttftWarm = conn.rtt + cpu.ms + warmPrefillMs;
-        const tokensMo = cfg.users * g.decode * 3600 * HRS_MO * UTIL;
+        const ttft = conn.rtt + dispatchMs + prefillMs;
+        const ttftCold = conn.rtt + dispatchMs + coldPrefillMs;
+        const ttftWarm = conn.rtt + dispatchMs + warmPrefillMs;
+        const tokensMo = cfg.users * g.decode * cap.perf * 3600 * HRS_MO * UTIL;
         const compute = nodes * g.gpusPerNode * g.hr * cpu.costMult * HRS_MO;
-        const powerKW = nodes * g.gpusPerNode * g.kw * cpu.kwMult * PUE;
+        const powerKW = nodes * g.gpusPerNode * g.kw * cpu.kwMult * cap.kw * PUE;
         const inter = conn.mo * 2 * speedOf(cfg).mult;
-        const dlr = powerKW * COLO_KW_MO + inter + (stor.external ? STOR_DLR_COLO_MO : 0);
-        const cost = compute + dlr + stor.mo;
+        const dlr = powerKW * COLO_KW_MO + inter + (stor.external ? STOR_DLR_COLO_MO : 0) + qpu.kw * COLO_KW_MO + (qpu.mo ? CONNS.cross.mo : 0);
+        const cost = compute + dlr + stor.mo + dpu.mo * nodes + qpu.mo;
         const per1M = cost / (tokensMo / 1e6);
         const value = (tokensMo / 1e6) * MARKET_PER_1M - cost;
-        return { ok: true, g, nodeGB, kvUser, budget, perNode, nodes, ttft, ttftCold, ttftWarm, kvaPct, prefillMs, tokensMo, compute, dlr, storMo: stor.mo, cost, per1M, value, powerKW };
+        return { ok: true, g, nodeGB, kvUser, budget, perNode, nodes, ttft, ttftCold, ttftWarm, kvaPct, prefillMs, tokensMo, compute, dlr, storMo: stor.mo, cost, per1M, value, powerKW, wprec: wpId, weights, dispatchMs };
       }
 
       function trainCalc(cfg, g, nodeGB) {
         const conn = CONNS[cfg.conn];
         const stor = storageOf(cfg);
-        const cpu = CPUS[cfg.cpu];
-        const weights = MODELS_BY_ID[cfg.model].gb;
+        const cpu = CPUS[cfg.cpu] || CPUS.xeon6;
+        const dpu = DPUS[cfg.dpu] || DPUS.none;
+        const qpu = QPUS[cfg.qpu] || QPUS.none;
+        const cap = PCAPS[cfg.pcap] || PCAPS.none;
+        const wpId = precAllowed(g, cfg.wprec) ? cfg.wprec || "fp16" : "fp8";
+        const wp = WPREC[wpId] || WPREC.fp16;
+        const duty = (SCHEDS[cfg.sched] || SCHEDS.std).duty;
+        const weights = MODELS_BY_ID[cfg.model].gb * wp.wMult;
         if (nodeGB * cfg.nodes < weights * 3) return { ok: false, g, nodeGB, reason: "cluster VRAM too small for model + optimizer states" };
-        const eff = conn.eff * SWITCHES[cfg.switch].eff * ROUTES[cfg.route].eff * (stor.gpuAdj ? 1.03 : 1);
-        const thru = prefillTokS(g, cfg.model) * cfg.nodes * TRAIN_FACTOR * eff;
-        const tokensMo = thru * 3600 * HRS_MO * 0.95; // 95% duty cycle
+        const eff = conn.eff * SWITCHES[cfg.switch].eff * ROUTES[cfg.route].eff * (stor.gpuAdj ? 1.03 : 1) * dpu.eff;
+        const thru = prefillTokS(g, cfg.model) * wp.cMult * cap.perf * cfg.nodes * TRAIN_FACTOR * eff;
+        const tokensMo = thru * 3600 * HRS_MO * duty; // SLURM scheduling sets duty cycle
         const computeMo = cfg.nodes * g.gpusPerNode * g.hr * cpu.costMult * HRS_MO;
-        const powerKW = cfg.nodes * g.gpusPerNode * g.kw * cpu.kwMult * PUE;
-        const dlrMo = powerKW * COLO_KW_MO + conn.mo * 2 * speedOf(cfg).mult + (stor.external ? STOR_DLR_COLO_MO : 0);
-        const costMo = computeMo + dlrMo + stor.mo;
+        const powerKW = cfg.nodes * g.gpusPerNode * g.kw * cpu.kwMult * cap.kw * PUE;
+        const dlrMo = powerKW * COLO_KW_MO + conn.mo * 2 * speedOf(cfg).mult + (stor.external ? STOR_DLR_COLO_MO : 0) + qpu.kw * COLO_KW_MO + (qpu.mo ? CONNS.cross.mo : 0);
+        const costMo = computeMo + dlrMo + stor.mo + dpu.mo * cfg.nodes + qpu.mo;
         const per1M = costMo / (tokensMo / 1e6);
-        return { ok: true, g, nodeGB, eff, thru, tokensMo, computeMo, dlrMo, costMo, per1M, powerKW };
+        return { ok: true, g, nodeGB, eff, thru, tokensMo, computeMo, dlrMo, costMo, per1M, powerKW, wprec: wpId, duty, weights };
       }
 
       const defNodeGB = (g) => g.variants[0].nodeGB;
@@ -925,6 +1077,14 @@
         $("fldUsers").hidden = training;
         $("fldCtx").hidden = training;
         $("fldNodes").hidden = !training;
+        // Gate FP4/FP6 to platforms that support them.
+        Array.prototype.forEach.call($("cfgWprec").options || [], (o) => {
+          o.disabled = (o.value === "fp4" || o.value === "fp6") && !precAllowed(g, o.value);
+        });
+        if (!precAllowed(g, cfg.wprec)) {
+          $("cfgWprec").value = "fp8";
+          cfg.wprec = "fp8";
+        }
         const isCust = cfg.model === "custommodel";
         $("fldCustP").hidden = !isCust;
         $("fldCustA").hidden = !isCust;
@@ -947,6 +1107,10 @@
         const preGA = spd.preGA
           ? " <strong>Note:</strong> 800G ServiceFabric is not yet GA — pre-GA availability only."
           : "";
+        const qpuNote = cfg.qpu !== "none"
+          ? " <strong>QPU sidecar:</strong> " + QPUS[cfg.qpu].label + " adds " + usd(QPUS[cfg.qpu].mo) +
+            "/mo and " + QPUS[cfg.qpu].kw + " kW of colo + a cross connect (value to DLR) for hybrid quantum-classical research adjacency — it does <em>not</em> accelerate LLM token serving."
+          : "";
         const estNote = mdl.cust
           ? " Custom model: " + nf(mdl.gb) + " GB FP16 weights" +
             (mdl.act ? ", " + nf(mdl.act / 2) + "B active — MoE prefills on active parameters only." : ", dense — every parameter works on every token.")
@@ -963,8 +1127,8 @@
             noticeEl.className = "notice over";
             noticeEl.innerHTML =
               "<strong>&#10007; Not feasible.</strong> " + g.name + ": " + r.reason + " (" +
-              nf(nodeGB) + " GB node vs " + nf(mdl.gb) + " GB weights for " + mdl.label +
-              "). Pick a larger platform / VRAM variant, shard, or choose a smaller model.";
+              nf(nodeGB) + " GB node vs " + nf(mdl.gb * (WPREC[cfg.wprec] || WPREC.fp16).wMult) + " GB weights for " + mdl.label +
+              " at " + (WPREC[cfg.wprec] || WPREC.fp16).label + "). Pick a larger platform / VRAM variant, a lower weights precision, shard, or choose a smaller model.";
             planEl.textContent = "No plan — configuration infeasible.";
           } else {
             noticeEl.className = "notice";
@@ -985,7 +1149,7 @@
               (r.kvaPct > 0
                 ? " KVA: " + r.kvaPct + "% of requests stream cached KV from flash instead of recomputing prefill (warm TTFT " + ms(r.ttftWarm) + " vs cold " + ms(r.ttftCold) + ")."
                 : "") +
-              preGA + estNote;
+              preGA + estNote + qpuNote;
             planEl.innerHTML =
               "<strong>Plan:</strong> Deploy " + nf(r.nodes) + " &times; " + g.name + " node(s) (" +
               nf(r.nodes * g.gpusPerNode) + " GPUs, " + nf1(r.powerKW) + " kW with PUE " + PUE +
@@ -994,7 +1158,7 @@
               " routing. Connect via " + conn.label + " (" + spd.label + ", " + conn.note +
               "). Storage: " + stor.label +
               (stor.external ? " — " + cfg.storMode + (stor.kvOff ? ", KV offload" : "") + (stor.gpuAdj ? ", GPUDirect" : "") : "") +
-              ". Serve " + nf(cfg.users) + " concurrent sessions of " + mdl.label + " at " +
+              ". Serve " + nf(cfg.users) + " concurrent sessions of " + mdl.label + " (" + WPREC[r.wprec].label + " weights, " + nf(r.weights) + " GB) at " +
               nf(cfg.ctx) + "-token context, " + KVLBL[cfg.kv] + " KV. Economics: compute " +
               usd(r.compute) + "/mo + storage " + usd(r.storMo) + "/mo + DLR " + usd(r.dlr) +
               "/mo &rarr; " + usd2(r.per1M) + " per 1M tokens vs $" + MARKET_PER_1M.toFixed(2) +
@@ -1045,7 +1209,7 @@
               ") &middot; east-west efficiency " + Math.round(r.eff * 100) + "% (" + conn.label +
               " &times; " + SWITCHES[cfg.switch].label + " &times; " + ROUTES[cfg.route].label +
               ") &middot; trains " + nf1(r.tokensMo / 1e12) + "T tokens/mo at 95% duty." +
-              preGA + estNote;
+              preGA + estNote + qpuNote;
             planEl.innerHTML =
               "<strong>Plan:</strong> Stand up a " + nf(cfg.nodes) + "-node " + g.name +
               " training cluster (" + fmtPow(r.powerKW) + ", " + CPUS[cfg.cpu].label +
@@ -1146,6 +1310,11 @@
         const recs = [];
         const cur = inferCalc(cfg, g, nodeGB);
         const spd = speedOf(cfg);
+        if ((WPREC[cfg.wprec] || {}).lossy)
+          recs.push(li("Aggressive quantization selected", WPREC[cfg.wprec].label +
+            " weights trade accuracy for capacity — validate quality (perplexity / task evals) against the FP16 baseline before production."));
+        if (cfg.dpu === "none")
+          recs.push(li("Add a DPU", "BlueField-3 / Pensando / IPU offload network + storage from the host: −1–2 ms dispatch and +1.5–2% training fabric efficiency for ~$170–220/node-mo."));
         if (spd.preGA)
           recs.push(li("800G ServiceFabric is pre-GA", "validate availability and timeline with DLR before committing; 2 &times; 400G VC LAG is the GA-equivalent today."));
         if (MODELS_BY_ID[cfg.model].est)
@@ -1174,7 +1343,7 @@
           recs.push(li("Enable GPU-adjacent storage (GPUDirect)", "prefill drops 10%: TTFT " +
             ms(cur.ttft) + " &rarr; " + ms(alt.ttft) + " for +" + usd(STOR_GPUADJ_MO) + "/mo."));
         }
-        if (cur.ok && cfg.cpu === "std") {
+        if (cur.ok && cfg.cpu !== "oc") {
           const alt = inferCalc({ ...cfg, cpu: "oc" }, g, nodeGB);
           recs.push(li("Blackcore overclocked CPUs", "dispatch 8 ms &rarr; 3 ms: TTFT " + ms(cur.ttft) +
             " &rarr; " + ms(alt.ttft) + "; compute cost +12% (" + usd2(cur.per1M) + " &rarr; " +
@@ -1585,6 +1754,147 @@
         }, 60);
       }
 
+      // ========================= Infrastructure optimiser =======================
+      // The user fills in the workload (model, users/nodes, context, optional
+      // TTFT target and monthly budget); the optimiser grid-searches platform x
+      // VRAM x weights precision x KV precision x storage/KVA x CPU x DPU x
+      // SLURM power cap x interconnect for the feasible configuration that
+      // maximises customer value (ties broken on $/1M). QPU is orthogonal
+      // (research sidecar) and is excluded; roadmap platforms are only
+      // considered if nothing shipping fits.
+      function optimiseInfra() {
+        const base = readCfg();
+        const training = base.workload === "training";
+        const ttftT = parseFloat($("cfgTtftTarget").value) || 0;
+        const budgetT = parseFloat($("cfgBudget").value) || 0;
+        const wprecs = ["fp16", "fp8", "fp4"];
+        const kvs = training ? [base.kv] : ["fp16", "fp8", "fp4"];
+        const cpus = ["xeon6", "oc"];
+        const dpus = ["none", "bf3"];
+        const pcaps = ["none", "cap85", "cap70"];
+        const conns = ["cross", "metro", "fabric"];
+        const stors = [
+          { storVendor: "local", storMode: "file", kvOff: false, kva: 0, gpuAdj: false },
+          { storVendor: "everpure", storMode: "object", kvOff: false, kva: 0, gpuAdj: true },
+          { storVendor: "everpure", storMode: "object", kvOff: true, kva: 0, gpuAdj: true },
+          { storVendor: "everpure", storMode: "object", kvOff: true, kva: 80, gpuAdj: true },
+        ];
+        const baseCfgH = { ...base, switch: "qx800", route: "adaptive", sched: "gang", qpu: "none" };
+        const baseH = training ? trainCalc(baseCfgH, GPUS[0], defNodeGB(GPUS[0])) : { ok: false };
+        let tried = 0;
+        const results = [];
+        const attempt = (pool) => {
+          pool.forEach((g) => {
+            g.variants.forEach((v, vi) => {
+              wprecs.forEach((wprec) => {
+                if (!precAllowed(g, wprec)) return;
+                kvs.forEach((kv) => {
+                  stors.forEach((st) => {
+                    cpus.forEach((cpuId) => {
+                      dpus.forEach((dpuId) => {
+                        pcaps.forEach((pcapId) => {
+                          conns.forEach((connId) => {
+                            tried++;
+                            const cfg2 = {
+                              ...base, ...st, gpu: g.id, vramIdx: vi, wprec, kv,
+                              cpu: cpuId, dpu: dpuId, pcap: pcapId, conn: connId, speed: "g100", qpu: "none",
+                              sched: training ? "gang" : base.sched,
+                              switch: training ? "qx800" : base.switch,
+                              route: training ? "adaptive" : base.route,
+                            };
+                            const r = training ? trainCalc(cfg2, g, v.nodeGB) : inferCalc(cfg2, g, v.nodeGB);
+                            if (!r.ok) return;
+                            const cost = training ? r.costMo : r.cost;
+                            if (budgetT > 0 && cost > budgetT) return;
+                            if (!training && ttftT > 0 && r.ttft > ttftT) return;
+                            const value = training
+                              ? (baseH.ok ? (r.tokensMo / 1e6) * baseH.per1M - cost : -cost)
+                              : r.value;
+                            results.push({ cfg2, g, v, vi, r, cost, value, per1M: r.per1M, ttft: r.ttft || 0 });
+                          });
+                        });
+                      });
+                    });
+                  });
+                });
+              });
+            });
+          });
+        };
+        attempt(GPUS.filter((x) => x.status !== "Roadmap"));
+        let usedRoadmap = false;
+        if (!results.length) { usedRoadmap = true; attempt(GPUS.filter((x) => x.status === "Roadmap")); }
+
+        const box = $("optResult");
+        box.hidden = false;
+        if (!results.length) {
+          box.className = "notice over";
+          box.innerHTML =
+            "<strong>Optimiser: no feasible configuration.</strong> Searched " + nf(tried) +
+            " combinations — nothing satisfies this workload" +
+            (ttftT ? " within a " + nf(ttftT) + " ms TTFT target" : "") +
+            (budgetT ? (ttftT ? " and" : " within") + " a " + usd(budgetT) + "/mo budget" : "") +
+            ". Relax the targets, shrink the model/context, or lower the weights precision.";
+          return;
+        }
+        results.sort((a, b) => (b.value - a.value) || (a.per1M - b.per1M));
+        const w = results[0];
+
+        // Write the winning recipe back into every control so the user sees it.
+        $("cfgGpu").value = w.g.id;
+        fillVramOptions();
+        $("cfgVram").value = String(w.vi);
+        $("cfgWprec").value = w.cfg2.wprec;
+        $("cfgKv").value = w.cfg2.kv;
+        $("cfgStorVendor").value = w.cfg2.storVendor;
+        $("cfgStorMode").value = w.cfg2.storMode;
+        $("cfgKvOff").value = w.cfg2.kvOff ? "on" : "off";
+        $("cfgKva").value = String(w.cfg2.kva || 0);
+        $("cfgGpuAdj").value = w.cfg2.gpuAdj ? "on" : "off";
+        $("cfgCpu").value = w.cfg2.cpu;
+        $("cfgDpu").value = w.cfg2.dpu;
+        $("cfgPcap").value = w.cfg2.pcap;
+        $("cfgConn").value = w.cfg2.conn;
+        fillSpeedOptions();
+        $("cfgSpeed").value = "g100";
+        if (training) { $("cfgSwitch").value = "qx800"; $("cfgRoute").value = "adaptive"; $("cfgSched").value = "gang"; }
+        renderPlanner();
+
+        // Top runner-ups, deduped by platform + precision.
+        const seen = {};
+        const top = [];
+        for (const x of results) {
+          const key = x.g.id + "/" + x.cfg2.wprec;
+          if (seen[key]) continue;
+          seen[key] = true;
+          top.push(x);
+          if (top.length >= 4) break;
+        }
+        const fmtRow = (x) =>
+          "<tr><td>" + x.g.name + " (" + x.v.label + ")</td><td>" + WPREC[x.cfg2.wprec].label.split(" ")[0] +
+          (training ? "" : " / KV " + KVLBL[x.cfg2.kv]) + "</td><td>" + PCAPS[x.cfg2.pcap].label.split(" — ")[0] +
+          "</td><td>" + (training ? "—" : ms(x.ttft)) + "</td><td>" + usdSmart(x.per1M) + "</td><td>" +
+          usd(x.cost) + "</td><td>" + usd(x.value) + "</td></tr>";
+        box.className = "notice";
+        box.innerHTML =
+          "<strong>Optimiser result.</strong> Searched " + nf(tried) + " combinations (" + nf(results.length) +
+          " feasible" + (usedRoadmap ? ", roadmap platforms admitted as last resort" : "") + ")" +
+          (ttftT ? " subject to TTFT ≤ " + nf(ttftT) + " ms" : "") +
+          (budgetT ? (ttftT ? " and" : " subject to") + " cost ≤ " + usd(budgetT) + "/mo" : "") +
+          ". Picked <strong>" + w.g.name + " (" + w.v.label + ")</strong> · " + WPREC[w.cfg2.wprec].label +
+          " weights" + (training ? "" : " · KV " + KVLBL[w.cfg2.kv]) + " · " + STORAGE[w.cfg2.storVendor].label +
+          (w.cfg2.kvOff ? " + KV offload" : "") + (w.cfg2.kva ? " + KVA " + w.cfg2.kva + "%" : "") +
+          (w.cfg2.gpuAdj ? " + GPUDirect" : "") + " · " + CPUS[w.cfg2.cpu].label + " · DPU " + DPUS[w.cfg2.dpu].label +
+          " · " + PCAPS[w.cfg2.pcap].label + " · " + CONNS[w.cfg2.conn].label +
+          " — the highest customer value of every feasible combination (" + usd(w.value) + "/mo at " +
+          usdSmart(w.per1M) + " per 1M" + (training ? "" : ", TTFT " + ms(w.ttft)) + "). " +
+          "All controls above now show this recipe — adjust anything to explore trade-offs." +
+          (top.length > 1
+            ? '<table class="mini" style="margin-top:0.6rem"><tr><th>Runner-up</th><th>Precision</th><th>Power cap</th><th>TTFT</th><th>$ / 1M</th><th>Cost $/mo</th><th>Customer $/mo</th></tr>' +
+              top.slice(1).map(fmtRow).join("") + "</table>"
+            : "");
+      }
+
       // ===================== Deploy & simulate (tab 3) ==========================
       // DLR site catalog: last-mile RTT from regional users (ms), ServiceFabric
       // and direct-liquid availability, regional colo $ multiplier.
@@ -1714,9 +2024,16 @@
         const cools = coolingOptionsFor(g);
         const cool = cools.find((c) => c.id === $("depCooling").value) || cools[0];
         const conn = CONNS[$("depConn").value] || CONNS.metro;
-        const cpu = CPUS[cfg.cpu];
+        const cpu = CPUS[cfg.cpu] || CPUS.xeon6;
+        const dpu = DPUS[cfg.dpu] || DPUS.none;
+        const qpu = QPUS[cfg.qpu] || QPUS.none;
+        const cap = PCAPS[cfg.pcap] || PCAPS.none;
+        const wp = WPREC[precAllowed(g, cfg.wprec) ? cfg.wprec || "fp16" : "fp8"] || WPREC.fp16;
+        const duty = (SCHEDS[cfg.sched] || SCHEDS.std).duty;
+        const dispatchMs = Math.max(1, cpu.ms - dpu.ms);
         const stor = storageOf(cfg);
         const mdl = MODELS_BY_ID[cfg.model];
+        const wGB = mdl.gb * wp.wMult;
         const training = cfg.workload === "training";
         const pricing = priceModel();
         const siteFactor = (x) => (cool.id === "dlc" && !x.liquid ? AIR_FALLBACK : cool.factor);
@@ -1724,19 +2041,19 @@
         if (training) {
           const site = sitesRaw[0]; // training concentrates in one campus
           const f = siteFactor(site);
-          if (nodeGB * cfg.nodes < mdl.gb * 3)
+          if (nodeGB * cfg.nodes < wGB * 3)
             return { ok: false, training: true, reason: "cluster VRAM too small for model + optimizer states — add nodes in the planner" };
-          const eff = conn.eff * SWITCHES[cfg.switch].eff * ROUTES[cfg.route].eff * (stor.gpuAdj ? 1.03 : 1) * f;
-          const thru = prefillTokS(g, cfg.model) * cfg.nodes * TRAIN_FACTOR * eff;
-          const tokensMo = thru * 3600 * HRS_MO * 0.95;
+          const eff = conn.eff * SWITCHES[cfg.switch].eff * ROUTES[cfg.route].eff * (stor.gpuAdj ? 1.03 : 1) * dpu.eff * f;
+          const thru = prefillTokS(g, cfg.model) * wp.cMult * cap.perf * cfg.nodes * TRAIN_FACTOR * eff;
+          const tokensMo = thru * 3600 * HRS_MO * duty;
           const gpus = cfg.nodes * g.gpusPerNode;
-          const powerKW = gpus * g.kw * cpu.kwMult * cool.pue;
+          const powerKW = gpus * g.kw * cpu.kwMult * cap.kw * cool.pue;
           const compute = gpus * g.hr * cpu.costMult * oem.mult * HRS_MO;
           const rateMo = siteRateMo(site, cool);
           const colo = powerKW * rateMo;
           const inter = conn.mo * 2 * speedOf(cfg).mult;
-          const dlr = colo + inter + (stor.external ? STOR_DLR_COLO_MO : 0);
-          const cost = compute + dlr + stor.mo;
+          const dlr = colo + inter + (stor.external ? STOR_DLR_COLO_MO : 0) + qpu.kw * COLO_KW_MO + (qpu.mo ? CONNS.cross.mo : 0);
+          const cost = compute + dlr + stor.mo + dpu.mo * cfg.nodes + qpu.mo;
           const per1M = cost / (tokensMo / 1e6);
           const baseH = trainCalc(cfg, GPUS[0], defNodeGB(GPUS[0]));
           const value = baseH.ok ? (tokensMo / 1e6) * baseH.per1M - cost : 0;
@@ -1745,14 +2062,14 @@
         }
 
         const kvUser = (cfg.ctx * KVMB[cfg.kv]) / 1000;
-        if (nodeGB - mdl.gb < kvUser)
+        if (nodeGB - wGB < kvUser)
           return { ok: false, training: false, reason: "model weights exceed node VRAM on " + g.name + " — pick another architecture in the planner" };
-        const budget = (nodeGB - mdl.gb) * (1 + (stor.kvOff ? stor.kvBoost : 0));
+        const budget = (nodeGB - wGB) * (1 + (stor.kvOff ? stor.kvBoost : 0));
         const perNode = Math.floor(budget / kvUser);
         const per = Math.floor(cfg.users / sitesRaw.length);
         const mAct = (mdl.act || mdl.gb) / 2;
-        const nodePF = g.gpusPerNode * g.pf8 * MFU_PREFILL;
-        const linMs0 = (cfg.ctx / prefillTokS(g, cfg.model)) * 1000;
+        const nodePF = g.gpusPerNode * g.pf8 * MFU_PREFILL * wp.cMult * cap.perf;
+        const linMs0 = (cfg.ctx / (prefillTokS(g, cfg.model) * wp.cMult * cap.perf)) * 1000;
         const quadMs0 = ((4 * ATTN_LD * mAct * cfg.ctx * cfg.ctx) / (nodePF * 1e15)) * 1000;
         const kvaStream = KVA_STREAM_GBS * g.gpusPerNode * (stor.gpuAdj ? 2 : 1);
         const kvaPct = stor.kvaPct || 0;
@@ -1763,22 +2080,22 @@
           const cold = ((linMs0 + quadMs0) / f) * (stor.gpuAdj ? 0.9 : 1);
           const warm = Math.min(cold, ((cfg.ctx * KVMB[cfg.kv]) / 1000 / kvaStream) * 1000 + KVA_OVERHEAD_MS);
           const prefillMs = cold * (1 - kvaPct / 100) + warm * (kvaPct / 100);
-          const ttft = x.rtt + conn.rtt + cpu.ms + prefillMs;
+          const ttft = x.rtt + conn.rtt + dispatchMs + prefillMs;
           const nodes = Math.max(1, Math.ceil(users / perNode));
-          const rate = ((prefillTokS(g, cfg.model) * f) / cfg.ctx) * nodes;
-          const decode = g.decode * f;
+          const rate = ((prefillTokS(g, cfg.model) * wp.cMult * cap.perf * f) / cfg.ctx) * nodes;
+          const decode = g.decode * cap.perf * f;
           const answerSec = answerTok / decode;
           const wave = users / rate;
           return { ...x, users, f, prefillMs, ttft, nodes, rate, decode, answerSec, wave, done: wave + answerSec, outTok: users * answerTok, kvWrite: users * kvUser, ctxTok: users * cfg.ctx, rateMo: siteRateMo(x, cool) };
         });
         const totalNodes = S.reduce((a, x) => a + x.nodes, 0);
-        const nodeKW = g.gpusPerNode * g.kw * cpu.kwMult * cool.pue;
+        const nodeKW = g.gpusPerNode * g.kw * cpu.kwMult * cap.kw * cool.pue;
         const powerKW = totalNodes * nodeKW;
         const compute = totalNodes * g.gpusPerNode * g.hr * cpu.costMult * oem.mult * HRS_MO;
         const colo = S.reduce((a, x) => a + x.nodes * nodeKW * x.rateMo, 0); // each site priced at its own rate
         const inter = conn.mo * 2 * speedOf(cfg).mult * S.length;
-        const dlr = colo + inter + (stor.external ? STOR_DLR_COLO_MO : 0);
-        const cost = compute + dlr + stor.mo;
+        const dlr = colo + inter + (stor.external ? STOR_DLR_COLO_MO : 0) + qpu.kw * COLO_KW_MO + (qpu.mo ? CONNS.cross.mo : 0);
+        const cost = compute + dlr + stor.mo + dpu.mo * totalNodes + qpu.mo;
         const decodeAvg = S.reduce((a, x) => a + x.users * x.decode, 0) / cfg.users;
         const tokensMo = cfg.users * decodeAvg * 3600 * HRS_MO * UTIL;
         const per1M = cost / (tokensMo / 1e6);
@@ -2177,7 +2494,8 @@
 
       $("cfgGpu").addEventListener("change", () => { fillVramOptions(); renderPlanner(); });
       $("cfgConn").addEventListener("change", () => { fillSpeedOptions(); renderPlanner(); });
-      ["cfgVram", "cfgWorkload", "cfgSpeed", "cfgSwitch", "cfgRoute", "cfgStorVendor", "cfgStorMode", "cfgKvOff", "cfgKva", "cfgGpuAdj", "cfgCpu", "cfgModel", "cfgKv"].forEach((id) =>
+      $("optBtn").addEventListener("click", optimiseInfra);
+      ["cfgVram", "cfgWorkload", "cfgSpeed", "cfgSwitch", "cfgRoute", "cfgStorVendor", "cfgStorMode", "cfgKvOff", "cfgKva", "cfgGpuAdj", "cfgCpu", "cfgDpu", "cfgQpu", "cfgWprec", "cfgPcap", "cfgSched", "cfgModel", "cfgKv"].forEach((id) =>
         $(id).addEventListener("change", renderPlanner)
       );
       ["cfgCtx", "cfgUsers", "cfgNodes", "cfgCustParams", "cfgCustActive"].forEach((id) =>
