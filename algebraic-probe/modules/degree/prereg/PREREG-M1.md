@@ -102,11 +102,14 @@ point alternative, not a shifted distribution.
 
 ## 7. Effect floor
 
-- `effect_floor`: 1.0, in bits of algebraic degree, applied to
-  `d_ub(r) - d_lb(r)`. Derivation: the degree is integer-valued, so 1 is the
-  smallest representable non-zero gap; one bit of gap halves the data complexity
-  of the implied distinguisher. A cell that clears statistical significance but
-  not this floor is recorded as a pass-fail and does not promote.
+- `effect_floor_units`: bits of algebraic degree
+- `effect_floor_applies_to`: d_ub(r) - d_lb(r)
+
+The value is `effect_floor` as declared in section 1: 1.0. Derivation: the degree
+is integer-valued, so 1 is the smallest representable non-zero gap; one bit of
+gap halves the data complexity of the implied distinguisher. A cell that clears
+statistical significance but not this floor is recorded as a pass-fail and does
+not promote.
 
 ## 8. Family size and multiple-comparison control
 

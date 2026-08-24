@@ -16,6 +16,7 @@ Exit code 0 if every mutant is killed.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -280,10 +281,10 @@ CATALOGUE: tuple[Mutant, ...] = (
         "CORE-02",
         "core",
         "core/gf2.py",
-        "    for tail in range(1, 1 << n, 2):  # constant term must be 1",
-        "    for tail in range(0, 1 << n, 1):  # constant term must be 1",
+        "            result ^= a",
+        "            result |= a",
         ("tests/test_core_gf2.py",),
-        "the field modulus search admits polynomials divisible by x",
+        "carry-less multiplication accumulates by OR instead of XOR",
     ),
     Mutant(
         "CORE-03",
@@ -298,10 +299,10 @@ CATALOGUE: tuple[Mutant, ...] = (
         "CORE-04",
         "core",
         "core/keccak.py",
-        "            register ^= 0x171",
-        "            register ^= 0x71",
+        "                rc ^= 1 << ((1 << j) - 1)",
+        "                rc ^= 1 << j",
         ("tests/test_core_keccak_mimc.py",),
-        "the iota LFSR uses a truncated feedback polynomial",
+        "the iota constants are placed at the wrong bit positions",
     ),
     Mutant(
         "CORE-05",
@@ -497,12 +498,27 @@ def pytest_command() -> list[str]:
 PYTEST = pytest_command()
 
 
+def purge_bytecode() -> None:
+    """Remove every __pycache__ under the tree.
+
+    A mutant of the same byte length as the text it replaces restores to a file
+    with the same size, and CPython's source-mtime cache validation has
+    one-second granularity: without this, a stale .pyc compiled from the mutated
+    source survives the restore and poisons every later run. That failure mode
+    cost a debugging round here; the purge is not optional tidiness.
+    """
+    for cache in ROOT.rglob("__pycache__"):
+        shutil.rmtree(cache, ignore_errors=True)
+
+
 def run_pytest(tests: tuple[str, ...]) -> int:
+    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
     return subprocess.run(
-        [*PYTEST, "-x", "-q", "--no-header", *tests],
+        [*PYTEST, "-x", "-q", "--no-header", "-p", "no:cacheprovider", *tests],
         cwd=str(ROOT),
         capture_output=True,
         text=True,
+        env=env,
     ).returncode
 
 
@@ -513,10 +529,12 @@ def apply_mutant(mutant: Mutant) -> tuple[bool, str]:
     if occurrences != 1:
         return False, f"anchor matched {occurrences} times; the mutant no longer applies"
     try:
+        purge_bytecode()
         path.write_text(original.replace(mutant.old, mutant.new), encoding="utf-8")
         code = run_pytest(mutant.tests)
     finally:
         path.write_text(original, encoding="utf-8")
+        purge_bytecode()
     return (code != 0), ("killed" if code != 0 else "SURVIVED")
 
 

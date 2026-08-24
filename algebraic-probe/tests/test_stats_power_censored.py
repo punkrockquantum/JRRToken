@@ -89,8 +89,12 @@ def test_a_meaningful_effect_without_a_derivation_is_refused() -> None:
 
 TRUE_INTERCEPT = 2.0
 TRUE_SLOPE = 0.5
-TRUE_SIGMA = 1.0
-CENSOR_LIMIT = 15.0
+# Chosen so that censoring bites across the whole range of x rather than only at
+# its top end: with a ceiling that only the largest x values reach, the surviving
+# uncensored subsample is barely truncated and a fit that simply discards
+# censored observations looks correct. It is not, and this fixture shows it.
+TRUE_SIGMA = 5.0
+CENSOR_LIMIT = 10.0
 
 
 def simulated_run(seed: int = 20260824, n: int = 120):
@@ -103,8 +107,24 @@ def simulated_run(seed: int = 20260824, n: int = 120):
 
 
 def test_censoring_is_actually_present_in_the_fixture() -> None:
-    _, _, censored = simulated_run()
+    xs, _, censored = simulated_run()
     assert 0 < sum(censored) < len(censored)
+    # censoring reaches the low-x half too, not only the tail
+    half = len(xs) // 2
+    assert any(censored[:half])
+
+
+def test_discarding_censored_observations_is_not_the_same_as_modelling_them() -> None:
+    """The censored observations carry information: a fit that keeps only the
+    uncensored rows is attenuated, and the Tobit fit is not."""
+    xs, ys, censored = simulated_run()
+    kept_x = [x for x, c in zip(xs, censored) if not c]
+    kept_y = [y for y, c in zip(ys, censored) if not c]
+    uncensored_only = ols_fit(kept_x, kept_y)
+    tobit = tobit_fit(xs, ys, censored, limits=[CENSOR_LIMIT] * len(xs))
+    assert abs(uncensored_only.slope - TRUE_SLOPE) > 0.15
+    assert abs(tobit.slope - TRUE_SLOPE) < 0.05
+    assert tobit.slope > uncensored_only.slope + 0.15
 
 
 def test_tobit_recovers_the_generating_slope_and_ols_does_not() -> None:
@@ -112,7 +132,10 @@ def test_tobit_recovers_the_generating_slope_and_ols_does_not() -> None:
     tobit = tobit_fit(xs, ys, censored, limits=[CENSOR_LIMIT] * len(xs))
     ols = ols_fit(xs, ys, n_censored=sum(censored))
     assert tobit.slope == pytest.approx(TRUE_SLOPE, rel=0.10)
-    assert tobit.intercept == pytest.approx(TRUE_INTERCEPT, abs=0.5)
+    # 86 of 120 observations are censored, so intercept and scale are recovered
+    # with correspondingly wider sampling error than the slope.
+    assert tobit.intercept == pytest.approx(TRUE_INTERCEPT, abs=1.5)
+    assert tobit.sigma == pytest.approx(TRUE_SIGMA, rel=0.25)
     assert abs(ols.slope - TRUE_SLOPE) > abs(tobit.slope - TRUE_SLOPE)
     assert ols.slope < tobit.slope  # naive OLS is attenuated by the ceiling
 
