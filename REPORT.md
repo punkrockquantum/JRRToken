@@ -58,7 +58,7 @@ on all six simultaneously, and is the highest-leverage single action available.
 | `verify/` | 160 | exhaustive Moebius-transform ANF, independent path |
 | `reports/` | 151 | prose lint |
 | `scripts/` | 1338 | CI checks, mutation harness, readiness, renderers, memory-cost benchmark |
-| `tests/` | 3361 | 371 tests |
+| `tests/` | 3517 | 377 tests |
 
 89 files tracked, ~10.3k lines of Python. No third-party dependencies
 (DECISIONS.md D-004).
@@ -67,7 +67,7 @@ on all six simultaneously, and is the highest-leverage single action available.
 
 ```
 checks=5 failed=0          scripts/ci_checks.py
-371 passed in 67.67s       pytest -q
+377 passed in 68.33s       pytest -q
 mutants=61 survivors=0     scripts/mutation_test.py  (8 layers, ≥5 each)
 ```
 
@@ -258,11 +258,11 @@ refusal semantics.
 ```bash
 git clone -b algo-games https://github.com/punkrockquantum/JRRToken.git
 cd JRRToken
-pytest -q                                    # 371 passed
+pytest -q                                    # 377 passed
 python scripts/ci_checks.py                  # checks=5 failed=0
 python scripts/mutation_test.py              # mutants=61 survivors=0
 python scripts/readiness_report.py           # go/no-go per module (exit 1: NO-GO)
-python -m modules.degree.calibration.suite   # what Module 1 will assert
+python -m modules.degree.calibration   # what Module 1 will assert
 python modules/degree/prereg/derive_thresholds.py
 python scripts/render_reports.py
 ```

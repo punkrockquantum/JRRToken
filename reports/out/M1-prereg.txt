@@ -1,7 +1,7 @@
-commit=0c9d23127cca3d5b971dc9bc4a32dd08d41bb8d4
+commit=aa172705fdbea668ba47f7d0137c3a2f7f37ceae
 prereg_id=PREREG-M1
 prereg_path=modules/degree/prereg/PREREG-M1.md
-prereg_sha256=640a246988537c69793c8b68737da1275d2e6c3b41acc355c6f828bb7144f319
+prereg_sha256=33f742cbdeae86fdb3a4f784059f312fb0a1e91ba190d799bf533e8a56b8e49c
 prereg_introducing_commit=d84c0968324d0151c0a8cdba74cd291fd2252579
 runner_introducing_commit=84ca87e77da68df6d725a6baed9df6bfd9c95df4
 H1_gap=there exists r with `d_ub(r) - d_lb(r) >= effect_floor`, i.e. the

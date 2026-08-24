@@ -200,7 +200,7 @@ Because of the figures above, and committed before any data exists:
 ## 11. Calibration
 
 Defined in `modules/degree/calibration/suite.py`; the manifest of exactly what
-it asserts is rendered by `python -m modules.degree.calibration.suite`. Summary:
+it asserts is rendered by `python -m modules.degree.calibration`. Summary:
 
 - `published-ground-truth` — degree growth values from the literature, one for
   an iterated permutation with published per-round degree bounds and one for a

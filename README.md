@@ -65,7 +65,7 @@ Combining, averaging or comparing results of different tiers raises
 cd algebraic-probe
 pytest -q                                       # the suite
 python scripts/ci_checks.py                     # structural checks
-python -m modules.degree.calibration.suite      # what Module 1 will assert
+python -m modules.degree.calibration            # what Module 1 will assert
 python modules/degree/prereg/derive_thresholds.py
 python scripts/render_reports.py                # regenerate reports/out/
 python scripts/mutation_test.py                 # deliberate-defect check
