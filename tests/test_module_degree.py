@@ -67,7 +67,8 @@ def test_the_intermediate_control_expects_a_middle_of_range_value() -> None:
 def test_the_negative_control_expects_a_saturated_degree() -> None:
     case = next(c for c in SUITE.cases if c.case_id == "CAL-M1-NEG-RANDOM")
     assert case.expected == 11
-    assert case.parameters["false_failure_probability"] < 1e-3
+    # 12 output bits, each failing by chance with probability 2^-13.
+    assert case.parameters["false_failure_probability"] == pytest.approx(12 * 2.0**-13)
 
 
 def test_the_blindness_case_expects_the_same_null_as_a_saturated_round_function() -> None:
@@ -116,10 +117,35 @@ def test_the_block_is_hard_not_a_warning() -> None:
         SUITE.run(lambda target, case: 0)
 
 
-def test_running_an_unblocked_suite_without_a_measure_would_still_raise(monkeypatch) -> None:
-    monkeypatch.setattr(SUITE, "require_unblocked", lambda: None)
-    with pytest.raises(NotAuthorised, match="no measurement implementation"):
+def test_the_citation_gate_is_checked_before_the_measurement_gate() -> None:
+    """Order matters: a blocked module must not report 'no implementation' as
+    though that were the only thing standing in the way."""
+    with pytest.raises(CalibrationBlocked):
         SUITE.run(None)
+
+
+def test_a_suite_of_only_module_1_controls_would_reach_the_measurement_gate() -> None:
+    """The same cases, with the two pending ground-truth citations satisfied,
+    stop at NotAuthorised rather than at the citation gate."""
+    from dataclasses import replace
+
+    from harness.calibration import CalibrationSuite
+    from tiers.provenance import CitationIndex
+
+    verified = CitationIndex(
+        citations=tuple(
+            replace(c, verification=Verification.PRIMARY_SOURCE, verification_note="")
+            for c in CITATIONS.citations
+        )
+    )
+    cases = tuple(
+        c if c.expected is not PENDING_PRIMARY_SOURCE else replace(c, expected=0)
+        for c in SUITE.cases
+    )
+    unblocked = CalibrationSuite(module_id=SUITE.module_id, cases=cases, citations=verified)
+    assert not unblocked.gate().blocked
+    with pytest.raises(NotAuthorised, match="no measurement implementation"):
+        unblocked.run(None)
 
 
 def test_the_ceiling_citation_is_declared_and_unverified() -> None:

@@ -302,6 +302,13 @@ Limitation: ancestry is a property of the history as it currently stands. A
 rebase or a filter-branch rewrites it. The check detects a *missing* ordering,
 not a rewritten one.
 
+`PREREG-M1.md` was edited once after the commit that introduced it, to stop the
+field parser reading the same key from two places. No run existed at that point,
+so no result's embedded `prereg_sha256` refers to the earlier text. Any edit
+after the first run would be a different matter: the auditor would report a
+`prereg_sha256` deviation on every earlier run, which is the intended behaviour
+and not something to work around.
+
 ---
 
 ## D-016 — What content-addressing does and does not prove
@@ -410,8 +417,39 @@ applies them one at a time, runs the selected tests, and restores the file. The
 catalogue is committed, so a mutant that stops being caught is visible in a diff.
 
 Per-mutant test selection rather than the whole suite: the suite takes ~40
-seconds, and 35 mutants at full-suite cost would make the check something nobody
+seconds, and 48 mutants at full-suite cost would make the check something nobody
 runs.
+
+Current state: 48 mutants across 8 layers, at least five per layer, all killed.
+
+Two things the first run turned up, recorded because they are the kind of thing
+that silently degrades a validation harness:
+
+*Two proposed mutants were semantically equivalent, not undetected defects.*
+Truncating the Keccak iota LFSR feedback from `0x171` to `0x71` leaves the low
+eight bits of the register evolving identically, because the dropped bit never
+feeds back; and widening the modulus search from odd tails to every tail changes
+nothing, because a polynomial with zero constant term is rejected by the
+divisibility guard one line later. Both were replaced with mutants that alter
+behaviour. A test suite cannot kill an equivalent mutant, and counting one as a
+survivor would have sent someone hunting for a missing test that does not exist.
+
+*A same-length mutant poisoned later runs through the bytecode cache.* Replacing
+`result ^= a` with `result |= a` restores to a file of identical size, and
+CPython validates a cached `.pyc` on source mtime with one-second granularity, so
+a stale `.pyc` compiled from the mutated source survived the restore and made
+every subsequent run fail in unrelated places. `apply_mutant` now purges
+`__pycache__` on both sides of the mutation and runs pytest with
+`PYTHONDONTWRITEBYTECODE=1`. Without that, a mutation harness silently corrupts
+the results of everything that follows it.
+
+*One survivor was a real gap.* Dropping the censored-observation term from the
+Tobit likelihood was not caught, because the original fixture censored only at
+the top of the x range: the surviving uncensored subsample was barely truncated,
+so a fit that discarded censored rows still recovered the slope. The fixture now
+censors across the whole range (86 of 120 observations), where discarding them
+attenuates the slope from 0.51 to 0.25, and a test asserts that difference
+directly. This is the mutation harness doing the job it exists for.
 
 ---
 

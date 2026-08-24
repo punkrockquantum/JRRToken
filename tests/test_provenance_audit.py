@@ -5,14 +5,25 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from harness.runner import ProvenanceRunner
 from modules.degree.spec import PREREG_PATH
+from provenance import gitinfo
 from provenance.audit import audit_run, audit_tree
 from provenance.store import ResultsLog
 
 PREREG_ALPHA = 0.05
 PREREG_FAMILY = 64
 PREREG_FLOOR = 1.0
+
+
+@pytest.fixture(autouse=True)
+def _clean_tree(monkeypatch):
+    """These tests exercise the auditor, not the state of the checkout. Without
+    this, every fixture run records working_tree_clean=False and the auditor
+    correctly flags it -- which is tested on its own below."""
+    monkeypatch.setattr(gitinfo, "working_tree_clean", lambda paths=None: True)
 
 
 def a_run(tmp_path: Path, analysis: dict | None = None) -> Path:
@@ -56,15 +67,26 @@ def test_a_compliant_run_reports_no_deviations(tmp_path: Path) -> None:
 
 
 def test_an_analysis_run_at_the_wrong_alpha_is_reported_and_recomputed(tmp_path: Path) -> None:
-    path = a_run(tmp_path, an_analysis(alpha=0.20, family_size=32, effect_floor=0.01))
+    path = a_run(tmp_path, an_analysis(alpha=0.20, family_size=64, effect_floor=0.01))
     report = audit_run(path)
     assert not report.compliant
     deviation = next(d for d in report.deviations if d.field_name.startswith("analysis"))
     assert "alpha=0.05" in deviation.prereg_value
-    assert "family_size=64" in deviation.prereg_value
+    assert "effect_floor=1.0" in deviation.prereg_value
     assert "alpha=0.2" in deviation.as_run_value
-    assert deviation.recomputed  # the auditor re-ran the pre-registered rule
+    # The auditor re-ran the pre-registered rule rather than only flagging it.
     assert "n_rejected=" in deviation.recomputed
+    assert "accepted_after_floor=" in deviation.recomputed
+
+
+def test_an_analysis_over_the_wrong_family_cannot_be_recomputed_and_says_so(
+    tmp_path: Path,
+) -> None:
+    path = a_run(tmp_path, an_analysis(alpha=0.05, family_size=32, effect_floor=1.0))
+    report = audit_run(path)
+    deviation = next(d for d in report.deviations if d.field_name.startswith("analysis"))
+    assert "could not recompute" in deviation.recomputed
+    assert "pre-registered family size is 64" in deviation.recomputed
 
 
 def test_a_broken_chain_is_reported_rather_than_raised(tmp_path: Path) -> None:

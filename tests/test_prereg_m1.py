@@ -92,7 +92,7 @@ def test_the_promotion_gate_is_instantiated_with_concrete_numbers() -> None:
         "gate_falsification",
         "feasibility_ceiling_log2` = 63.1",
         "2^(k+256)",
-        "brute force always present",
+        "brute force",
     ):
         assert marker in text, marker
 

@@ -126,4 +126,5 @@ def test_the_same_negative_without_the_test_is_incomplete() -> None:
 def test_the_blindness_statement_names_a_concrete_class_and_its_cost() -> None:
     assert "GF(2^n)" in BLINDNESS_STATEMENT
     assert "x*y = 1" in BLINDNESS_STATEMENT
-    assert "one field inversion" in BLINDNESS_STATEMENT
+    assert "single field inversion" in BLINDNESS_STATEMENT
+    assert ALGEBRAIC_TRACTABILITY["solving_cost"] == "one inversion in GF(2^n)"
