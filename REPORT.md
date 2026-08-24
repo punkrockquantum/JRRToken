@@ -1,6 +1,6 @@
 # algebraic-probe — full report
 
-**Commit** `f85407c` · **Date** 2026-08-24
+**Commit** `1fc7af1` · **Date** 2026-08-24 · **Autonomous completion run: stages A–E complete**
 
 An instrument for bounding the algebraic attack surface of ARX and
 arithmetisation-oriented hash functions. Output is bounds, distributions and
@@ -9,6 +9,62 @@ scope statements; it claims neither a break nor an impossibility.
 This is the single operator-facing report and it contains judgement. It is
 deliberately **not** in `reports/out/` — those are instrument output and carry no
 prose, enforced in CI. Judgement calls are itemised in `DECISIONS.md`.
+
+---
+
+## 0. Run outcome
+
+Stages A–E complete. **Promoted set empty.** Every module either passes its
+gates or is recorded calibration-blocked with the reason. Compliance audit run
+with every deviation reported; provenance chain verified.
+
+| Stage | Outcome |
+|---|---|
+| A — MiMC divergence | bound path **sound but loose**, not defective; derived bound added, mean gap 3.71 → 0.86 |
+| B — composition | naive doubling **provably cannot track** a composed target; gap up to 10 bits |
+| C — blockers | C1, C2 confirmed environmental; C3 has no anchor. All escalated, none worked around |
+| D — M2–M6 | M4 built and calibration-blocked; M2/M3/M5/M6 blocked on E-03 |
+| E — synthesis | 0 candidates eligible, 0 promoted; 1 of 3 runs compliant; chains unbroken |
+
+Per-stage detail in `checkpoints/`. Operator items in `ESCALATIONS.md` (7).
+
+### Stage A — the divergence was a loose bound, not a defect
+
+`d_ub ≥ d_exact` at every measured point (n ∈ {9,11,13}, r ∈ [1,7]). Both models
+stated in advance were refuted: MODEL-P predicted a drop at r=4 that **did not
+occur** (measured 4, predicted 3), so it is not even an upper bound; MODEL-C is
+sound but overshoots by 1–3 bits. `mimc_derived_bound` implements the sound one.
+
+### Stage B — what composition exposed
+
+Iterated cube map over GF(2^9): the exact degree **decreases** at r=4 and r=6. A
+doubling bound is monotone and cannot reproduce a decrease at any round.
+Block-restricted map at n=12: the naive bound breaches a ceiling that is a
+theorem about the target from r=3, reaching 11 against a true degree of 1.
+
+The prior gap=0 controls were validating the implementation, not the instrument.
+
+### Stage D — M4's substantive result
+
+The round at which the implied higher-order distinguisher stops being useful:
+
+| n | naive doubling | derived | exact | rounds given up by doubling |
+|---|---:|---:|---:|---:|
+| 9 | 2 | 5 | 5 | **3** |
+| 11 | 3 | 6 | 6 | **3** |
+| 13 | 3 | 7 | 8 | **5** |
+
+Checked empirically: the order-(d+1) derivative vanishes and the order-d one does
+not, at every round.
+
+### Stage E — combined blindness
+
+Three implemented, run and passing blindness classes. Their union is the honest
+description of what remains unexamined: anything expressible as a small implicit
+relation system over the extension field; anything over multiplicative or
+non-affine subsets (a distinguisher on **7** inputs where the degree measure
+demands **2^9**); all of SHA-256; differential, MITM and rotational structure;
+and degree over prime fields, where the metric is undefined.
 
 ---
 

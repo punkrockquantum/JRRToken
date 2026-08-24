@@ -1,4 +1,4 @@
-commit=66a0a482f2e75ab9d0208eba67dc1489f3f2ee08
+commit=1fc7af1a45c0e4f94b36e72f00d162f7257cfcd2
 calibration_suite module=modules.degree n_cases=11
   case=CAL-M1-GT-KECCAK-R1 kind=published-ground-truth target=keccak-f[25] rounds=1 quantity=algebraic_degree_upper_bound asserts=algebraic_degree_upper_bound == PENDING_PRIMARY_SOURCE rounds=1 variables=25 width=25 provenance=citation=CITE-BCD11
     assertion=the module's certified upper bound on the algebraic degree of 1-round Keccak-f[25] equals the per-round bound stated for that round in CITE-BCD11
