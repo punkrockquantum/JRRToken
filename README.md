@@ -23,7 +23,7 @@ D-002).
 | `core/` — control targets, Keccak-f, MiMC | implemented, validated |
 | `core/sha256.py` — primary target | absent; raises `NotAuthorised` |
 | `verify/` — independent exhaustive ANF path | implemented, tested |
-| `modules/degree/` — Module 1 | pre-registered and calibrated; `measure=None` |
+| `modules/degree/` — Module 1 | pre-registered, calibrated, measurement path built |
 | Modules 2-6 | not started |
 
 ## Layout
@@ -66,6 +66,8 @@ cd algebraic-probe
 pytest -q                                       # the suite
 python scripts/ci_checks.py                     # structural checks
 python -m modules.degree.calibration            # what Module 1 will assert
+python scripts/readiness_report.py              # per-target go/no-go
+python scripts/execute.py                       # run what the gates authorise
 python modules/degree/prereg/derive_thresholds.py
 python scripts/render_reports.py                # regenerate reports/out/
 python scripts/mutation_test.py                 # deliberate-defect check
