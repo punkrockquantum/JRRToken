@@ -241,25 +241,58 @@ class CalibrationSuite:
 
     # -- gate 2: execution ---------------------------------------------------
 
+    def run_controls(
+        self, measure: Callable[[Any, CalibrationCase], Any] | None
+    ) -> CalibrationReport:
+        """Run only the cases whose expected value is established in this
+        repository -- the controls and the blindness class.
+
+        Section 5 asks two different things of a calibration suite: that the
+        instrument measures what it claims (the controls), and that it agrees
+        with the literature (the published ground truth). The second is a hard
+        block on running against anything new, and this method does not lift it:
+        it establishes the first while the second is outstanding, and the gate in
+        ``gate()`` is unchanged by whether this passed.
+        """
+        cases = tuple(c for c in self.cases if c.kind is not CaseKind.PUBLISHED_GROUND_TRUTH)
+        return self._execute(cases, measure, label=f"{self.module_id}::controls")
+
     def run(self, measure: Callable[[Any, CalibrationCase], Any] | None) -> CalibrationReport:
         self.require_unblocked()
+        return self._execute(self.cases, measure, label=self.module_id)
+
+    def _execute(
+        self,
+        cases: tuple[CalibrationCase, ...],
+        measure: Callable[[Any, CalibrationCase], Any] | None,
+        *,
+        label: str,
+    ) -> CalibrationReport:
         if measure is None:
             raise NotAuthorised(
-                f"{self.module_id}: no measurement implementation is registered. "
+                f"{label}: no measurement implementation is registered. "
                 "The calibration suite is defined and can be inspected with "
                 "manifest(), but the module's measurement path does not exist yet."
             )
         outcomes = []
-        for case in self.cases:
+        for case in cases:
             target = case.target_factory()
-            observed = measure(target, case)
+            try:
+                observed: Any = measure(target, case)
+                passed = bool(case.comparator.holds(observed, case.expected))
+                detail = ""
+            except Exception as exc:
+                observed = f"{type(exc).__name__}"
+                passed = False
+                detail = str(exc)[:160]
             outcomes.append(
                 CaseOutcome(
                     case_id=case.case_id,
                     observed=observed,
                     expected=case.expected,
                     comparator=case.comparator,
-                    passed=bool(case.comparator.holds(observed, case.expected)),
+                    passed=passed,
+                    detail=detail,
                 )
             )
-        return CalibrationReport(module_id=self.module_id, outcomes=tuple(outcomes))
+        return CalibrationReport(module_id=label, outcomes=tuple(outcomes))

@@ -20,8 +20,10 @@ def test_the_module_is_registered_with_its_declared_tiers() -> None:
     assert spec.declared_tiers == frozenset({Tier.P, Tier.E, Tier.S})
 
 
-def test_no_measurement_path_is_registered() -> None:
-    assert SPEC.measure is None
+def test_a_measurement_path_is_registered_and_dispatches_on_the_quantity() -> None:
+    assert SPEC.measure is not None
+    exact = next(c for c in SUITE.cases if c.quantity == "algebraic_degree")
+    assert SPEC.measure(exact.target_factory(), exact) >= 0
 
 
 def test_the_router_accepts_each_declared_tier_under_its_own_regime() -> None:

@@ -46,6 +46,9 @@ class SpecSheet:
     #: The published result section 5 names for this module, if it names one.
     calibration_anchor: str | None
     depends_on: tuple[str, ...] = ()
+    #: (target_id, factory-or-None, citation the target's ground truth needs).
+    #: A target with no citation has its expected values established in-repo.
+    targets: tuple[tuple[str, str | None, str | None], ...] = ()
 
 
 INVENTORY: tuple[SpecSheet, ...] = (
@@ -58,6 +61,15 @@ INVENTORY: tuple[SpecSheet, ...] = (
         prereg_path="modules/degree/prereg/PREREG-M1.md",
         verify_symbol="verify.anf:algebraic_degree",
         calibration_anchor="a permutation with published per-round degree values",
+        targets=(
+            ("sha256-compression-parametrised", "core.sha256", None),
+            ("keccak-f[25]", "core.keccak:KeccakF", "CITE-BCD11"),
+            ("mimc-gf2n[9]", "core.mimc:MiMC", "CITE-EGLORSW20"),
+            ("linear-map-gf2", "core.targets:LinearMapGF2", None),
+            ("power-map-gf2n", "core.targets:PowerMap", None),
+            ("inverse-map-gf2n", "core.targets:InverseMap", None),
+            ("random-function-sha256-prf", "core.targets:RandomFunction", None),
+        ),
     ),
     SpecSheet(
         module_id="M2",
@@ -121,6 +133,88 @@ INVENTORY: tuple[SpecSheet, ...] = (
 
 def _import(dotted: str):
     return importlib.import_module(dotted)
+
+
+SAMPLE_TARGETS = {
+    "keccak-f[25]": lambda: _import("core.keccak").KeccakF.create(0, 2),
+    "mimc-gf2n[9]": lambda: _import("core.mimc").MiMC.create(n=9, n_rounds=2),
+    "linear-map-gf2": lambda: _import("core.targets").LinearMapGF2.random_invertible(9, 1),
+    "power-map-gf2n": lambda: _import("core.targets").PowerMap.create(9, 31),
+    "inverse-map-gf2n": lambda: _import("core.targets").InverseMap.create(9),
+    "random-function-sha256-prf": lambda: _import("core.targets").RandomFunction.create(9, 9, 1),
+}
+
+
+def make_target_gates(
+    sheet: SpecSheet, target_id: str, citation_key: str | None
+) -> tuple[Gate, ...]:
+    """Gates that decide whether this module may run against this target."""
+
+    def check_available() -> tuple[bool, str]:
+        if target_id.startswith("sha256"):
+            return check_primary_target()
+        factory = SAMPLE_TARGETS.get(target_id)
+        if factory is None:
+            return False, "no constructor is registered for this target"
+        target = factory()
+        value = target(0)
+        return True, f"constructed, n_in={target.n_in} n_out={target.n_out} f(0)={value}"
+
+    def check_ground_truth_for_target() -> tuple[bool, str]:
+        if citation_key is None:
+            return True, "expected values for this target are established in-repo"
+        if sheet.package is None:
+            return False, "no module package exists"
+        citations = _import(f"{sheet.package}.citations").CITATIONS
+        citation = citations.get(citation_key)
+        from tiers.provenance import Verification
+
+        if citation.verification is Verification.UNVERIFIED:
+            return False, (
+                f"this target's ground truth rests on {citation_key}, whose claimed "
+                "value has not been checked against the primary source"
+            )
+        return True, f"{citation_key} verified"
+
+    def check_measure_supports_target() -> tuple[bool, str]:
+        if sheet.package is None:
+            return False, "no module package exists"
+        if target_id.startswith("sha256"):
+            return False, "the target is absent, so no path can be exercised"
+        measure_module = _import(f"{sheet.package}.measure")
+        target = SAMPLE_TARGETS[target_id]()
+        paths = []
+        try:
+            measure_module.degree_upper_bound(target)
+            paths.append("upper-bound")
+        except Exception:
+            pass
+        try:
+            measure_module.exact_degree(target)
+            paths.append("exact")
+        except Exception:
+            pass
+        if not paths:
+            return False, "the measurement path supports neither a bound nor an exact value"
+        return True, f"paths={paths}"
+
+    return (
+        Gate("T01", "target-available", "section 9", BlockClass.OPERATOR, check_available),
+        Gate(
+            "T02",
+            "target-ground-truth-verified",
+            "section 5",
+            BlockClass.OPERATOR,
+            check_ground_truth_for_target,
+        ),
+        Gate(
+            "T03",
+            "measurement-path-supports-target",
+            "section 4",
+            BlockClass.BUILD,
+            check_measure_supports_target,
+        ),
+    )
 
 
 def check_primary_target() -> tuple[bool, str]:
@@ -276,13 +370,11 @@ def make_checks(sheet: SpecSheet, decided: dict[str, Decision]):
         return True, f"dependencies {list(sheet.depends_on)} are GO"
 
     return (
-        Gate("G01", "primary-target-present", "section 9", BlockClass.OPERATOR, check_primary_target),
         Gate("G02", "prereg-committed", "section 8", BlockClass.BUILD, check_prereg),
         Gate("G03", "prereg-matches-derivation", "directive 2.1", BlockClass.BUILD, check_derivation),
         Gate("G04", "runner-precedes-prereg", "section 8", BlockClass.BUILD, check_ordering),
         Gate("G05", "calibration-suite-defined", "section 5", BlockClass.BUILD, check_calibration_defined),
         Gate("G06", "published-anchor-named", "section 5", BlockClass.OPERATOR, check_anchor_named),
-        Gate("G07", "ground-truth-verified", "section 5", BlockClass.OPERATOR, check_ground_truth),
         Gate("G08", "controls-recompute", "section 5", BlockClass.BUILD, check_controls),
         Gate("G09", "blindness-test-passes", "section 6", BlockClass.BUILD, check_blindness),
         Gate("G10", "independent-verify-path", "section 7.2", BlockClass.BUILD, check_verify_path),
@@ -296,6 +388,10 @@ def build_report() -> ReadinessReport:
     decided: dict[str, Decision] = {}
     modules: list[ModuleReadiness] = []
     for sheet in INVENTORY:
+        target_gates = {
+            target_id: make_target_gates(sheet, target_id, citation)
+            for target_id, _factory, citation in sheet.targets
+        }
         readiness = evaluate(
             module_id=sheet.module_id,
             title=sheet.title,
@@ -303,6 +399,7 @@ def build_report() -> ReadinessReport:
             declared_tiers=sheet.declared_tiers,
             depends_on=sheet.depends_on,
             gates=make_checks(sheet, decided),
+            target_gates=target_gates,
         )
         decided[sheet.module_id] = readiness.decision
         modules.append(readiness)
