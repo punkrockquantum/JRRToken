@@ -161,6 +161,12 @@ class CalibrationSuite:
     module_id: str
     cases: tuple[CalibrationCase, ...]
     citations: CitationIndex
+    #: A module for which section 5 names no published anchor may be constructed
+    #: without a ground-truth case -- and is then permanently blocked by gate().
+    #: This moves the block from construction time to gate time so the module can
+    #: ship calibration-blocked with a stated reason. It does not relax the gate.
+    allow_missing_ground_truth: bool = False
+    missing_ground_truth_reason: str = ""
 
     def __post_init__(self) -> None:
         ids = [c.case_id for c in self.cases]
@@ -168,11 +174,15 @@ class CalibrationSuite:
         if dupes:
             raise CalibrationBlocked(f"duplicate calibration case ids: {sorted(dupes)}")
         kinds = {c.kind for c in self.cases}
-        for required in (
-            CaseKind.PUBLISHED_GROUND_TRUTH,
-            CaseKind.POSITIVE_CONTROL,
-            CaseKind.NEGATIVE_CONTROL,
-        ):
+        required_kinds = [CaseKind.POSITIVE_CONTROL, CaseKind.NEGATIVE_CONTROL]
+        if not self.allow_missing_ground_truth:
+            required_kinds.insert(0, CaseKind.PUBLISHED_GROUND_TRUTH)
+        elif not self.missing_ground_truth_reason.strip():
+            raise CalibrationBlocked(
+                f"{self.module_id}: a suite without published ground truth must state "
+                "why, and the reason is what the gate reports"
+            )
+        for required in required_kinds:
             if required not in kinds:
                 raise CalibrationBlocked(
                     f"{self.module_id}: calibration suite has no {required.value} case "
@@ -188,6 +198,13 @@ class CalibrationSuite:
     def gate(self) -> GateStatus:
         reasons: list[str] = []
         blocking: list[str] = []
+        if self.allow_missing_ground_truth:
+            # Permanently blocked until an anchor is supplied. The suite could be
+            # constructed; it cannot be trusted on anything new.
+            reasons.append(
+                f"module={self.module_id} has no published-ground-truth case: "
+                f"{self.missing_ground_truth_reason}"
+            )
         for case in self.cases:
             if case.expected is PENDING_PRIMARY_SOURCE:
                 reasons.append(
