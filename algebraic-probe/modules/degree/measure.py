@@ -279,6 +279,50 @@ def power_map_bound(target: PowerMap | InverseMap) -> BoundResult:
     )
 
 
+def max_weight_up_to(m: int) -> int:
+    """Largest Hamming weight of any integer in [1, m].
+
+    That integer is the largest all-ones value not exceeding m, so the answer is
+    the number of ones in 2^k - 1 for the largest k with 2^k - 1 <= m.
+    """
+    if m < 1:
+        raise ValueError("m must be at least 1")
+    k = m.bit_length()
+    return k if (1 << k) - 1 <= m else k - 1
+
+
+def mimc_derived_bound(target: MiMC) -> BoundResult:
+    """A tighter, derived bound for the AO case.
+
+    The r-round MiMC polynomial is univariate over GF(2^n). Round constants keep
+    every lower exponent alive, so after r rounds of cubing the exponent support
+    is contained in [1, 3^r], reduced modulo 2^n - 1. The GF(2)-degree of x^e is
+    wt(e), and the degree of a sum is at most the largest degree of its terms, so
+
+        deg <= max { wt(e) : 1 <= e <= min(3^r, 2^n - 1) }
+
+    capped at n-1 because the map is a permutation. Sound by construction, and
+    strictly tighter than doubling wherever 3^r is not itself all-ones.
+
+    Derivation is in-repo (computation M1-AO-BOUND-001); no citation is relied
+    on, and none is claimed.
+    """
+    modulus_order = (1 << target.n) - 1
+    reach = min(3**target.n_rounds, modulus_order)
+    raw = max_weight_up_to(reach)
+    bound, capped = _permutation_cap(raw, target.n)
+    return BoundResult(
+        value=bound,
+        derivation=(
+            f"exponent support of the {target.n_rounds}-round polynomial is contained "
+            f"in [1, min(3^r, 2^n-1)] = [1, {reach}]; deg(x^e) = wt(e) and the degree "
+            f"of a sum is at most the largest term's, giving {raw}"
+            + (f", capped at n-1 = {target.n - 1} for a permutation" if capped else "")
+        ),
+        capped_by_permutation=capped,
+    )
+
+
 def mimc_bound(target: MiMC) -> BoundResult:
     x = SymbolicWord.variables(target.n)
     state = x
@@ -475,4 +519,11 @@ def measure(target: Any, case: Any) -> int:
         return exact_degree(target)
     if quantity == "algebraic_degree_upper_bound":
         return degree_upper_bound(target).value
+    if quantity == "algebraic_degree_upper_bound_derived":
+        if not isinstance(target, MiMC):
+            raise MeasurementRefused(
+                "the derived exponent-support bound is specific to the MiMC "
+                f"construction; {type(target).__name__} has no such derivation"
+            )
+        return mimc_derived_bound(target).value
     raise MeasurementRefused(f"no measurement path for quantity {quantity!r}")

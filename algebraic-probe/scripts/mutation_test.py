@@ -484,6 +484,33 @@ CATALOGUE: tuple[Mutant, ...] = (
         ("tests/test_measure.py",),
         "Frobenius squaring resets the degree instead of carrying it",
     ),
+    Mutant(
+        "MEAS-07",
+        "measure",
+        "modules/degree/measure.py",
+        "    k = m.bit_length()\n    return k if (1 << k) - 1 <= m else k - 1",
+        "    k = m.bit_length()\n    return k",
+        ("tests/test_stage_a.py",),
+        "the derived bound overstates the reachable Hamming weight by one",
+    ),
+    Mutant(
+        "MEAS-08",
+        "measure",
+        "modules/degree/measure.py",
+        "    reach = min(3**target.n_rounds, modulus_order)",
+        "    reach = min(2**target.n_rounds, modulus_order)",
+        ("tests/test_stage_a.py",),
+        "the exponent support is computed for squaring rather than cubing, making the derived bound unsound",
+    ),
+    Mutant(
+        "MEAS-09",
+        "measure",
+        "modules/degree/blindness/saturated_power.py",
+        "    return observed_degree == n - 1",
+        "    return True",
+        ("tests/test_stage_a.py",),
+        "the saturation blindness test passes for any measurement",
+    ),
     # -- verify --------------------------------------------------------------
     Mutant(
         "VRFY-01",

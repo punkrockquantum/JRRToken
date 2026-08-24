@@ -630,3 +630,58 @@ SAT/brute-force ratio, the 3% intermediate-control agreement) are not reproduced
 in this repository and are not cited anywhere in it. They shaped the design; they
 are not numbers this instrument emits. If any of them should appear in an output,
 they need a citation key pointing at `sha256-testbed` with a commit id.
+
+---
+
+## D-029 — Stage A: the MiMC bound path is sound and loose, not defective
+
+The autonomous completion brief ordered Stage A first on the hypothesis that the
+d_ub/d_exact divergence might be a defect invalidating everything above it. It is
+not. Each step of the propagation is a valid inequality (Frobenius is linear;
+deg(a·b) ≤ deg a + deg b), and `d_ub ≥ d_exact` holds at every measured point
+across n ∈ {9,11,13}, r ∈ [1,7]. Class 1 does not apply.
+
+Both models stated in advance were refuted as predictors. MODEL-P (pure power,
+`wt(3^r mod 2^n−1)`) predicted a non-monotonic drop at r=4 which did not occur —
+measured 4, predicted 3 — so MODEL-P is not even an upper bound. MODEL-C
+(constant contamination) is sound but overshoots by 1–3 bits. Measured values lie
+strictly between at every point. The data separates them, so Class 4 does not
+apply.
+
+`mimc_derived_bound` implements MODEL-C as a certified path: the exponent support
+after r rounds lies in [1, min(3^r, 2^n−1)], deg(x^e) = wt(e), and the degree of a
+sum is at most its largest term's. Mean gap at n=13 falls from 3.71 to 0.86.
+
+Both paths are retained and reported per round. The naive one is not deleted: it
+is the bound a reader would expect, and showing the derived one beside it is what
+makes the improvement checkable rather than asserted.
+
+## D-030 — the derived bound is not substituted for the published anchor
+
+Stage A produced a sound MiMC bound in-repo. It is not used to satisfy
+`CITE-EGLORSW20`. The completion brief's Class 2 forbids substituting a
+self-derived value for a published anchor, and the original brief's §5 requires
+the module to reproduce a *published* value before it is trusted on anything new.
+`mimc-gf2n[9]` therefore remains T02-blocked despite the repository now
+containing a better bound than the naive one. That is the gate working.
+
+## D-031 — Stage D order deviates from the completion brief
+
+The completion brief §5 orders M2 first. M2's subject is SHA-256's message
+schedule, which is unavailable (ESCALATIONS E-03). Taking M4's AO arm first, and
+recording M2/M3/M5/M6 as blocked, delivers work that is actually reachable
+instead of idling. Deviation recorded here as the brief instructs; the ordering
+is a sequencing choice and changes no result.
+
+## D-032 — where the two briefs conflict, the original wins
+
+The completion brief restates several rules loosely ("no prose conclusions",
+"nulls require a blindness proof"). Where wording differs, the original brief's
+formulation is the one enforced in code, and the code was not changed to match
+the restatement. One substantive conflict: the completion brief §0 forbids
+characterising a result as "negative", while the original §6 defines NEGATIVE as
+a formal status with mechanism, blindness statement and passing blindness test.
+Resolution: the formal status label `NEGATIVE` in `tiers/finding.py` is retained,
+since it is a structured epistemic state and not a characterisation; the *prose*
+word remains banned in reports by the lint. Recorded rather than silently
+reconciled.
