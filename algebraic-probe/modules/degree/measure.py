@@ -33,7 +33,14 @@ from typing import Any, Sequence
 
 from core.keccak import KeccakF, permute
 from core.mimc import MiMC
-from core.targets import InverseMap, LinearMapGF2, PowerMap, RandomFunction
+from core.targets import (
+    BlockRestrictedMap,
+    InverseMap,
+    IteratedPowerMap,
+    LinearMapGF2,
+    PowerMap,
+    RandomFunction,
+)
 from tiers.errors import ProbeError
 
 #: Above this the subset-sum ANF (3^n coefficient XORs) stops being a sensible
@@ -353,8 +360,50 @@ def linear_bound(target: LinearMapGF2) -> BoundResult:
     )
 
 
+def iterated_power_bound(target: IteratedPowerMap) -> BoundResult:
+    """Composition-blind bound: each application of x^e multiplies the bound by
+    wt(e), because the map is a product of wt(e) Frobenius images.
+
+    Sound, and blind to the fact that composing power maps yields another power
+    map whose exponent reduces modulo 2^n - 1. That blindness is the point of
+    this control.
+    """
+    per_application = bin(target.exponent).count("1")
+    raw_iterated = per_application**target.rounds
+    bound, capped = _permutation_cap(min(raw_iterated, target.n), target.n)
+    return BoundResult(
+        value=bound,
+        derivation=(
+            f"each application of x^{target.exponent} multiplies the degree bound by "
+            f"wt = {per_application}; over {target.rounds} applications that is {raw_iterated}"
+            + (f", capped at n-1 = {target.n - 1}" if capped else "")
+        ),
+        capped_by_permutation=capped,
+    )
+
+
+def block_restricted_bound(target: BlockRestrictedMap) -> BoundResult:
+    """Composition-blind bound, ignoring the block restriction."""
+    per_block_application = bin(target.exponent).count("1")
+    raw_block = per_block_application**target.rounds
+    bound, capped = _permutation_cap(min(raw_block, target.n), target.n)
+    return BoundResult(
+        value=bound,
+        derivation=(
+            f"{target.rounds} applications each multiplying the bound by "
+            f"wt = {per_block_application}, ignoring that only {target.active} of {target.n} bits "
+            "are active"
+        ),
+        capped_by_permutation=capped,
+    )
+
+
 def degree_upper_bound(target: Any) -> BoundResult:
     """Tier P. Dispatch to the propagation path for this target family."""
+    if isinstance(target, IteratedPowerMap):
+        return iterated_power_bound(target)
+    if isinstance(target, BlockRestrictedMap):
+        return block_restricted_bound(target)
     if isinstance(target, KeccakF):
         return keccak_bound(target)
     if isinstance(target, (PowerMap, InverseMap)):
