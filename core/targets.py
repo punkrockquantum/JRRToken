@@ -291,3 +291,131 @@ class RandomFunction:
             "uniform over GF(2); degree < n-1 requires the single degree-n coefficient "
             "and all n degree-(n-1) coefficients to vanish, probability 2^-(n+1)"
         )
+
+
+# ---------------------------------------------------------------------------
+# COMPOSED CONTROLS (Stage B).
+#
+# Every gap=0 control above is a single uncomposed map, where the degree bound
+# is just wt(exponent) and tightness validates the implementation rather than
+# the instrument. These compose, and their per-round exact degree is
+# analytically known, so bound tightness under composition is measurable.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class IteratedPowerMap:
+    """x -> x^e applied ``rounds`` times over GF(2^n), no round constants.
+
+    Equal to x^(e^rounds mod 2^n - 1), so the exact degree is
+    wt(e^rounds mod 2^n - 1) analytically. That sequence is NON-MONOTONIC in
+    the round count, which no doubling bound can reproduce: this is the control
+    on which naive doubling is provably wrong rather than merely loose.
+    """
+
+    n: int
+    exponent: int
+    rounds: int
+    field: GF2n
+
+    target_id: str = "iterated-power-map-gf2n"
+
+    @property
+    def n_in(self) -> int:
+        return self.n
+
+    @property
+    def n_out(self) -> int:
+        return self.n
+
+    @staticmethod
+    def create(n: int, exponent: int, rounds: int) -> "IteratedPowerMap":
+        if rounds < 1:
+            raise ValueError("rounds must be at least 1")
+        if exponent < 1:
+            raise ValueError("iterated-power exponent must be at least 1")
+        return IteratedPowerMap(n=n, exponent=exponent, rounds=rounds, field=GF2n(n))
+
+    def __call__(self, x: int) -> int:
+        _check_input(x, self.n, self.target_id)
+        state = x
+        for _ in range(self.rounds):  # composed, not evaluated in closed form
+            state = self.field.pow(state, self.exponent)
+        return state
+
+    @property
+    def effective_exponent(self) -> int:
+        order = (1 << self.n) - 1
+        e = pow(self.exponent, self.rounds, order)
+        return e if e else order
+
+    @property
+    def expected_degree(self) -> int:
+        return bin(self.effective_exponent).count("1")
+
+    @property
+    def expected_degree_derivation(self) -> str:
+        return (
+            "composing x -> x^e r times gives x^(e^r mod 2^n - 1), and the algebraic "
+            "degree of a power map is the Hamming weight of its exponent"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class BlockRestrictedMap:
+    """A power map on the low ``active`` bits, identity on the rest.
+
+    The degree can never exceed active-1 however many times it is iterated,
+    because no output bit depends on more than ``active`` inputs. A control with
+    a known ceiling well below the state size, which a doubling bound blows
+    past immediately.
+    """
+
+    n: int
+    active: int
+    exponent: int
+    rounds: int
+    field: GF2n
+
+    target_id: str = "block-restricted-map"
+
+    @property
+    def n_in(self) -> int:
+        return self.n
+
+    @property
+    def n_out(self) -> int:
+        return self.n
+
+    @staticmethod
+    def create(n: int, active: int, exponent: int, rounds: int) -> "BlockRestrictedMap":
+        if not 1 <= active <= n:
+            raise ValueError("active must lie in [1, n]")
+        return BlockRestrictedMap(
+            n=n, active=active, exponent=exponent, rounds=rounds, field=GF2n(active)
+        )
+
+    def __call__(self, x: int) -> int:
+        _check_input(x, self.n, self.target_id)
+        mask = (1 << self.active) - 1
+        low, high = x & mask, x & ~mask
+        for _ in range(self.rounds):
+            low = self.field.pow(low, self.exponent)
+        return high | low
+
+    @property
+    def degree_ceiling(self) -> int:
+        return self.active - 1
+
+    @property
+    def expected_degree(self) -> int:
+        order = (1 << self.active) - 1
+        e = pow(self.exponent, self.rounds, order)
+        return bin(e if e else order).count("1")
+
+    @property
+    def expected_degree_derivation(self) -> str:
+        return (
+            f"no output bit depends on more than {self.active} input bits, so the "
+            f"degree cannot exceed {self.active - 1} at any round count"
+        )
