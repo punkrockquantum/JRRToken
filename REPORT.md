@@ -1,6 +1,8 @@
 # algebraic-probe — status report
 
-**Commit** `0c9d231` · **Date** 2026-08-24 · **Scope** first deliverable (brief section 11) plus execution-readiness assessment
+**Commit** `7b86060` · **Date** 2026-08-24 · **Scope** first deliverable (brief section 11) plus execution-readiness assessment
+
+Outcomes of every run are recorded separately in `OUTCOMES.md`.
 
 This is an operator-facing status report and it contains judgement. It is
 deliberately **not** in `reports/out/` — those files are instrument output and
