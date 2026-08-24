@@ -51,6 +51,7 @@ class ResultsLog:
     @staticmethod
     def open(path: Path) -> "ResultsLog":
         records = ResultsLog._read_verified(path)
+        ResultsLog._check_not_truncated(path, records)
         header = {k: v for k, v in records[0].payload.items() if k != "kind"}
         return ResultsLog(path=path, header=header, _records=records)
 
@@ -78,7 +79,61 @@ class ResultsLog:
         return records
 
     def verify(self) -> bool:
-        ResultsLog._read_verified(self.path)
+        records = ResultsLog._read_verified(self.path)
+        ResultsLog._check_not_truncated(self.path, records)
+        return True
+
+    @staticmethod
+    def _check_not_truncated(path: Path, records: list[ChainRecord]) -> None:
+        """A hash chain detects edits and insertions but not truncation.
+
+        Every record commits to its predecessor, so dropping records from the
+        *end* of the log leaves a shorter chain that still verifies -- an
+        inconvenient result and the run_end marker can both be deleted silently.
+        Two independent closures against that:
+
+          1. a run_end record declares the total length of the run, and must be
+             the last record in the log;
+          2. a sealed log's length and head hash are registered in the run index
+             (see ``seal``), which ``verify_against_index`` cross-checks.
+        """
+        for position, record in enumerate(records):
+            if record.payload.get("kind") != "run_end":
+                continue
+            if position != len(records) - 1:
+                raise AppendOnlyViolation(
+                    f"{path}: records follow the run_end marker at {position}; the log "
+                    "was appended to after the run was closed"
+                )
+            declared = record.payload.get("n_records")
+            if declared is not None and declared != len(records):
+                raise AppendOnlyViolation(
+                    f"{path}: run_end declares {declared} records but the log holds "
+                    f"{len(records)}; records have been removed from the end"
+                )
+
+    def verify_against_index(self) -> bool:
+        """Cross-check a sealed log against what the run index recorded for it.
+
+        Catches truncation of a log that never got a run_end marker, and any
+        rewrite that produced a self-consistent but different chain.
+        """
+        entries = read_index(self.path.parent / INDEX_NAME)
+        entry = next((e for e in entries if e["path"] == self.path.name), None)
+        if entry is None:
+            return False  # never sealed: nothing to cross-check against
+        if entry["n_records"] != len(self._records):
+            raise AppendOnlyViolation(
+                f"{self.path}: index recorded {entry['n_records']} records, the log "
+                f"holds {len(self._records)}; the log has been truncated or extended "
+                "since it was sealed"
+            )
+        if entry["head_hash"] != self.head_hash:
+            raise AppendOnlyViolation(
+                f"{self.path}: index recorded head {entry['head_hash'][:16]}, the log "
+                f"heads at {self.head_hash[:16]}; the log has been rewritten since it "
+                "was sealed"
+            )
         return True
 
     @property
@@ -97,6 +152,10 @@ class ResultsLog:
         if len(on_disk) != len(self._records) or on_disk[-1].hash != self.head_hash:
             raise AppendOnlyViolation(
                 f"{self.path} changed underneath this handle; refusing to append"
+            )
+        if any(r.payload.get("kind") == "run_end" for r in on_disk):
+            raise AppendOnlyViolation(
+                f"{self.path} carries a run_end marker; a closed run is not reopened"
             )
         record = ChainRecord.create(len(self._records), self.head_hash, payload)
         with self.path.open("a", encoding="utf-8") as handle:

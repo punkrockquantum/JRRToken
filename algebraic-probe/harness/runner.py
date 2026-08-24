@@ -216,7 +216,9 @@ class ProvenanceRunner:
 
     def finish(self) -> RunReceipt:
         log = self._require_log()
-        log.append({"kind": "run_end", "n_records": len(log.records)})
+        # +1 for the run_end record itself: the count is the total length of the
+        # closed log, so a reader can detect records removed from the end.
+        log.append({"kind": "run_end", "n_records": len(log.records) + 1})
         receipt = self._receipt()
         log.seal()
         self._sealed = True

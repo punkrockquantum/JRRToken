@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from stats.bh import BHTest, benjamini_hochberg
-from tiers.errors import ProvenanceError
+from tiers.errors import AppendOnlyViolation, ProvenanceError
 
 from . import gitinfo
 from .prereg import load as load_prereg
@@ -89,6 +89,23 @@ def audit_run(log_path: Path) -> AuditReport:
 
     deviations: list[Deviation] = []
     notes: list[str] = []
+
+    # The chain alone cannot see records removed from the end of the log; the
+    # index recorded the sealed length and head hash for exactly this check.
+    try:
+        if log.verify_against_index():
+            notes.append("log length and head hash match the sealed run index")
+        else:
+            notes.append("log is not sealed in the run index; length is unverified")
+    except AppendOnlyViolation as exc:
+        chain_valid = False
+        deviations.append(
+            Deviation(
+                field_name="log_length",
+                prereg_value="as sealed in the run index",
+                as_run_value=str(exc),
+            )
+        )
 
     if not digest_matches:
         deviations.append(

@@ -166,12 +166,33 @@ class SweepStore:
         )
         self._conn.commit()
 
-    def results(self, prereg_id: str, cell_key: str) -> tuple[list[int], list[float], list[bool]]:
+    def results(
+        self, prereg_id: str, cell_key: str, *, require_complete: bool = True
+    ) -> tuple[list[int], list[float], list[bool]]:
+        """Terminal results for one cell.
+
+        ``require_complete`` defaults to True: a partially finished cell handed
+        to ``SeedDistribution`` silently becomes a smaller sample than the plan
+        declared, and the seed-count floor only catches it if the shortfall
+        happens to drop below 30. Reading a half-finished cell is a deliberate
+        act, not a default.
+        """
+        planned = self._conn.execute(
+            "SELECT COUNT(*) FROM sweep WHERE prereg_id=? AND cell_key=?",
+            (prereg_id, cell_key),
+        ).fetchone()[0]
+        if planned == 0:
+            raise ProbeError(f"cell {cell_key!r} is not part of the plan for {prereg_id}")
         rows = self._conn.execute(
             "SELECT seed, value, censored FROM sweep WHERE prereg_id=? AND cell_key=? "
             "AND status IN ('done','censored') ORDER BY seed",
             (prereg_id, cell_key),
         ).fetchall()
+        if require_complete and len(rows) != planned:
+            raise ProbeError(
+                f"cell {cell_key!r} of {prereg_id} has {len(rows)} of {planned} planned "
+                "seeds recorded; pass require_complete=False to read it anyway"
+            )
         seeds = [r[0] for r in rows]
         values = [json.loads(r[1]) for r in rows]
         censored = [bool(r[2]) for r in rows]

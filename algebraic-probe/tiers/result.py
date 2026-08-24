@@ -13,9 +13,11 @@ Each factory demands the evidence its tier requires.
 
 from __future__ import annotations
 
+import copy
 import statistics
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from types import MappingProxyType
+from typing import Any, Iterable, Mapping
 
 from .distribution import SeedDistribution
 from .errors import ProvenanceError, SamplingError, SpaceError, TierViolation
@@ -52,7 +54,9 @@ class Result:
     space: EnumeratedSpace | None = None
     #: Tier S only: the raw per-seed distribution.
     distribution: SeedDistribution | None = None
-    payload: dict[str, Any] = field(default_factory=dict)
+    #: Read-only: a frozen result whose payload could be edited in place is not
+    #: frozen. ``mint`` wraps whatever it is given in a MappingProxyType.
+    payload: Mapping[str, Any] = field(default_factory=dict)
     _mint: Any = None
 
     def __post_init__(self) -> None:
@@ -123,6 +127,45 @@ class Result:
     __mul__ = __add__
     __truediv__ = __add__
 
+    def __eq__(self, other: object) -> bool:
+        """Equality is a comparison, and cross-tier comparison raises.
+
+        Returning False for a Tier P result set against a Tier E one would be an
+        answer to a question section 3 forbids asking. Non-Result operands get
+        ``NotImplemented`` so ``result == 5`` and collection membership behave
+        normally.
+        """
+        if not isinstance(other, Result):
+            return NotImplemented
+        if other.tier is not self.tier:
+            raise TierViolation(
+                f"Refusing to compare a Tier {self.tier.value} result with a Tier "
+                f"{other.tier.value} result. Results of different tiers may not be "
+                "combined, averaged, or compared (section 3)."
+            )
+        return (
+            self.metric,
+            self.value,
+            self.provenance,
+            self.target,
+            self.derivation,
+            self.space,
+            self.distribution,
+            dict(self.payload),
+        ) == (
+            other.metric,
+            other.value,
+            other.provenance,
+            other.target,
+            other.derivation,
+            other.space,
+            other.distribution,
+            dict(other.payload),
+        )
+
+    def __hash__(self) -> int:
+        return hash((self.tier, self.metric, self.target, self.provenance))
+
     def __lt__(self, other: object) -> bool:
         self._guard(other, "compare")
         return bool(self.value < other.value)  # type: ignore[union-attr]
@@ -160,7 +203,9 @@ class Result:
             "metric": self.metric,
             "value": self.value,
             "provenance": self.provenance.to_dict(),
-            "payload": self.payload,
+            # A copy: handing out the live mapping would let a caller edit a
+            # recorded result through the dict it was serialised into.
+            "payload": copy.deepcopy(dict(self.payload)),
         }
         if self.derivation is not None:
             out["derivation"] = self.derivation
@@ -206,7 +251,7 @@ def mint(
         derivation=derivation,
         space=space,
         distribution=distribution,
-        payload=dict(payload or {}),
+        payload=MappingProxyType(copy.deepcopy(dict(payload or {}))),
         _mint=_MINT,
     )
 

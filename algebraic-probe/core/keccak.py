@@ -106,20 +106,29 @@ class KeccakF:
     n_rounds: int
 
     target_id: str = "keccak-f"
-    n_in: int = 0
-    n_out: int = 0
+
+    @property
+    def n_in(self) -> int:
+        return self.width
+
+    @property
+    def n_out(self) -> int:
+        return self.width
 
     @staticmethod
     def create(lane_log2: int, n_rounds: int | None = None) -> "KeccakF":
         rounds = default_rounds(lane_log2) if n_rounds is None else n_rounds
-        width = LANES << lane_log2
-        return KeccakF(lane_log2=lane_log2, n_rounds=rounds, n_in=width, n_out=width)
+        return KeccakF(lane_log2=lane_log2, n_rounds=rounds)
 
     @property
     def width(self) -> int:
         return LANES << self.lane_log2
 
     def __call__(self, x: int) -> int:
+        if not 0 <= x < (1 << self.width):
+            raise ValueError(
+                f"{self.target_id}: input {x} out of range for a {self.width}-bit state"
+            )
         w = 1 << self.lane_log2
         mask = (1 << w) - 1
         state = [(x >> (i * w)) & mask for i in range(LANES)]

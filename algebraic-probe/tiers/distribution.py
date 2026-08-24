@@ -8,6 +8,7 @@ Section 3, Tier S:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from .errors import SamplingError
@@ -49,6 +50,16 @@ class SeedDistribution:
             )
         if len(set(self.seeds)) != len(self.seeds):
             raise SamplingError("seeds must be distinct: repeated seeds are not independent runs")
+        # A NaN silently corrupts every order statistic below -- sorted() places
+        # it arbitrarily, and min/max propagate it -- so a single failed run
+        # would poison the median and the IQR without raising anywhere.
+        for seed, value in zip(self.seeds, self.values):
+            if not math.isfinite(value):
+                raise SamplingError(
+                    f"seed {seed} produced a non-finite value ({value!r}); a run that "
+                    "did not produce a number is not a sample, and must be recorded as "
+                    "censored or failed rather than folded into the distribution"
+                )
         if len(self.seeds) < MIN_SEEDS:
             raise SamplingError(
                 f"Tier S requires at least {MIN_SEEDS} independent seeds per cell; got {len(self.seeds)}"

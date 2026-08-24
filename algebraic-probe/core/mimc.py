@@ -56,8 +56,14 @@ class MiMC:
     field: GF2n
 
     target_id: str = "mimc-gf2n"
-    n_in: int = 0
-    n_out: int = 0
+
+    @property
+    def n_in(self) -> int:
+        return self.n
+
+    @property
+    def n_out(self) -> int:
+        return self.n
 
     @staticmethod
     def create(n: int, n_rounds: int | None = None, key: int = 0, seed: int = 0) -> "MiMC":
@@ -73,11 +79,11 @@ class MiMC:
             key=key,
             constants=derived_constants(n, max(rounds, 1), seed),
             field=GF2n(n),
-            n_in=n,
-            n_out=n,
         )
 
     def __call__(self, x: int) -> int:
+        if not 0 <= x < (1 << self.n):
+            raise ValueError(f"{self.target_id}: input {x} out of range for {self.n} bits")
         state = x
         for i in range(self.n_rounds):
             state = self.field.pow(state ^ self.key ^ self.constants[i], CUBE)
