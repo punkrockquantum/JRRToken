@@ -1,290 +1,345 @@
-# algebraic-probe — status report
+# algebraic-probe — full report
 
-**Commit** `7b86060` · **Date** 2026-08-24 · **Scope** first deliverable (brief section 11) plus execution-readiness assessment
+**Commit** `f85407c` · **Date** 2026-08-24
 
-Outcomes of every run are recorded separately in `OUTCOMES.md`.
+An instrument for bounding the algebraic attack surface of ARX and
+arithmetisation-oriented hash functions. Output is bounds, distributions and
+scope statements; it claims neither a break nor an impossibility.
 
-This is an operator-facing status report and it contains judgement. It is
-deliberately **not** in `reports/out/` — those files are instrument output and
-carry no prose, enforced by `scripts/ci_checks.py`. See DECISIONS.md D-018.
+This is the single operator-facing report and it contains judgement. It is
+deliberately **not** in `reports/out/` — those are instrument output and carry no
+prose, enforced in CI. Judgement calls are itemised in `DECISIONS.md`.
 
 ---
 
 ## 1. Decision
 
-**NO-GO on all six modules.** The decision is computed, not asserted: thirteen
-gates per module, each a check against the repository, combined by a rule fixed
-before evaluation (`GO iff every blocking gate passes`, no weighting, no partial
-credit — a weighting would itself be a judgement about which of the brief's
-requirements matter more).
+Computed, not asserted. Gates are checks against the repository; the rule is
+fixed before evaluation (`GO iff every blocking gate passes`, no weighting, no
+partial credit — a weighting would itself be a judgement about which of the
+brief's requirements matter more).
 
-| Module | Title | Gates | Blocking | Blocked on |
-|---|---|---|---|---|
-| **M1** | Algebraic degree growth vs round count | **10/13** | 3 | operator, build |
-| M2 | Dependency-graph reachability, free-round budget | 1/13 | 12 | operator, build |
-| M3 | Differential characteristic search | 2/13 | 11 | operator, build |
-| M4 | Higher-order differentials, integral distinguishers | 0/13 | 13 | operator, build, **dependency (M1)** |
-| M5 | Meet-in-the-middle and biclique structure | 2/13 | 11 | operator, build |
-| M6 | Rotational-XOR propagation | 1/13 | 12 | operator, build |
+Decisions are per **(module, target)**. A monolithic verdict blocked measuring
+degree on Keccak-f because SHA-256 was absent, which is the opposite of acting on
+the evidence; `PARTIAL` names a module whose own machinery is sound and whose
+targets differ.
 
-Rerun with `python scripts/readiness_report.py`; full output in
-`reports/out/readiness.txt`.
+| Module | Title | Module gates | Targets GO | Decision |
+|---|---|---:|---:|---|
+| **M1** | Algebraic degree growth vs round count | **11/11** | **4/7** | **PARTIAL** |
+| M2 | Dependency-graph reachability, free-round budget | 1/11 | — | NO-GO |
+| M3 | Differential characteristic search | 2/11 | — | NO-GO |
+| M4 | Higher-order differentials, integral distinguishers | 0/11 | — | NO-GO (+ depends on M1) |
+| M5 | Meet-in-the-middle and biclique structure | 2/11 | — | NO-GO |
+| M6 | Rotational-XOR propagation | 1/11 | — | NO-GO |
 
-### Root causes, by number of modules blocked
+### M1 per-target
 
-| Gate | Modules blocked | Class |
+| Target | Decision | Blocking gate |
 |---|---|---|
-| G01 primary-target-present | **6/6** | operator |
-| G07 ground-truth-verified | **6/6** | operator |
-| G11 measurement-registered | **6/6** | build |
-| G02–G05, G08–G10, G12 | 5/6 each | build |
-| G06 published-anchor-named | 3/6 | operator |
-| G13 dependencies-are-go | 1/6 | dependency |
+| linear-map-gf2 | **GO** | — |
+| power-map-gf2n | **GO** | — |
+| inverse-map-gf2n | **GO** | — |
+| random-function-sha256-prf | **GO** | — |
+| keccak-f[25] | NO-GO | T02 ground truth rests on unverified `CITE-BCD11` |
+| mimc-gf2n[9] | NO-GO | T02 ground truth rests on unverified `CITE-EGLORSW20` |
+| sha256-compression-parametrised | NO-GO | T01 target absent |
 
-Three gates block every module. That is a fact about the dependency structure,
-not a priority call — but it means vendoring the SHA-256 target clears one gate
-on all six simultaneously, and is the highest-leverage single action available.
+Every M1 module-level gate now passes: pre-registration committed and matching
+its derivation, runner-precedes-prereg ancestry intact, calibration suite
+defined, published anchor named, controls recomputing, blindness test passing,
+independent verify path present, **measurement path registered**, promotion gate
+instantiated, dependencies clear.
+
+Rerun: `python scripts/readiness_report.py` (exit 1 while anything is NO-GO).
 
 ---
 
-## 2. What exists
+## 2. Execution
 
-| Package | Lines | State |
+`scripts/execute.py` runs exactly what the gates authorise, through the
+provenance runner, and records refusals in the same append-only hash-chained log
+as the results — so the log says what was withheld as well as what was measured.
+
+```
+authorised_runs=4
+refused  sha256-compression-parametrised   T01:target-available
+refused  keccak-f[25]                      T02:target-ground-truth-verified
+refused  mimc-gf2n[9]                      T02:target-ground-truth-verified
+```
+
+| Target | Instance | `d_ub` (P) | `d_exact` (E) | gap | `d_lb` witnessed | space |
+|---|---|---:|---:|---:|---|---|
+| linear-map-gf2 | n=12 | 1 | 1 | 0 | yes | 2^12 |
+| power-map-gf2n | n=11, d=3 | 2 | 2 | 0 | yes | 2^11 |
+| power-map-gf2n | n=11, d=31 | 5 | 5 | 0 | yes | 2^11 |
+| inverse-map-gf2n | n=11 | 10 | 10 | 0 | yes | 2^11 |
+| random-function | n=12 | no bound path | 12 | — | yes | 2^12 |
+
+The bound is exact on every control. The random-oracle stand-in has no round
+structure to propagate through and the measure refuses rather than inventing
+one; that refusal is recorded, not skipped.
+
+Run log: `runs/PREREG-M1/…jsonl`, 20 records, content-addressed, carrying the
+commit and the pre-registration digest.
+
+---
+
+## 3. The measurement path
+
+Three quantities, three code paths, three tiers.
+
+**`degree_upper_bound` — Tier P.** A per-bit degree bound propagated through the
+target's *own code* by a symbolic word type, so Keccak-f is measured by running
+`core.keccak.permute` rather than by re-implementing it. Two details make the
+bound tight rather than vacuous:
+
+- structural zeros are tracked separately from degrees, so the rotation idiom
+  (OR of two disjoint shifted copies) is not charged as a product;
+- squaring is charged as GF(2)-linear (Frobenius), so square-and-multiply over
+  an exponent returns **exactly wt(d)** on power maps.
+
+**`exact_degree` — Tier E.** ANF coefficients from their definition: the
+coefficient on variable set S is the XOR of f over every subset of S, scanning
+monomial weights downward. A different algorithm from the in-place Möbius
+butterfly in `verify/`, which is what makes one a check on the other rather than
+a restatement.
+
+**`witness_lower_bound` — Tier P when it witnesses.** A non-zero k-th order
+derivative *proves* degree ≥ k. The seed that found it is provenance, not
+evidence. Failure to witness is Tier S and, per PREREG-M1 §9.1, has no promotion
+path above probe dimension 2.
+
+### Soundness
+
+The load-bearing property: a certified bound that ever falls below the true
+degree is wrong in the dangerous direction, and everything downstream inherits
+the error. Checked against the independent exhaustive path on every supported
+target, and pinned by six mutants (XOR taking min, AND not summing, cap off by
+one, Frobenius resetting, wrong coefficient branch, vanishing derivative
+reported as a witness).
+
+### Measured behaviour
+
+| Target | Bound by round |
+|---|---|
+| Keccak-f[25] | 2, 4, 8, 16, **24, 24** — doubling until the permutation cap at width−1 |
+| MiMC GF(2^9) `d_ub` | 2, 4, 8 |
+| MiMC GF(2^9) `d_exact` | 2, **2**, **4** |
+
+The MiMC divergence is the arithmetisation-oriented degree-growth phenomenon —
+naive doubling overstating the real degree — as a number this instrument
+produces rather than a claim it repeats. It is also exactly why the ground-truth
+citations matter: the literature's bound is tighter than mine, and until those
+values are transcribed I cannot show mine is competitive.
+
+---
+
+## 4. What exists
+
+| Package | Lines | Role |
 |---|---:|---|
 | `tiers/` | 1028 | tier labels, provenance, spaces, distributions, findings — enforced |
-| `harness/` | 1302 | registry, regime router, calibration gates, promotion gate, sweeps, runner, readiness |
+| `harness/` | 1419 | registry, regime router, calibration and promotion gates, sweeps, runner, readiness |
 | `provenance/` | 771 | commit embedding, prereg hashing, hash chain, append-only store, audit |
+| `modules/` | 1213 | Module 1: pre-registration, calibration, blindness, **measurement** |
+| `core/` | 795 | control targets, Keccak-f, MiMC; SHA-256 absent by design |
 | `stats/` | 716 | BH, power analysis, Tobit censored regression, p-value formatting |
-| `core/` | 795 | control targets, Keccak-f, MiMC; SHA-256 **absent by design** |
-| `modules/` | 702 | Module 1: pre-registration, calibration suite, blindness class |
-| `verify/` | 160 | exhaustive Moebius-transform ANF, independent path |
+| `verify/` | 160 | exhaustive Möbius ANF, independent path |
 | `reports/` | 151 | prose lint |
-| `scripts/` | 1338 | CI checks, mutation harness, readiness, renderers, memory-cost benchmark |
-| `tests/` | 3517 | 377 tests |
+| `scripts/` | 1683 | CI checks, mutation harness, readiness, execution, renderers, benchmark |
+| `tests/` | 3703 | 425 tests |
 
-89 files tracked, ~10.3k lines of Python. No third-party dependencies
-(DECISIONS.md D-004).
+101 files, ~11.6k lines of Python, **no third-party dependencies**.
 
-### Verification evidence, this commit
+### Verification at this commit
 
 ```
 checks=5 failed=0          scripts/ci_checks.py
-377 passed in 68.33s       pytest -q
-mutants=61 survivors=0     scripts/mutation_test.py  (8 layers, ≥5 each)
+425 passed in 66.55s       pytest -q
+mutants=67 survivors=0     scripts/mutation_test.py  (9 layers, ≥5 each)
 ```
 
-Mutants per layer: core 8, harness 11, modules 7, provenance 9, reports 6,
-stats 6, tiers 9, verify 5.
+Mutants per layer: core 8, harness 11, measure 6, modules 7, provenance 9,
+reports 6, stats 6, tiers 9, verify 5.
 
-The structural checks are:
+Structural checks: `verify/` does not import `modules/`; `modules/` does not
+import `verify/` (so a module cannot verify itself); `reports/out/` holds no
+prose conclusions; PREREG-M1's derived numbers are byte-equal to their
+derivation; the provenance runner was committed **before** the pre-registration
+it stamps (git ancestry, not timestamps).
 
-- `verify/` does not import `modules/` — the separation that stops a
-  verification restating what it verifies
-- `modules/` does not import `verify/` — the same in reverse, so a module
-  cannot verify itself (my addition, D-006)
-- `reports/out/` contains no prose conclusions
-- PREREG-M1's derived numbers are byte-equal to their derivation script
-- the provenance runner was committed **before** the pre-registration it
-  stamps — `runner=84ca87e` is a strict git ancestor of `prereg=d84c096`
+### Independent reproduction
 
-Regenerating the instrument reports changes only the embedded commit stamp,
-which is the intended evidence of determinism.
+The documented sequence was run against a fresh clone of the published branch,
+not the working tree. Output compared byte-for-byte: derived block identical,
+calibration manifest identical, instrument reports identical apart from commit
+identifiers, which the subtree split legitimately rewrote.
 
 ### Primitives validated
 
-- **Keccak-f**, parametrised by lane width and round count. Rho offsets derived
-  from the `(x,y) ← (y, 2x+3y)` recurrence, iota constants from the 8-bit LFSR —
-  no tabulated constants. Bit-exact against `hashlib.sha3_256` and
-  `hashlib.shake_128` over eleven committed input lengths.
-- **MiMC** over GF(2^n) with the cube map; permutation property verified
-  exhaustively at n=9.
-- **GF(2^n)** with field moduli *searched for* by Rabin's irreducibility test
-  rather than copied from a table, and the "lowest" verified by checking every
-  smaller candidate.
+- **Keccak-f** — ρ offsets from the `(x,y) ← (y, 2x+3y)` recurrence, ι constants
+  from the 8-bit LFSR, no tabulated constants. Bit-exact against
+  `hashlib.sha3_256` and `shake_128` over 11 committed input lengths.
+- **MiMC** over GF(2^n) — permutation property verified exhaustively at n=9.
+- **GF(2^n)** — moduli *searched* by Rabin's test, "lowest" verified against
+  every smaller candidate.
+- **Power map** — degree = wt(d) verified for **all 510 exponents** at n=9.
 
 ---
 
-## 3. Module 1 — the only module near GO
-
-Passes 10 of 13 gates. Blocks on exactly three, two of which are yours.
-
-### Pre-registration (`modules/degree/prereg/PREREG-M1.md`)
+## 5. Module 1 pre-registration
 
 - primary metric `k_HO = d_ub + 1`, the order of a provably vanishing
   higher-order differential; lower is better
-- family size **64**, one Tier S cell per round, asserted at analysis time —
-  `stats.bh.benjamini_hochberg` raises if the tests presented differ
-- effect floor **1.0 bits of algebraic degree**, derived from the representable
-  quantum (degree is integer-valued) rather than chosen
-- promotion gate instantiated with numbers: threshold 2^63.1, generic zero-sum
-  baseline 2^(k+256), brute force always a baseline, memory-access cost measured
-  on the run host by `scripts/measure_memory_cost.py` rather than assumed
-- twelve holdout rounds (53–64) reserved before any run, so a criterion changed
-  after seeing data becomes an out-of-sample test
+- family size **64**, asserted at analysis time — `benjamini_hochberg` raises if
+  the tests presented differ
+- effect floor **1.0 degree bits**, from the representable quantum
+- promotion gate with numbers: ceiling 2^63.1, generic zero-sum baseline
+  2^(k+256), brute force always a baseline, memory-access cost *measured* on the
+  run host
+- twelve holdout rounds (53–64) reserved before any run
 
-Every number in it is emitted by `derive_thresholds.py`, and a CI check asserts
-the document is byte-equal to that script's output. It cannot drift.
+Every number is emitted by `derive_thresholds.py`; a CI check asserts the
+document is byte-equal to that output, so it cannot drift.
 
 ### The power-analysis finding
 
-This is the most decision-relevant thing in the pre-registration, and it was
-computed before any data exists:
-
 | Quantity | Value |
 |---|---|
-| Smallest witness probability detectable at 80% power, 50 seeds | 0.0317 |
-| Guaranteed-under-H0 probability at probe dimension k | 2^-k |
+| Detectable at 80% power, 50 seeds | 0.0317 |
+| Guaranteed under H0 at probe dimension k | 2^−k |
 | Highest k with ≥80% power | **4** |
-| Highest k reaching the BH family's smallest critical value | **2** |
-| Seeds needed to reopen k=16 | 468,882 |
-| Seeds needed to reopen k=32 | 3.07 × 10^10 |
+| Highest k reaching BH's smallest critical value | **2** |
+| Seeds to reopen k=16 / k=32 | 468,882 / 3.07×10^10 |
 
-The sampled witness probe therefore has no promotion path above probe dimension
-2 at the brief's preferred 50 seeds. PREREG-M1 §9.1 closes it in advance and
-routes Module 1 through Tier P and Tier E. Reasoning in DECISIONS.md D-010 —
-this is the judgement call I would most want overruled if you disagree.
+The sampled probe has no promotion path above dimension 2 at 50 seeds. §9.1
+closes it in advance and routes M1 through Tier P and Tier E. `DECISIONS.md`
+D-010 — the judgement I would most want overruled.
 
-### Calibration suite — 11 cases
+### Calibration — 11 cases
 
-| Kind | Case | Asserts | State |
-|---|---|---|---|
-| positive control | `Ax` over GF(2), n=12 | degree == 1 | ✅ recomputes |
-| intermediate | `x^31` over GF(2^11) | degree == wt(d) == 5 | ✅ recomputes |
-| intermediate | `x^3` over GF(2^11) | degree == 2 | ✅ recomputes |
-| negative | random-oracle stand-in, n=12 | degree ≥ 11 | ✅ recomputes |
-| blindness | `x^(-1)` over GF(2^11) | degree == n-1 | ✅ recomputes |
-| ground truth ×3 | Keccak-f[25], r=1,2,3 | per-round bound from CITE-BCD11 | ⛔ pending source |
-| ground truth ×3 | MiMC/GF(2^9), r=1,2,3 | degree growth from CITE-EGLORSW20 | ⛔ pending source |
-
-The controls span the range rather than the endpoints — 1, then 5, then n-1 —
-and the power map is checked for **all 510 exponents** at n=9, not a sample.
+Five controls now execute **through the module's own measurement path** and
+pass: degree 1 → 5 → 2 → ≥11 → 10, spanning the range rather than the endpoints.
+Six published-ground-truth cases carry `PENDING_PRIMARY_SOURCE` and still block.
+Running the controls does not lift that gate, and a test asserts it does not.
 
 ### The blindness demonstration
 
-The null Module 1 can emit is "degree saturated, no higher-order differential of
-feasible order". The multiplicative inverse over GF(2^n) has degree n-1 — the
-maximum for a permutation — and is inverted by **one field inversion**, being
-described exactly by the quadratic relation `x·y = 1`.
-
-The demonstration runs against the *exact* reference measure in `verify/`, not
-against an approximation. So the blindness is a property of the quantity itself:
-no future bounding argument in Module 1 can remove it. That is the strongest
-form section 6(c) can take.
+`x → x^(2^n−2)` has degree n−1 — maximal for a permutation — and is inverted by
+one field inversion, being described exactly by `x·y = 1`. The demonstration runs
+against the **exact** reference measure, so the blindness is a property of the
+quantity: no future bounding argument can remove it.
 
 ---
 
-## 4. Nine integrity defects found and closed
+## 6. Defects found and closed — 10
 
-Found by adversarial probing **after** the suite was green and every mutant
-died. They shared one cause: an integrity rule stated in a docstring and
-enforced only along the paths the tests happened to walk.
+Nine surfaced by adversarial probing **after** the suite was green and every
+mutant died; the tenth only by running the documented commands from a fresh
+clone. Common cause: an integrity rule stated in a docstring and enforced only
+along the paths the tests happened to walk.
 
-| # | Defect | Why it mattered |
+| # | Defect | Consequence if unfixed |
 |---|---|---|
-| 1 | Cross-tier `==` returned `False` while `<`/`>` raised | answered a question section 3 forbids |
-| 2 | A "frozen" result's payload was editable in place | `frozen=True` protects the binding, not the dict |
-| 3 | **The hash chain could not see truncation** | records deleted from the *end* left a shorter chain that verified perfectly |
-| 4 | A NaN seed value corrupted every order statistic | one failed run silently poisoned median and IQR |
-| 5 | `PowerMap.create(n, 0)` stated expected degree n | a *calibration control* with a wrong expected value |
-| 6 | Target arity was a field defaulting to 0 | a measurement over zero variables returns a confident answer about nothing |
-| 7 | Targets silently truncated out-of-range inputs | an exhaustive walk with wrong n gives a complete, self-consistent, wrong degree, with nothing raising |
-| 8 | The prose lint missed wrapped phrases | "as expected" split across a line break — exactly how a report wraps — passed |
-| 9 | A part-finished sweep cell was returned as complete | 40 of 50 seeds cleared the 30-seed floor and looked planned |
+| 1 | Cross-tier `==` returned `False` while `<`/`>` raised | answered a question §3 forbids |
+| 2 | A "frozen" result's payload was editable in place | recorded results mutable after the fact |
+| 3 | **Hash chain could not detect truncation** | records deleted from the end left a chain that verified perfectly |
+| 4 | NaN seed value corrupted every order statistic | one failed run poisoned median and IQR silently |
+| 5 | `PowerMap.create(n, 0)` stated expected degree n | a calibration control with a wrong expected value |
+| 6 | Target arity was a field defaulting to 0 | a measurement over zero variables returning a confident answer |
+| 7 | Targets silently truncated out-of-range inputs | a complete, self-consistent, wrong degree, nothing raising |
+| 8 | Prose lint missed phrases wrapped across a line break | banned conclusions passing into reports |
+| 9 | Part-finished sweep cell returned as complete | 40-of-50 seeds clearing the 30-seed floor, looking planned |
+| 10 | Documented `-m` command double-imported and warned | suite built twice; would fail under `filterwarnings=["error"]` |
 
-Defect 3 is the serious one. It is closed twice over: `run_end` declares the
-run's total length and must be the last record, and `seal()` registers length
-and head hash in the run index for `verify_against_index()`. The declared-count
-check earns its keep against a *re-chained* forgery — every hash recomputed
-after a deletion, but the closing record still declaring the original length.
+Defect 3 is the serious one, closed twice over: `run_end` declares the run's
+total length and must be last, and `seal()` registers length and head hash in the
+run index. The declared-count check earns its keep against a *re-chained* forgery
+— every hash recomputed after a deletion, but the closing record still declaring
+the original length.
 
-Each has a regression test and a mutant pinning it. Full write-up: DECISIONS.md
-D-028.
+Each has a regression test and a mutant. Detail: `DECISIONS.md` D-028.
+
+Three findings from the mutation runs about themselves: two proposed mutants were
+semantically **equivalent** (not undetected defects) and were replaced; a
+same-length mutant poisoned later runs through CPython's mtime-granularity `.pyc`
+cache, so the harness now purges `__pycache__` on both sides of each mutation.
 
 ---
 
-## 5. Blockers, by owner
+## 7. Outstanding
 
-### Yours (operator)
+**Operator**
 
-1. **Vendor the parametrised SHA-256 target.** `sha256-testbed` is unreachable
-   from this session. `core/sha256.py` raises `NotAuthorised` listing four
-   preconditions: vendor without modification, re-run FIPS 180-4 vectors here,
-   assert bit-identity with `hashlib` at 64 rounds, record the upstream commit.
-   Clears gate G01 on **all six** modules.
-2. **Transcribe two ground-truth values.** `eprint.iacr.org` and `hal.science`
-   are blocked by this environment's egress proxy — logged with the exact failed
-   fetches. Needed: per-round Keccak-f degree bounds from Boura–Canteaut–De
-   Cannière (ePrint 2010/589) and the MiMC degree-growth statement from
-   Eichlseder et al. (ePrint 2020/182), with table or theorem numbers. I did not
-   write plausible numbers from memory. Clears G07 for M1.
-3. **Choose published anchors for M2, M4, M6.** Section 5 requires a published
-   calibration anchor for every module and names one for only M1, M3 and M5. The
-   requirement is blanket, so those three cannot reach GO until you pick one.
-4. **Confirm or overrule the Tier S closure** (D-010) and the promotion
+1. **Vendor the parametrised SHA-256 target.** Unblocks T01 on every module — the
+   highest-leverage single action. `core/sha256.py` lists its four preconditions.
+2. **Transcribe two ground-truth values** — per-round Keccak-f degree bounds
+   (ePrint 2010/589) and MiMC degree growth (ePrint 2020/182), with table or
+   theorem numbers. Both hosts are blocked by this environment's egress proxy;
+   the failed fetches are logged. No plausible numbers were written from memory.
+   Unblocks M1 on Keccak-f and MiMC.
+3. **Choose published anchors for M2, M4, M6.** §5 makes an anchor a blanket
+   precondition and names one for M1, M3, M5 only.
+4. **Confirm or overrule** the Tier S closure (D-010) and the promotion
    threshold's dependency on an unverified citation (D-013).
 
-### Mine (build)
+**Build**
 
-5. Module 1's measurement path (division property / monomial prediction) —
-   deliberately unwritten; the brief's stop point.
-6. Modules 2–6 in full.
+5. Modules 2–6.
+6. A `d_Fp` metric for the prime-field targets — see below.
 
 ---
 
-## 6. One requirement conflict I believe is technically wrong
+## 8. Requirement conflict
 
-Section 4 defines Module 1's quantity as algebraic degree **over GF(2)**.
-Section 9 then names Poseidon over KoalaBear and MiMC over BN254/BLS12-381 —
-prime fields — as secondary targets.
-
-Boolean algebraic degree is not defined for a function on F_p with p not a power
-of two. There is no ANF over GF(2) for a map F_p → F_p, and bit-embedding yields
-a quantity that is not the one the AO literature disputes — which is the
-univariate degree over F_p, the degree of the Gröbner-basis system, or the
-degree after the exponent map.
-
-MiMC over GF(2^n) is unaffected and is what `core/mimc.py` implements. But
-Module 1 as specified cannot be pointed at the prime-field targets without a
-second, separately pre-registered metric. Proposed, not built: a companion
-`d_Fp(r)` sharing the harness and nothing else.
+§4 defines Module 1's quantity as algebraic degree **over GF(2)**; §9 names
+Poseidon over KoalaBear and MiMC over BN254/BLS12-381 — prime fields, where
+Boolean algebraic degree is not defined. There is no ANF over GF(2) for a map
+F_p → F_p, and bit-embedding gives a quantity that is not the one the AO
+literature disputes. MiMC over GF(2^n) is unaffected and is what is implemented.
 
 Related gap: `tiers/` refuses cross-*tier* comparison but not cross-*metric*
-comparison. `d_ub` and `d_Fp` would both be Tier P and would compare without
-complaint. If you want that closed it is a `metric_family` field with the same
-refusal semantics.
+comparison — `d_ub` and a future `d_Fp` would both be Tier P and would compare
+without complaint. Closing it is a `metric_family` field with the same refusal
+semantics.
 
 ---
 
-## 7. Reproduction
+## 9. Reproduction
 
 ```bash
 git clone -b algo-games https://github.com/punkrockquantum/JRRToken.git
 cd JRRToken
-pytest -q                                    # 377 passed
+pytest -q                                    # 425 passed
 python scripts/ci_checks.py                  # checks=5 failed=0
-python scripts/mutation_test.py              # mutants=61 survivors=0
-python scripts/readiness_report.py           # go/no-go per module (exit 1: NO-GO)
-python -m modules.degree.calibration   # what Module 1 will assert
+python scripts/mutation_test.py              # mutants=67 survivors=0
+python scripts/readiness_report.py           # per-target go/no-go
+python scripts/execute.py                    # run what the gates authorise
+python -m modules.degree.calibration         # what Module 1 asserts
 python modules/degree/prereg/derive_thresholds.py
 python scripts/render_reports.py
 ```
 
-Full history requires an unshallow clone: the runner-precedes-prereg check is a
-claim about git ancestry and `fetch-depth: 0` is load-bearing in CI.
+Full history is required: the runner-precedes-prereg check is a claim about git
+ancestry, so `fetch-depth: 0` is load-bearing in CI.
 
-**Branches** — `algo-games` (project at repository root) and
-`claude/algebraic-probe-skeleton-2uaojo` (under `algebraic-probe/`, alongside the
-unrelated simulator). Identical content.
+Branches — `algo-games` (project at repository root) and
+`claude/algebraic-probe-skeleton-2uaojo` (under `algebraic-probe/`). Identical
+content.
 
 ---
 
-## 8. Position
+## 10. Position
 
-The instrument is built, tested and calibrated as far as the available inputs
-allow, and it says NO-GO on everything. That is the instrument working: two of
-Module 1's three blockers are missing inputs rather than missing code, and it
-refuses to run rather than substituting something plausible for them.
+The instrument is built, calibrated on its controls through its own measurement
+path, independently reproducible, and it has executed everything its gates
+authorise while refusing the rest with reasons recorded in the log.
 
-No module has been executed. Nothing has been run against a real target. The
-brief's stop point stands until you have reviewed PREREG-M1 and the calibration
-suite.
+M1 is PARTIAL: sound machinery, four of seven targets clear. The three that are
+not are blocked on inputs only you can supply — one absent target and two
+untranscribed literature values. M2–M6 have no package and remain NO-GO.
+
+Nothing has been run against SHA-256. The ten defects — nine of them found after
+the suite was green and every mutant had died — are the strongest evidence
+available that the enforcement here is real rather than documentary.
