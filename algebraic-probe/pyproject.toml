@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "algebraic-probe"
+version = "0.0.1"
+description = "Instrument for bounding the algebraic attack surface of ARX and arithmetisation-oriented hash functions."
+requires-python = ">=3.11"
+# Dependencies: none. See DECISIONS.md D-004 (pure standard library).
+dependencies = []
+
+[tool.setuptools]
+packages = [
+    "core",
+    "tiers",
+    "verify",
+    "harness",
+    "stats",
+    "provenance",
+    "reports",
+    "modules",
+    "modules.degree",
+    "modules.degree.calibration",
+    "modules.degree.blindness",
+    "modules.degree.prereg",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "slow: long-running (mutation testing); not run by default in CI fast lane",
+]
+filterwarnings = ["error"]

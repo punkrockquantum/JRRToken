@@ -1,0 +1,30 @@
+name: algebraic-probe
+
+on:
+  push:
+    paths: ["algebraic-probe/**", ".github/workflows/algebraic-probe.yml"]
+  pull_request:
+    paths: ["algebraic-probe/**", ".github/workflows/algebraic-probe.yml"]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: algebraic-probe
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: the runner-precedes-prereg assertion is a claim about
+          # git ancestry, and a shallow clone cannot evaluate it.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pytest
+      - name: structural checks
+        run: python scripts/ci_checks.py
+      - name: test suite
+        run: pytest -q
+      - name: mutation testing
+        run: python scripts/mutation_test.py
