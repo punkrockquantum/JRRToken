@@ -109,7 +109,9 @@ def test_a_dirty_working_tree_is_a_recorded_deviation(tmp_path: Path) -> None:
     # Rebuild a log with the altered header so the chain stays internally valid.
     forged = tmp_path / "forged.jsonl"
     rebuilt = ResultsLog.create(forged, header)
-    rebuilt.append({"kind": "run_end", "n_records": 1})
+    # n_records counts the whole closed log: the header plus this run_end.
+    rebuilt.append({"kind": "run_end", "n_records": 2})
+    rebuilt.seal()
     report = audit_run(forged)
     assert any(d.field_name == "working_tree_clean" for d in report.deviations)
 

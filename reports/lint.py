@@ -11,6 +11,7 @@ banned is not a report.
 
 from __future__ import annotations
 
+import bisect
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -75,19 +76,53 @@ class LintHit:
 
 
 def _pattern(term: str) -> re.Pattern[str]:
-    return re.compile(r"(?<![A-Za-z])" + re.escape(term) + r"(?![A-Za-z])", re.IGNORECASE)
+    """Match a term with any run of whitespace between its words.
+
+    A multi-word term written as a literal space misses "as  expected" and, more
+    to the point, misses "as expected" wrapped across a line -- which is exactly
+    how it would appear in a generated report. Words are joined by \\s+ so the
+    lint reads the phrase rather than the spacing.
+    """
+    body = r"\s+".join(re.escape(word) for word in term.split())
+    return re.compile(r"(?<![A-Za-z])" + body + r"(?![A-Za-z])", re.IGNORECASE)
 
 
 _PATTERNS = {term: _pattern(term) for term in FORBIDDEN_TERMS}
 
 
 def lint_text(text: str, path: str = "<text>") -> list[LintHit]:
+    """Scan line by line, and again across line breaks.
+
+    A term split over two lines by wrapping belongs to neither line, so the
+    whole text is scanned a second time and any hit not already reported is
+    attributed to the line the match starts on.
+    """
+    lines = text.splitlines()
     hits: list[LintHit] = []
-    for line_no, line in enumerate(text.splitlines(), start=1):
+    seen: set[tuple[int, str]] = set()
+    for line_no, line in enumerate(lines, start=1):
         for term, pattern in _PATTERNS.items():
             if pattern.search(line):
                 hits.append(LintHit(path=path, line_no=line_no, term=term, line=line))
-    return hits
+                seen.add((line_no, term))
+
+    line_starts: list[int] = []
+    offset = 0
+    for line in lines:
+        line_starts.append(offset)
+        offset += len(line) + 1
+    for term, pattern in _PATTERNS.items():
+        if " " not in term:
+            continue  # single words cannot straddle a line break
+        for match in pattern.finditer(text):
+            line_no = bisect.bisect_right(line_starts, match.start())
+            if (line_no, term) in seen:
+                continue
+            seen.add((line_no, term))
+            hits.append(
+                LintHit(path=path, line_no=line_no, term=term, line=lines[line_no - 1])
+            )
+    return sorted(hits, key=lambda h: (h.line_no, h.term))
 
 
 def lint_paths(paths: list[Path]) -> list[LintHit]:

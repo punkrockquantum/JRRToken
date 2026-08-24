@@ -29,6 +29,17 @@ class VectorialFunction(Protocol):
     def __call__(self, x: int) -> int: ...
 
 
+def _check_input(x: int, n_in: int, target_id: str) -> None:
+    """Refuse an out-of-range input rather than truncating it.
+
+    An exhaustive measurement walks range(2**n). If the target quietly masks its
+    input, a wrong n produces a complete, self-consistent, wrong answer -- the
+    worst failure mode this instrument has, because nothing raises.
+    """
+    if not 0 <= x < (1 << n_in):
+        raise ValueError(f"{target_id}: input {x} out of range for {n_in} bits")
+
+
 # ---------------------------------------------------------------------------
 # POSITIVE CONTROL: g(x) = Ax over GF(2), A random invertible.
 #
@@ -45,8 +56,17 @@ class LinearMapGF2:
     rows: tuple[int, ...]
 
     target_id: str = "linear-map-gf2"
-    n_in: int = 0
-    n_out: int = 0
+
+    # Arity is derived, never stored. A stored field with a default lets a
+    # hand-constructed target declare n_in = 0, and a measurement over zero
+    # variables returns a confidently wrong answer instead of failing.
+    @property
+    def n_in(self) -> int:
+        return self.n
+
+    @property
+    def n_out(self) -> int:
+        return self.n
 
     @staticmethod
     def random_invertible(n: int, seed: int) -> "LinearMapGF2":
@@ -54,10 +74,11 @@ class LinearMapGF2:
         for _ in range(10_000):
             rows = tuple(rng.getrandbits(n) for _ in range(n))
             if _rank_gf2(rows, n) == n:
-                return LinearMapGF2(n=n, seed=seed, rows=rows, n_in=n, n_out=n)
+                return LinearMapGF2(n=n, seed=seed, rows=rows)
         raise RuntimeError("failed to draw an invertible matrix")  # pragma: no cover
 
     def __call__(self, x: int) -> int:
+        _check_input(x, self.n, self.target_id)
         out = 0
         for i, row in enumerate(self.rows):
             out |= (_parity(row & x)) << i
@@ -121,14 +142,31 @@ class PowerMap:
     field: GF2n
 
     target_id: str = "power-map-gf2n"
-    n_in: int = 0
-    n_out: int = 0
+
+    @property
+    def n_in(self) -> int:
+        return self.n
+
+    @property
+    def n_out(self) -> int:
+        return self.n
 
     @staticmethod
     def create(n: int, exponent: int) -> "PowerMap":
-        return PowerMap(n=n, exponent=exponent, field=GF2n(n), n_in=n, n_out=n)
+        if exponent <= 0:
+            # x^0 is the constant 1, of degree 0, and the wt(d) rule below does
+            # not describe it: 0 mod (2^n - 1) is 0, which the reduction used
+            # for exponents that are multiples of 2^n - 1 would map to n. A
+            # control whose stated expected value is wrong is worse than no
+            # control, so this is refused rather than special-cased.
+            raise ValueError(
+                f"power-map exponent must be positive; x^{exponent} is not a "
+                "power map with degree wt(d)"
+            )
+        return PowerMap(n=n, exponent=exponent, field=GF2n(n))
 
     def __call__(self, x: int) -> int:
+        _check_input(x, self.n, self.target_id)
         return self.field.pow(x, self.exponent)
 
     @property
@@ -163,14 +201,21 @@ class InverseMap:
     field: GF2n
 
     target_id: str = "inverse-map-gf2n"
-    n_in: int = 0
-    n_out: int = 0
+
+    @property
+    def n_in(self) -> int:
+        return self.n
+
+    @property
+    def n_out(self) -> int:
+        return self.n
 
     @staticmethod
     def create(n: int) -> "InverseMap":
-        return InverseMap(n=n, field=GF2n(n), n_in=n, n_out=n)
+        return InverseMap(n=n, field=GF2n(n))
 
     def __call__(self, x: int) -> int:
+        _check_input(x, self.n, self.target_id)
         return self.field.inv(x)
 
     @property
@@ -206,16 +251,21 @@ class RandomFunction:
     seed: int
 
     target_id: str = "random-function-sha256-prf"
-    n_in: int = 0
-    n_out: int = 0
+
+    @property
+    def n_in(self) -> int:
+        return self.n
+
+    @property
+    def n_out(self) -> int:
+        return self.m
 
     @staticmethod
     def create(n: int, m: int, seed: int) -> "RandomFunction":
-        return RandomFunction(n=n, m=m, seed=seed, n_in=n, n_out=m)
+        return RandomFunction(n=n, m=m, seed=seed)
 
     def __call__(self, x: int) -> int:
-        if not 0 <= x < (1 << self.n):
-            raise ValueError(f"input {x} out of range for {self.n} bits")
+        _check_input(x, self.n, self.target_id)
         preimage = self.seed.to_bytes(8, "big") + x.to_bytes((self.n + 7) // 8 or 1, "big")
         stream = b""
         counter = 0

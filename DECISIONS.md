@@ -481,6 +481,68 @@ Section 8: "Run logs are committed, not gitignored." `.gitignore` covers
 
 ---
 
+---
+
+## D-028 — Nine integrity defects found by adversarial probing, and closed
+
+The test suite passed and every mutant died while nine real holes were open.
+They shared one cause: an integrity rule stated in a docstring and enforced only
+along the paths the tests happened to walk. Recorded because the *pattern*
+matters more than the individual fixes.
+
+1. **Cross-tier equality answered a forbidden question.** `<` and `>` raised
+   across tiers; `==` returned `False`. Comparing a Tier P result to a Tier E
+   one is refused now, including through `in`, which uses `__eq__`. Non-Result
+   operands still compare normally so collections behave.
+2. **A "frozen" result's payload was editable in place.** `frozen=True` protects
+   the field binding, not the dict behind it. Payloads are `MappingProxyType`
+   over a deep copy, and `to_dict()` hands out a copy rather than the live
+   mapping.
+3. **The hash chain could not see truncation.** Each record commits to its
+   predecessor, so removing records from the *end* leaves a shorter chain that
+   verifies perfectly — a result and the `run_end` marker could both be deleted
+   silently. Closed two ways: `run_end` declares the run's total length and must
+   be the last record, and `seal()` registers length and head hash in the run
+   index, which `verify_against_index()` cross-checks. The auditor now calls it.
+   The declared-count check earns its place on a re-chained forgery, where every
+   hash was recomputed after a deletion but the closing record still says four.
+4. **A NaN seed value corrupted every order statistic.** `sorted()` places NaN
+   arbitrarily and `min`/`max` propagate it, so one failed run silently poisoned
+   the median and the IQR. Non-finite values are refused, naming the seed: a run
+   that produced no number is censored or failed, not a sample.
+5. **A control stated a wrong expected value.** `PowerMap.create(n, 0)` reported
+   expected degree `n` — the reduction that handles exponents which are
+   multiples of `2^n - 1` maps `0` to `2^n - 1` — while `x^0` is the constant 1,
+   of degree 0. A control with a wrong expected value is worse than no control,
+   so the zero exponent is refused.
+6. **Target arity was a stored field defaulting to zero.** Only the `create`
+   factories set it, so a hand-constructed target declared `n_in = 0` and a
+   measurement over zero variables would have returned a confident answer about
+   nothing. Arity is a derived property on every target now.
+7. **Targets silently truncated out-of-range inputs.** Keccak-f masked a 26-bit
+   input onto 25 bits. An exhaustive walk of `range(2**n)` with a wrong `n`
+   would have produced a complete, self-consistent, wrong degree with nothing
+   raising anywhere — the worst failure mode this instrument has. Every target
+   validates its input; `RandomFunction` already did, and the inconsistency was
+   the tell.
+8. **The prose lint missed wrapped phrases.** Multi-word terms matched a single
+   literal space, so `as expected` split across a line break — exactly how it
+   would appear in a generated report — passed. Terms now join on `\s+` and the
+   text is scanned across line boundaries as well as line by line.
+9. **A part-finished sweep cell was returned as complete.** `results()` returned
+   whatever had finished; a cell with 40 of 50 seeds cleared the 30-seed floor
+   and became a Tier S sample that looked planned. Reading an incomplete cell is
+   now a deliberate act (`require_complete=False`).
+
+Each has a regression test in `tests/test_integrity_regressions.py` and a mutant
+in the catalogue: 58 mutants, all killed; 357 tests.
+
+The general lesson for the modules still to be built: an invariant is only as
+strong as the narrowest path that enforces it, and a test suite written
+alongside the code tends to walk the paths the author had in mind.
+
+---
+
 # Q — Open questions and flagged requirements
 
 ## Q1 — BLOCKING. The published ground truth for Module 1 needs transcribing
