@@ -1,0 +1,92 @@
+commit=b61fd80e7ffd86a739396f3854cc13e69731910c
+prereg_id=PREREG-M1
+prereg_path=modules/degree/prereg/PREREG-M1.md
+prereg_sha256=640a246988537c69793c8b68737da1275d2e6c3b41acc355c6f828bb7144f319
+prereg_introducing_commit=d84c0968324d0151c0a8cdba74cd291fd2252579
+runner_introducing_commit=84ca87e77da68df6d725a6baed9df6bfd9c95df4
+H1_gap=there exists r with `d_ub(r) - d_lb(r) >= effect_floor`, i.e. the
+H1_primary=there exists r in [1, 64] with `k_HO(r) <= feasibility_ceiling`,
+T1_existence=k_HO(r) <= existence_ceiling_k`. Derivation: a k-th order
+T2_feasibility=k_HO(r) < feasibility_ceiling_log2`. Derivation: the
+T3_advantage=the cost comparison of section 9 must show
+alpha=0.05
+bh_smallest_critical_value=0.00078125
+blindness_statement=the multiplicative inverse over GF(2^n) has maximal
+blindness_test=modules/degree/blindness/inverse_map.py`, which runs the
+confidence=0.95
+criterion_change_policy=a criterion may not be switched after seeing data.
+declared_tiers=P,E,S
+effect_floor=1.0
+effect_floor_applies_to=d_ub(r) - d_lb(r)
+effect_floor_degree_bits=1
+effect_floor_units=bits of algebraic degree
+existence_ceiling_k=512
+family_size=64
+feasibility_ceiling_log2=63.1
+generic_zero_sum_advantage_log2=256
+holdout_rounds=53,54,55,56,57,58,59,60,61,62,63,64
+max_probe_dim_reaching_bh_significance=2
+max_probe_dim_with_power80=4
+mechanism=the structural derivation of the value from the round function
+min_detectable_p_at_power80=0.03167621427
+module=modules.degree
+n_free_bits_primary=512
+n_out_bits_primary=256
+power=0.8
+precondition_calibration=modules/degree/calibration/suite.py` reports
+precondition_ground_truth=every calibration case of kind
+precondition_measurement=a measurement implementation is registered for
+precondition_target=the parametrised SHA-256 core from sha256-testbed is
+prereg_id=PREREG-M1
+primary_metric=k_HO
+primary_target=sha256-compression-parametrised
+primary_target_rounds=r in [1, 64], round count a runtime parameter
+primary_target_variables=the 512-bit message block, chaining value fixed to
+reproduction_policy=one factor per reproduction run, named in the run
+runner_path=harness/runner.py
+secondary_targets=MiMC and MiMCSponge over BN254 and BLS12-381; Poseidon
+seeds_per_cell=50
+seeds_required_bh_significant_k16=468882
+seeds_required_bh_significant_k32=30728838970
+seeds_required_bh_significant_k4=111
+seeds_required_bh_significant_k8=1829
+seeds_required_power80_k16=105476
+seeds_required_power80_k32=6912483199
+seeds_required_power80_k4=25
+seeds_required_power80_k8=412
+tier_s_promotion_closed_above_k=2. A Tier S cell at probe dimension
+title=Algebraic degree growth versus round count
+worked_meaningful_over_detectable=0.1233180823
+worked_meaningful_p=0.00390625
+worked_probe_dim=8
+zero_witness_p_upper_bound_95=0.05815507912
+
+<!-- BEGIN DERIVED computation_id=M1-DERIVE-001 -->
+- `seeds_per_cell`: 50
+- `alpha`: 0.05
+- `family_size`: 64
+- `power`: 0.8
+- `confidence`: 0.95
+- `n_free_bits_primary`: 512
+- `n_out_bits_primary`: 256
+- `effect_floor_degree_bits`: 1
+- `feasibility_ceiling_log2`: 63.1
+- `bh_smallest_critical_value`: 0.00078125
+- `min_detectable_p_at_power80`: 0.03167621427
+- `zero_witness_p_upper_bound_95`: 0.05815507912
+- `max_probe_dim_with_power80`: 4
+- `max_probe_dim_reaching_bh_significance`: 2
+- `worked_probe_dim`: 8
+- `worked_meaningful_p`: 0.00390625
+- `worked_meaningful_over_detectable`: 0.1233180823
+- `existence_ceiling_k`: 512
+- `generic_zero_sum_advantage_log2`: 256
+- `seeds_required_power80_k4`: 25
+- `seeds_required_bh_significant_k4`: 111
+- `seeds_required_power80_k8`: 412
+- `seeds_required_bh_significant_k8`: 1829
+- `seeds_required_power80_k16`: 105476
+- `seeds_required_bh_significant_k16`: 468882
+- `seeds_required_power80_k32`: 6912483199
+- `seeds_required_bh_significant_k32`: 30728838970
+<!-- END DERIVED -->
