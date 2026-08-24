@@ -13,6 +13,7 @@ from harness.registry import REGISTRY, ModuleSpec
 from tiers.tier import Tier
 
 from .calibration.suite import MODULE_ID, SUITE
+from .measure import measure
 
 PREREG_PATH = "modules/degree/prereg/PREREG-M1.md"
 
@@ -26,7 +27,7 @@ SPEC = ModuleSpec(
     prereg_path=PREREG_PATH,
     runner_path="harness/runner.py",
     suite=SUITE,
-    measure=None,
+    measure=measure,
     targets=(
         "sha256-compression-parametrised",
         "keccak-f",

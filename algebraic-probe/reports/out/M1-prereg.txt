@@ -1,4 +1,4 @@
-commit=aa172705fdbea668ba47f7d0137c3a2f7f37ceae
+commit=7c18018f8b8dc3638b8805d941a8d33eeb6b7d6c
 prereg_id=PREREG-M1
 prereg_path=modules/degree/prereg/PREREG-M1.md
 prereg_sha256=33f742cbdeae86fdb3a4f784059f312fb0a1e91ba190d799bf533e8a56b8e49c

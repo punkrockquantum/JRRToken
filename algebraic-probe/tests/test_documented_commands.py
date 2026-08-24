@@ -59,7 +59,8 @@ def test_the_readiness_command_reports_no_go_and_exits_nonzero() -> None:
     """Exit code carries the decision, so a caller can gate on it."""
     result = run("scripts/readiness_report.py")
     assert result.returncode == 1
-    assert "go=[] no_go=['M1', 'M2', 'M3', 'M4', 'M5', 'M6']" in result.stdout
+    assert "partial=['M1']" in result.stdout
+    assert "no_go=['M2', 'M3', 'M4', 'M5', 'M6']" in result.stdout
 
 
 @pytest.mark.slow

@@ -108,29 +108,55 @@ def test_module_4_declares_its_dependency_on_module_1() -> None:
 
 
 @pytest.mark.slow
-def test_the_live_report_is_reproducible_and_every_module_is_no_go() -> None:
+def test_the_live_report_is_reproducible() -> None:
     first = build_report()
     second = build_report()
     assert first.render() == second.render()
-    assert first.go == ()
-    assert len(first.no_go) == 6
 
 
 @pytest.mark.slow
-def test_module_1_blocks_on_exactly_three_gates() -> None:
+def test_module_1_clears_every_module_level_gate() -> None:
     report = build_report()
     m1 = next(m for m in report.modules if m.module_id == "M1")
-    assert m1.n_passed == 10
-    assert [o.gate_id for o in m1.blocking_failures] == ["G01", "G07", "G11"]
-    assert set(m1.block_classes) == {"operator", "build"}
+    assert m1.blocking_failures == ()
+    assert m1.n_passed == len(m1.outcomes)
 
 
 @pytest.mark.slow
-def test_the_missing_primary_target_blocks_every_module() -> None:
+def test_module_1_is_partial_because_some_targets_are_blocked() -> None:
+    """The point of per-target evaluation: a validated target is not held
+    hostage by an unrelated absent one."""
     report = build_report()
-    top_cause, count = report.root_causes()[0]
-    assert count == 6
-    assert top_cause in ("G01:primary-target-present", "G11:measurement-registered")
+    m1 = next(m for m in report.modules if m.module_id == "M1")
+    assert m1.decision is Decision.PARTIAL
+    blocked = {t.target_id: [o.gate_id for o in t.blocking_failures] for t in m1.targets
+               if t.decision is Decision.NO_GO}
+    assert set(blocked) == {
+        "sha256-compression-parametrised",
+        "keccak-f[25]",
+        "mimc-gf2n[9]",
+    }
+    assert blocked["keccak-f[25]"] == ["T02"]
+    assert blocked["mimc-gf2n[9]"] == ["T02"]
+    assert "T01" in blocked["sha256-compression-parametrised"]
+    assert len(m1.targets_go) == 4
+
+
+@pytest.mark.slow
+def test_the_authorised_runs_are_exactly_the_clear_targets() -> None:
+    report = build_report()
+    assert set(report.authorised_runs) == {
+        ("M1", "linear-map-gf2"),
+        ("M1", "power-map-gf2n"),
+        ("M1", "inverse-map-gf2n"),
+        ("M1", "random-function-sha256-prf"),
+    }
+
+
+@pytest.mark.slow
+def test_modules_without_a_package_remain_no_go() -> None:
+    report = build_report()
+    assert set(report.no_go) == {"M2", "M3", "M4", "M5", "M6"}
 
 
 @pytest.mark.slow
