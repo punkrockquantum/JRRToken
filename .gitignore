@@ -1,0 +1,5 @@
+# Run logs and generated reports are COMMITTED, not ignored (section 8).
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.sqlite-journal

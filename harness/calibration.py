@@ -1,0 +1,265 @@
+"""Calibration framework: no module is trusted until it reproduces ground truth.
+
+Section 5. A calibration suite is declarative: every case states the target, the
+quantity, the expected value, where the expected value comes from, and the exact
+assertion it will make. ``CalibrationSuite.manifest()`` renders all of that
+*without running anything*, which is what the first deliverable asks for.
+
+Two gates sit in front of execution:
+
+  GATE 1 (citation verification). A case whose expected value comes from the
+  literature is inert until that value has been checked against the primary
+  source. An UNVERIFIED citation blocks the module. Hard block, not a warning.
+
+  GATE 2 (calibration outcome). Every case must pass before the module is
+  permitted to run on anything new.
+"""
+
+from __future__ import annotations
+
+import enum
+from dataclasses import dataclass, field
+from typing import Any, Callable
+
+from tiers.errors import CalibrationBlocked, NotAuthorised
+from tiers.provenance import CitationIndex, Provenance, Verification
+
+
+class _PendingPrimarySource:
+    """Sentinel for an expected value that must be transcribed from the source.
+
+    A calibration case may be fully declared -- target, quantity, comparator,
+    assertion form -- before its expected value has been read out of the primary
+    source. Writing a plausible number in the meantime is exactly the failure
+    prime directive 2.1 forbids, so the value is this sentinel and the case
+    blocks its module until the number is transcribed.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "PENDING_PRIMARY_SOURCE"
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _PendingPrimarySource)
+
+    def __hash__(self) -> int:
+        return hash("PENDING_PRIMARY_SOURCE")
+
+
+PENDING_PRIMARY_SOURCE = _PendingPrimarySource()
+
+
+class CaseKind(enum.Enum):
+    PUBLISHED_GROUND_TRUTH = "published-ground-truth"
+    POSITIVE_CONTROL = "positive-control"
+    NEGATIVE_CONTROL = "negative-control"
+    INTERMEDIATE_CONTROL = "intermediate-control"
+    BLINDNESS = "blindness"
+
+
+class Comparator(enum.Enum):
+    EQUAL = "=="
+    AT_MOST = "<="
+    AT_LEAST = ">="
+    IN_SET = "in"
+
+    def holds(self, observed: Any, expected: Any) -> bool:
+        if self is Comparator.EQUAL:
+            return observed == expected
+        if self is Comparator.AT_MOST:
+            return observed <= expected
+        if self is Comparator.AT_LEAST:
+            return observed >= expected
+        return observed in expected
+
+
+@dataclass(frozen=True, slots=True)
+class CalibrationCase:
+    case_id: str
+    kind: CaseKind
+    target_id: str
+    target_factory: Callable[[], Any]
+    quantity: str
+    comparator: Comparator
+    expected: Any
+    expectation_provenance: Provenance
+    #: The exact assertion, in words, that this case will make. Printed by the
+    #: manifest before anything runs.
+    assertion: str
+    #: Why this case is in the suite -- what failure it would catch.
+    rationale: str
+    parameters: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for name in ("case_id", "target_id", "quantity", "assertion", "rationale"):
+            if not str(getattr(self, name)).strip():
+                raise CalibrationBlocked(f"CalibrationCase.{name} must be non-empty")
+
+    def manifest_line(self) -> str:
+        params = " ".join(f"{k}={v}" for k, v in sorted(self.parameters.items()))
+        return (
+            f"case={self.case_id} kind={self.kind.value} target={self.target_id} "
+            f"quantity={self.quantity} asserts={self.quantity} {self.comparator.value} "
+            f"{self.expected} {params} provenance={self.expectation_provenance.render()}"
+        ).rstrip()
+
+
+@dataclass(frozen=True, slots=True)
+class CaseOutcome:
+    case_id: str
+    observed: Any
+    expected: Any
+    comparator: Comparator
+    passed: bool
+    detail: str = ""
+
+    def render(self) -> str:
+        return (
+            f"case={self.case_id} observed={self.observed} "
+            f"{self.comparator.value} expected={self.expected} passed={self.passed}"
+            + (f" detail={self.detail}" if self.detail else "")
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GateStatus:
+    module_id: str
+    blocked: bool
+    blocking_citations: tuple[str, ...]
+    blocking_reasons: tuple[str, ...]
+
+    def render(self) -> str:
+        return (
+            f"module={self.module_id} calibration_blocked={self.blocked} "
+            f"blocking_citations={list(self.blocking_citations)} "
+            f"blocking_reasons={list(self.blocking_reasons)}"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CalibrationReport:
+    module_id: str
+    outcomes: tuple[CaseOutcome, ...]
+
+    @property
+    def satisfied(self) -> bool:
+        return all(o.passed for o in self.outcomes)
+
+    @property
+    def failures(self) -> tuple[CaseOutcome, ...]:
+        return tuple(o for o in self.outcomes if not o.passed)
+
+    def render(self) -> str:
+        lines = [f"module={self.module_id} calibration_satisfied={self.satisfied}"]
+        lines += [f"  {o.render()}" for o in self.outcomes]
+        return "\n".join(lines)
+
+
+@dataclass(frozen=True, slots=True)
+class CalibrationSuite:
+    module_id: str
+    cases: tuple[CalibrationCase, ...]
+    citations: CitationIndex
+
+    def __post_init__(self) -> None:
+        ids = [c.case_id for c in self.cases]
+        dupes = {i for i in ids if ids.count(i) > 1}
+        if dupes:
+            raise CalibrationBlocked(f"duplicate calibration case ids: {sorted(dupes)}")
+        kinds = {c.kind for c in self.cases}
+        for required in (
+            CaseKind.PUBLISHED_GROUND_TRUTH,
+            CaseKind.POSITIVE_CONTROL,
+            CaseKind.NEGATIVE_CONTROL,
+        ):
+            if required not in kinds:
+                raise CalibrationBlocked(
+                    f"{self.module_id}: calibration suite has no {required.value} case "
+                    "(section 5 requires one)"
+                )
+        for case in self.cases:
+            key = case.expectation_provenance.citation_key
+            if key is not None:
+                self.citations.get(key)  # raises on an unknown key
+
+    # -- gate 1: citation verification --------------------------------------
+
+    def gate(self) -> GateStatus:
+        reasons: list[str] = []
+        blocking: list[str] = []
+        for case in self.cases:
+            if case.expected is PENDING_PRIMARY_SOURCE:
+                reasons.append(
+                    f"case={case.case_id} has no expected value: it must be transcribed "
+                    "from the primary source before the case can assert anything"
+                )
+            key = case.expectation_provenance.citation_key
+            if key is None:
+                continue
+            citation = self.citations.get(key)
+            if citation.verification is Verification.UNVERIFIED:
+                blocking.append(key)
+                reasons.append(
+                    f"case={case.case_id} depends on citation {key} whose claimed value "
+                    f"has not been checked against the primary source "
+                    f"({citation.verification_note})"
+                )
+        return GateStatus(
+            module_id=self.module_id,
+            blocked=bool(reasons),
+            blocking_citations=tuple(sorted(set(blocking))),
+            blocking_reasons=tuple(reasons),
+        )
+
+    def require_unblocked(self) -> None:
+        status = self.gate()
+        if status.blocked:
+            raise CalibrationBlocked(
+                f"{self.module_id} refuses to run: " + "; ".join(status.blocking_reasons)
+            )
+
+    # -- manifest: what the suite will assert, before it runs ---------------
+
+    def manifest(self) -> str:
+        lines = [f"calibration_suite module={self.module_id} n_cases={len(self.cases)}"]
+        for kind in CaseKind:
+            for case in self.cases:
+                if case.kind is kind:
+                    lines.append("  " + case.manifest_line())
+                    lines.append(f"    assertion={case.assertion}")
+                    lines.append(f"    rationale={case.rationale}")
+        lines.append("  citations:")
+        for citation in sorted(self.citations.citations, key=lambda c: c.key):
+            lines.append("    " + citation.render())
+            lines.append(f"      claim={citation.claim}")
+            if citation.verification_note:
+                lines.append(f"      verification_note={citation.verification_note}")
+        status = self.gate()
+        lines.append("  " + status.render())
+        return "\n".join(lines)
+
+    # -- gate 2: execution ---------------------------------------------------
+
+    def run(self, measure: Callable[[Any, CalibrationCase], Any] | None) -> CalibrationReport:
+        self.require_unblocked()
+        if measure is None:
+            raise NotAuthorised(
+                f"{self.module_id}: no measurement implementation is registered. "
+                "The calibration suite is defined and can be inspected with "
+                "manifest(), but the module's measurement path does not exist yet."
+            )
+        outcomes = []
+        for case in self.cases:
+            target = case.target_factory()
+            observed = measure(target, case)
+            outcomes.append(
+                CaseOutcome(
+                    case_id=case.case_id,
+                    observed=observed,
+                    expected=case.expected,
+                    comparator=case.comparator,
+                    passed=bool(case.comparator.holds(observed, case.expected)),
+                )
+            )
+        return CalibrationReport(module_id=self.module_id, outcomes=tuple(outcomes))
