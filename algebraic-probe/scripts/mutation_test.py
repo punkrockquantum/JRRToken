@@ -330,6 +330,33 @@ CATALOGUE: tuple[Mutant, ...] = (
         ("tests/test_integrity_regressions.py",),
         "a partly finished sweep cell is returned as though it were complete",
     ),
+    Mutant(
+        "HARN-09",
+        "harness",
+        "harness/readiness.py",
+        "        return Decision.NO_GO if self.blocking_failures else Decision.GO",
+        "        return Decision.GO if self.blocking_failures else Decision.NO_GO",
+        ("tests/test_readiness.py",),
+        "the go/no-go decision is inverted",
+    ),
+    Mutant(
+        "HARN-10",
+        "harness",
+        "harness/readiness.py",
+        "        return tuple(o for o in self.outcomes if o.blocking and not o.passed)",
+        "        return tuple(o for o in self.outcomes if o.blocking and not o.passed)[:1]",
+        ("tests/test_readiness.py",),
+        "only the first blocking failure is reported, hiding the rest of the path to GO",
+    ),
+    Mutant(
+        "HARN-11",
+        "harness",
+        "harness/readiness.py",
+        "            passed, detail = False, f\"check raised {type(exc).__name__}: {exc}\"",
+        '            passed, detail = True, f"check raised {type(exc).__name__}: {exc}"',
+        ("tests/test_readiness.py",),
+        "a gate whose check crashes is counted as passed",
+    ),
     # -- core ----------------------------------------------------------------
     Mutant(
         "CORE-01",
