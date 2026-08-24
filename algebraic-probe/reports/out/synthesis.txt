@@ -1,0 +1,27 @@
+commit=1fc7af1a45c0e4f94b36e72f00d162f7257cfcd2
+
+E1 promotion gate
+  module=modules.degree calibration_blocked=True eligible_for_promotion=False
+    ineligible_because=case=CAL-M1-GT-KECCAK-R1 has no expected value: it must be transcribed from the primary source before the case can assert anything
+    ineligible_because=case=CAL-M1-GT-KECCAK-R1 depends on citation CITE-BCD11 whose claimed value has not been checked against the primary source (primary source not reacha
+  module=modules.hod calibration_blocked=True eligible_for_promotion=False
+    ineligible_because=module=modules.hod has no published-ground-truth case: section 5 requires a published anchor an independent reader can check; neither brief names one 
+  candidates_evaluated=0 promoted=0
+  note=no module is calibration-clear, so no result reached criterion 1
+
+E4 compliance audit
+  runs_audited=3
+  run=PREREG-M1.54c56266d5964c85b519ab4d5b9b30db.jsonl chain_valid=True prereg_digest_matches=True deviations=1 compliant=False
+    deviation field=working_tree_clean prereg=True as_run=False recomputed_under_prereg=embedded commit does not describe the code that ran
+  run=PREREG-M1.668f043aada2464abf6b6346706a56d8.jsonl chain_valid=True prereg_digest_matches=True deviations=1 compliant=False
+    deviation field=working_tree_clean prereg=True as_run=False recomputed_under_prereg=embedded commit does not describe the code that ran
+  run=PREREG-M1.d978251dd021453da8b5746124349121.jsonl chain_valid=True prereg_digest_matches=True deviations=0 compliant=True
+
+E5 provenance verification
+  prereg=PREREG-M1 introduced=d84c0968324d runner=84ca87e77da6 runner_precedes=True
+  prereg=PREREG-M4 introduced=1fc7af1a45c0 runner=84ca87e77da6 runner_precedes=True
+  runner_introducing_commit=84ca87e77da6
+  logs_verified=3 chains_unbroken=True
+  byte_identical_pairs=0
+  index_entries=2
+  run_log_files_committed=5
