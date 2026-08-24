@@ -1,4 +1,4 @@
-commit=0c9d23127cca3d5b971dc9bc4a32dd08d41bb8d4
+commit=aa172705fdbea668ba47f7d0137c3a2f7f37ceae
 decision_rule=GO iff every blocking gate passes; any failing blocking gate yields NO-GO. Fixed before evaluation, no weighting, no partial credit.
 modules=6 go=[] no_go=['M1', 'M2', 'M3', 'M4', 'M5', 'M6']
 
@@ -7,7 +7,7 @@ module=M1 decision=NO-GO gates_passed=10/13 blocking_failures=3 block_classes=['
   quantity=algebraic degree over GF(2) of output bits in the input variables
   declared_tiers=P,E,S
   gate=G01 name=primary-target-present passed=False blocking=True block_class=operator detail=core/sha256.py raises NotAuthorised: the parametrised SHA-256 target is not present in this repository. Required before it may be used: vendor the parametris
-  gate=G02 name=prereg-committed passed=True blocking=True block_class=none detail=prereg_id=PREREG-M1 sha256=640a246988537c69
+  gate=G02 name=prereg-committed passed=True blocking=True block_class=none detail=prereg_id=PREREG-M1 sha256=33f742cbdeae86fd
   gate=G03 name=prereg-matches-derivation passed=True blocking=True block_class=none detail=derived block is byte-equal to its derivation script
   gate=G04 name=runner-precedes-prereg passed=True blocking=True block_class=none detail=runner=84ca87e77da6 precedes prereg=d84c0968324d
   gate=G05 name=calibration-suite-defined passed=True blocking=True block_class=none detail=n_cases=11 kinds=['blindness', 'intermediate-control', 'negative-control', 'positive-control', 'published-ground-truth']

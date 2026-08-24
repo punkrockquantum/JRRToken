@@ -2,7 +2,7 @@
 
 Section 5. Nothing in this file measures anything: it declares what will be
 measured, on which target, against which expected value, and where that expected
-value comes from. ``python -m modules.degree.calibration.suite`` prints the
+value comes from. ``python -m modules.degree.calibration`` prints the
 manifest -- exactly what the suite will assert -- without running it.
 
 Case kinds:
