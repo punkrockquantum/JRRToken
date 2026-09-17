@@ -6,6 +6,7 @@ A completed run that promotes nothing is a completed run.
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -97,6 +98,13 @@ def e5_provenance() -> list[str]:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--out-dir", default=None, help="where to write; defaults to reports/out/"
+    )
+    args = parser.parse_args()
+    out_dir = Path(args.out_dir) if args.out_dir else OUT_DIR
+
     lines = [f"commit={gitinfo.head_commit()}", ""]
     for section in (e1_promotion, e4_compliance, e5_provenance):
         lines.extend(section())
@@ -108,8 +116,8 @@ def main() -> int:
             print(hit.render())
         return 1
     print(text)
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    (OUT_DIR / "synthesis.txt").write_text(text, encoding="utf-8")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "synthesis.txt").write_text(text, encoding="utf-8")
     return 0
 
 

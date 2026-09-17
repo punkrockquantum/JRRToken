@@ -685,3 +685,38 @@ Resolution: the formal status label `NEGATIVE` in `tiers/finding.py` is retained
 since it is a structured epistemic state and not a characterisation; the *prose*
 word remains banned in reports by the lint. Recorded rather than silently
 reconciled.
+
+## D-033 — a test must not corrupt the provenance of what runs after it
+
+Found by re-running the documented reproduction on 2026-09-17.
+
+`test_the_report_renderer_writes_every_declared_report` ran the real renderer,
+which wrote into the tracked `reports/out/`. Three committed files were rewritten
+with a fresh commit stamp, so the working tree was dirty from that point on, and
+any provenance run executed afterwards recorded `working_tree_clean=False` and
+was reported non-compliant by the auditor.
+
+Diagnosed by bisecting the suite file by file: exactly one test file dirtied the
+tree, and it dirtied exactly three files.
+
+Chosen: `render_reports.py` and `synthesis.py` take `--out-dir`, and the suite
+renders into a temporary directory. Three guard tests were added — one asserting
+the tracked directory is byte-identical before and after rendering elsewhere, one
+for the synthesis script, and one that the registry report lists every registered
+module. A mutant (`RPRT-07`) pins the switch by making the renderer ignore it.
+
+Rejected: leaving it and treating `working_tree_clean` as advisory. The field
+exists to say whether the embedded commit describes the code that ran, and a
+suite that falsifies it makes every later run unattributable.
+
+Two things worth recording about the repair itself. An early draft of the
+registry-report guard wrote into `reports/out/` and re-introduced the very defect
+it sat beside; it was caught by re-running the dirty-tree check rather than by
+reading the diff. And a `git checkout -- .` used to reset state mid-repair
+reverted the uncommitted fix, which had to be reapplied — the fix is now
+committed before any further git operation.
+
+Also fixed in passing: `render_reports.py` imported only Module 1's spec, so the
+registry report said `modules=1` while two modules were registered. It now
+imports both and reports `modules=2`. That was a reporting gap introduced when
+Module 4 was added in Stage D and not caught because nothing asserted the count.

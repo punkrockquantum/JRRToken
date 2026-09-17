@@ -574,6 +574,15 @@ CATALOGUE: tuple[Mutant, ...] = (
         ("tests/test_stage_b.py",),
         "the block control's ceiling becomes the state size, so no breach is detectable",
     ),
+    Mutant(
+        "RPRT-07",
+        "reports",
+        "scripts/render_reports.py",
+        "    out_dir = Path(args.out_dir) if args.out_dir else OUT_DIR",
+        "    out_dir = OUT_DIR",
+        ("tests/test_documented_commands.py",),
+        "the renderer ignores --out-dir and writes into the tracked directory, dirtying the tree",
+    ),
     # -- verify --------------------------------------------------------------
     Mutant(
         "VRFY-01",
