@@ -139,3 +139,46 @@ recorded as blocked pending E-03 and E-05.
 
 Recorded as a deviation from the brief's stated order, with its reason, per the
 instruction that conflicts go to DECISIONS.md.
+
+---
+
+## E-08 — the publication route invalidates recorded commit ids (recorded, not fixable here)
+
+Found by re-running the documented reproduction against a fresh clone of the
+published `algo-games` branch on 2026-09-17.
+
+Every run log records the commit that introduced the runner and the commit that
+introduced its pre-registration. Those ids are from the `claude/…` branch. The
+published branch is produced by `git subtree split`, which **rewrites every
+commit hash**, so the recorded ids do not exist in the published history.
+
+Consequence on the published branch:
+
+```
+deviation field=ordering_commits
+  prereg=64bfa5100ea4… < 6b39bb6fd505…   (what this history says)
+  as_run=84ca87e77da6… < d84c096832…     (what the log recorded)
+```
+
+All four run logs carry it, so **0 of 4 runs are compliant on `algo-games`**
+where 1 of 3 was compliant on the source branch.
+
+**The ordering relation itself still holds.** E5 reports `runner_precedes=True`
+for both pre-registrations in the published history: the runner's introducing
+commit is still a strict ancestor of the pre-registration's. It is the *ids* that
+do not match, not the claim they support.
+
+**Not worked around.** The auditor is right to flag it and was not weakened. The
+options, all of which are yours:
+
+1. publish by pushing the branch itself rather than a subtree split, so hashes
+   are preserved and the recorded ids resolve;
+2. accept the deviation as a known property of the publication route, recorded
+   here, and treat the source branch as the provenance-bearing one;
+3. record the run under both hashes, which means the runner must know at write
+   time how the repository will later be published — it cannot.
+
+Option 1 is the only one that makes the published branch self-verifying. It
+requires the project to live at the repository root on its own branch, which is
+what `algo-games` was meant to be before the repo-access block (E-03) forced the
+subtree route.

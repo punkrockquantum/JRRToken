@@ -64,8 +64,55 @@ def test_the_readiness_command_reports_no_go_and_exits_nonzero() -> None:
 
 
 @pytest.mark.slow
-def test_the_report_renderer_writes_every_declared_report() -> None:
-    result = run("scripts/render_reports.py")
+def test_the_report_renderer_writes_every_declared_report(tmp_path) -> None:
+    """Rendered into a temporary directory, never the tracked one.
+
+    Rendering into reports/out/ rewrites tracked files with a fresh commit
+    stamp, so the working tree is dirty afterwards and any provenance run
+    executed later records working_tree_clean=False and is reported
+    non-compliant. A test must not corrupt the provenance of what runs after it.
+    """
+    result = run("scripts/render_reports.py", "--out-dir", str(tmp_path))
     assert result.returncode == 0, result.stderr
     for name in ("module-registry.txt", "M1-prereg.txt", "M1-calibration-manifest.txt"):
-        assert f"wrote=reports/out/{name}" in result.stdout
+        assert f"wrote={name}" in result.stdout
+        assert (tmp_path / name).exists()
+
+
+@pytest.mark.slow
+def test_the_renderer_leaves_the_tracked_report_directory_untouched(tmp_path) -> None:
+    """The guard on the defect above."""
+    tracked = ROOT / "reports" / "out"
+    before = {q.name: q.read_bytes() for q in tracked.glob("*.txt")}
+    assert before, "expected committed reports to compare against"
+    result = run("scripts/render_reports.py", "--out-dir", str(tmp_path))
+    assert result.returncode == 0, result.stderr
+    assert {q.name: q.read_bytes() for q in tracked.glob("*.txt")} == before
+
+
+@pytest.mark.slow
+def test_the_synthesis_script_also_honours_an_output_directory(tmp_path) -> None:
+    """Same trap, same switch: synthesis.py writes unconditionally otherwise."""
+    tracked = ROOT / "reports" / "out" / "synthesis.txt"
+    before = tracked.read_bytes() if tracked.exists() else None
+    result = run("scripts/synthesis.py", "--out-dir", str(tmp_path))
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "synthesis.txt").exists()
+    after = tracked.read_bytes() if tracked.exists() else None
+    assert after == before
+
+
+@pytest.mark.slow
+def test_the_registry_report_lists_every_registered_module(tmp_path) -> None:
+    """It listed one module while two were registered, because the renderer
+    imported only Module 1's spec.
+
+    Rendered into a temporary directory: an earlier draft of this test wrote
+    into reports/out/ and re-introduced the defect it sits beside.
+    """
+    result = run("scripts/render_reports.py", "--out-dir", str(tmp_path))
+    assert result.returncode == 0, result.stderr
+    registry = (tmp_path / "module-registry.txt").read_text()
+    assert "modules=2" in registry
+    assert "module=modules.degree" in registry
+    assert "module=modules.hod" in registry

@@ -1,4 +1,4 @@
-commit=1fc7af1a45c0e4f94b36e72f00d162f7257cfcd2
+commit=10eb6fe2277cf9a8efba39790cba19567a2ef19a
 
 E1 promotion gate
   module=modules.degree calibration_blocked=True eligible_for_promotion=False
