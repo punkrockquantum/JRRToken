@@ -182,3 +182,87 @@ Option 1 is the only one that makes the published branch self-verifying. It
 requires the project to live at the repository root on its own branch, which is
 what `algo-games` was meant to be before the repo-access block (E-03) forced the
 subtree route.
+
+---
+
+## E-09 — may an exhaustive in-repo ground truth substitute for a published anchor?
+
+New, 2026-09-17. Raised by the exhaustive arm (D-034, D-035), which was built in
+response to the instruction to convert escalations into results by brute-force
+exhaustion.
+
+**What is now available that was not before.** The exact algebraic degree of
+Keccak-f[25] at every round up to saturation, and of MiMC over GF(2^9) at every
+round, each computed over the target's complete input space. Tier E: nothing
+sampled. Reproduce with `python scripts/exhaust.py`.
+
+```
+keccak-f[25]   r=1 exact=2  bound=2  gap=0
+               r=2 exact=4  bound=4  gap=0
+               r=3 exact=8  bound=8  gap=0
+               r=4 exact=16 bound=16 gap=0
+               r=5 exact=22 bound=24 gap=2
+               r=6 exact=24 bound=24 gap=0   (saturated at width-1)
+
+mimc-gf2n[9]   mean gap, naive doubling bound   1.333
+               mean gap, derived support bound  0.444
+               soundness holds at every round for both
+```
+
+**What it does not do.** It does not supply the value `CAL-M1-GT-KECCAK-R1..R3`
+and `CAL-M1-GT-MIMC-R1..R3` are waiting on. Those cases are still
+`PENDING_PRIMARY_SOURCE`, the gate still blocks on `CITE-BCD11` and
+`CITE-EGLORSW20` with the same reasons as before, and Module 1's status is
+unchanged. Writing a number I computed into a case whose provenance names a paper
+is what Class 2 of the completion brief forbids, so it was not done and the
+refusal is enforced in code (mutant `EXHT-02`).
+
+**The decision.** Section 5 makes a published anchor a blanket precondition. The
+exhaustive cases satisfy prime directive 2.1(a) — a computation in this
+repository you can rerun — but not section 5. Three options, all yours:
+
+1. **Leave it.** Exhaustive cases run and report; the gate stays blocked until
+   E-04 is resolved. Module 1 stays PARTIAL. Nothing further is needed from you.
+2. **Accept the substitution where the target implementation is externally
+   anchored.** Keccak would qualify and MiMC would not: `core.keccak.sha3_256` is
+   asserted bit-equal to `hashlib.sha3_256`, so the implementation is pinned by a
+   party other than me, and an exhaustive degree over a pinned implementation
+   closes the chain without the paper. MiMC's round constants are this
+   repository's own construction, so its exhaustive degree validates my
+   instrument against my implementation and the circularity is real.
+3. **Accept it generally.** Not recommended, and I will say why rather than just
+   flagging it: an instrument and a target written by the same author can share a
+   misreading of a specification, and agreeing with yourself is the one thing
+   calibration is supposed to rule out.
+
+If you choose 2, the condition needs to be written into the gate as a per-case
+declaration of what anchors the implementation, checked rather than asserted.
+That is a pre-registration amendment, so on the completion brief's own terms it
+must be registered before it is evaluated, and evaluated on cases not yet
+examined.
+
+**Not done pending your answer.** No gate logic was changed, no published case
+was filled, and no result was promoted.
+
+---
+
+## E-10 — the brute-force arm does not reach the other escalations, and here is the arithmetic
+
+Recorded so the limit is visible rather than implied. Of the nine items above,
+exhaustion converts one and touches a second.
+
+| Item | Reachable by exhaustion? | Why |
+|---|---|---|
+| E-01 | No | The Tier S ceiling is already computed. Reopening k=16 needs 468,882 seeds and k=32 needs 3.07×10^10; neither is a decision exhaustion can make, and both are beyond this environment regardless. |
+| E-02 | No | A data-complexity ceiling is a policy choice, not a measurement. |
+| E-03 | No | SHA-256 has 512 free bits. 2^512 is not reachable by any method, and D-010 caps the sampled probe dimension at 2, so probability does not substitute. The blocker is that the implementation is absent, not that a number is uncomputed. |
+| E-04 | **Partly** | Both its targets are now measured exactly, in-repo. The citations remain untranscribed, so the gate is unchanged. This is E-09. |
+| E-05 | No for M4 | An exhaustive arm for Module 4 would need the packed path, which lives in `verify/`, and `modules/` must not import `verify/` (D-006, enforced by `scripts/ci_checks.py`). Module 4's own exact path guards at 13 variables, so Keccak-f[25] is out of its reach. Duplicating the machinery into `modules/hod/` would satisfy the letter of the independence rule and defeat its purpose, so it was not done. |
+| E-06 | No | A metric over F_p has to be defined before anything can be exhausted with it. |
+| E-08 | No | A publication route is a choice about git history. |
+
+**One thing exhaustion did establish that is not a gate question.** The Tier P
+bound for Keccak-f[25] is exactly tight at rounds 1–4, loose by 2 at round 5, and
+exact again at 6. That is the first measurement of this instrument's tightness
+against exact truth on a real primitive, it needed no citation, and it holds
+whichever way E-09 is decided.

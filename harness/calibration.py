@@ -52,6 +52,23 @@ PENDING_PRIMARY_SOURCE = _PendingPrimarySource()
 
 class CaseKind(enum.Enum):
     PUBLISHED_GROUND_TRUTH = "published-ground-truth"
+    #: The exact value, computed in this repository over the target's complete
+    #: input space. Tier E: nothing is sampled, so the number is not an estimate.
+    #:
+    #: This kind does NOT satisfy section 5's published-anchor requirement and is
+    #: deliberately not accepted in place of PUBLISHED_GROUND_TRUTH anywhere in
+    #: this file. The two answer different questions. A published anchor asks
+    #: whether this repository agrees with an independent party; an exhaustive
+    #: computation asks whether the instrument agrees with the truth about the
+    #: function *as this repository implements it*. The second cannot detect an
+    #: error shared by the instrument and the target implementation, which is
+    #: exactly the failure the first exists to catch.
+    #:
+    #: It is still a hard, falsifiable check -- a bound that exceeds the exact
+    #: degree is unsound and fails here -- so these cases run, and they run under
+    #: ``run_controls`` without lifting any gate. Whether the gate should ever
+    #: recognise one as an anchor substitute is ESCALATIONS.md E-09.
+    EXHAUSTIVE_GROUND_TRUTH = "exhaustive-ground-truth"
     POSITIVE_CONTROL = "positive-control"
     NEGATIVE_CONTROL = "negative-control"
     INTERMEDIATE_CONTROL = "intermediate-control"
@@ -262,7 +279,8 @@ class CalibrationSuite:
         self, measure: Callable[[Any, CalibrationCase], Any] | None
     ) -> CalibrationReport:
         """Run only the cases whose expected value is established in this
-        repository -- the controls and the blindness class.
+        repository -- the controls, the blindness class, and the exhaustive
+        ground truth.
 
         Section 5 asks two different things of a calibration suite: that the
         instrument measures what it claims (the controls), and that it agrees
@@ -270,6 +288,12 @@ class CalibrationSuite:
         block on running against anything new, and this method does not lift it:
         it establishes the first while the second is outstanding, and the gate in
         ``gate()`` is unchanged by whether this passed.
+
+        An EXHAUSTIVE_GROUND_TRUTH case runs here for the same reason a control
+        does -- its expected value came from a computation in this repository, so
+        no citation gates it -- and for the same reason it does not lift the
+        block: agreeing with a number I computed is not agreeing with the
+        literature.
         """
         cases = tuple(c for c in self.cases if c.kind is not CaseKind.PUBLISHED_GROUND_TRUTH)
         return self._execute(cases, measure, label=f"{self.module_id}::controls")

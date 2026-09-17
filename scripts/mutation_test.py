@@ -629,6 +629,127 @@ CATALOGUE: tuple[Mutant, ...] = (
         ("tests/test_verify_anf.py",),
         "the truth table extracts two bits instead of one",
     ),
+    Mutant(
+        "VRFY-06",
+        "verify",
+        "verify/packed.py",
+        "        coefficients ^= (coefficients & low_mask(n, index)) << step",
+        "        coefficients ^= (coefficients & low_mask(n, index)) >> step",
+        ("tests/test_verify_packed.py",),
+        "the packed Moebius transform shifts the wrong way, so coefficients land "
+        "on the wrong monomials",
+    ),
+    Mutant(
+        "VRFY-07",
+        "verify",
+        "verify/packed.py",
+        "            nxt[weight + 1] |= mask << half",
+        "            nxt[weight] |= mask << half",
+        ("tests/test_verify_packed.py",),
+        "the weight masks stop distinguishing Hamming weights, so every degree "
+        "reads as the same value",
+    ),
+    Mutant(
+        "VRFY-08",
+        "verify",
+        "verify/packed.py",
+        "    if coefficients == 0:\n        return -1",
+        "    if coefficients == 0:\n        return 0",
+        ("tests/test_verify_packed.py",),
+        "the zero function is given degree 0 in the packed path, indistinguishable "
+        "from a non-zero constant. Note: replacing the guard with `if False` is an "
+        "equivalent mutant, because the loop then falls through to the same -1; "
+        "the value is what carries the behaviour, so the value is what is mutated",
+    ),
+    Mutant(
+        "VRFY-09",
+        "verify",
+        "verify/packed.py",
+        "    return [universe ^ low_mask(n, i) for i in range(n)]",
+        "    return [low_mask(n, i) for i in range(n)]",
+        ("tests/test_verify_packed.py", "tests/test_verify_keccak_columns.py"),
+        "the input columns are complemented, so every target is evaluated on the "
+        "bitwise complement of its input",
+    ),
+    Mutant(
+        "VRFY-10",
+        "verify",
+        "verify/keccak_columns.py",
+        "        d = [c[(x - 1) % 5] ^ c[(x + 1) % 5] for x in range(5)]",
+        "        d = [c[(x - 1) % 5] for x in range(5)]",
+        ("tests/test_verify_keccak_columns.py",),
+        "theta loses one of its two mixing terms, so the bitsliced permutation is "
+        "no longer Keccak",
+    ),
+    Mutant(
+        "VRFY-11",
+        "verify",
+        "verify/keccak_columns.py",
+        "                a[x + 5 * y] = b[x + 5 * y] ^ (\n                    (universe ^ b[(x + 1) % 5 + 5 * y]) & b[(x + 2) % 5 + 5 * y]\n                )",
+        "                a[x + 5 * y] = b[x + 5 * y] ^ (\n                    b[(x + 1) % 5 + 5 * y] & b[(x + 2) % 5 + 5 * y]\n                )",
+        ("tests/test_verify_keccak_columns.py",),
+        "chi drops its complement, which changes the permutation while leaving its "
+        "algebraic degree at 2 -- caught only by comparison against permute",
+    ),
+    Mutant(
+        "VRFY-12",
+        "verify",
+        "verify/keccak_columns.py",
+        "        if constants[rnd] & 1:\n            a[0] ^= universe",
+        "        if False:\n            a[0] ^= universe",
+        ("tests/test_verify_keccak_columns.py",),
+        "iota is skipped, so the round constants never enter the state",
+    ),
+    Mutant(
+        "EXHT-01",
+        "exhaustive",
+        "harness/calibration.py",
+        "        cases = tuple(c for c in self.cases if c.kind is not CaseKind.PUBLISHED_GROUND_TRUTH)",
+        "        cases = tuple(c for c in self.cases if c.kind is CaseKind.EXHAUSTIVE_GROUND_TRUTH)",
+        ("tests/test_exhaustive_truth.py", "tests/test_measure.py"),
+        "run_controls silently narrows to the exhaustive cases, so the controls "
+        "stop being run while the report still says satisfied",
+    ),
+    Mutant(
+        "EXHT-02",
+        "exhaustive",
+        "harness/calibration.py",
+        "        if not self.allow_missing_ground_truth:\n            required_kinds.insert(0, CaseKind.PUBLISHED_GROUND_TRUTH)",
+        "        if not self.allow_missing_ground_truth:\n            required_kinds.insert(0, CaseKind.EXHAUSTIVE_GROUND_TRUTH)",
+        ("tests/test_exhaustive_truth.py", "tests/test_harness_calibration_registry.py"),
+        "an exhaustive ground truth is accepted in place of a published anchor -- "
+        "the substitution E-09 exists to refuse",
+    ),
+    Mutant(
+        "EXHT-03",
+        "exhaustive",
+        "scripts/exhaust.py",
+        "        if mismatches:",
+        "        if False:",
+        ("tests/test_exhaustive_truth.py",),
+        "the exhaustive runner stops checking its bitsliced evaluation against "
+        "core.keccak.permute, so it could exhaust the wrong function",
+    ),
+    Mutant(
+        "EXHT-04",
+        "exhaustive",
+        "scripts/exhaust.py",
+        "        if exact >= KECCAK_WIDTH - 1:\n            break",
+        "        if exact >= 2:\n            break",
+        ("tests/test_exhaustive_truth.py",),
+        "the Keccak table stops at the first round instead of at saturation, so "
+        "later rounds are silently absent",
+    ),
+    Mutant(
+        "EXHT-05",
+        "exhaustive",
+        "scripts/exhaust.py",
+        '                "sound": bound.value >= exact,',
+        '                "sound": True,',
+        ("tests/test_exhaustive_truth.py",),
+        "soundness is recorded as true rather than computed, so an unsound bound "
+        "would be reported as sound",
+    ),
     # -- reports -------------------------------------------------------------
     Mutant(
         "RPRT-01",
