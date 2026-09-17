@@ -720,3 +720,93 @@ Also fixed in passing: `render_reports.py` imported only Module 1's spec, so the
 registry report said `modules=1` while two modules were registered. It now
 imports both and reports `modules=2`. That was a reporting gap introduced when
 Module 4 was added in Stage D and not caught because nothing asserted the count.
+
+---
+
+## D-034 — a second exhaustive path, with a higher guard, rather than a raised guard
+
+`verify/anf.py` stores one Python integer per truth-table entry and refuses above
+`MAX_EXHAUSTIVE_VARS = 24`. Keccak-f[25] has 25 free bits. Raising that constant
+would not have worked: 2^25 boxed integers per output bit, over 25 output bits,
+is on the order of 7 GB.
+
+Chosen: a second file, `verify/packed.py`, holding one bit per input in a single
+integer, with its own guard `MAX_PACKED_VARS = 26`. The same mathematics — a
+Moebius transform and a maximum Hamming weight — carried out on 4 MB integers
+instead of Python lists. The guard's value is derived from what the computation
+holds live, not picked: a column is 2^n bits, a full evaluation needs on the
+order of 60 live columns plus n+1 weight masks, so n = 26 is about 700 MB.
+
+Rejected: raising `anf.py`'s guard and rewriting it to be packed. `anf.py` is the
+reference path that the module is calibrated against, and rewriting it for speed
+would mean the reference and the thing under test were both new. The old path is
+untouched, and `tests/test_verify_packed.py` pins the new one against it on
+eleven targets, per output bit rather than on the maximum.
+
+The Keccak evaluation needed its own file for the same reason. `verify/keccak_columns.py`
+writes the step wiring out a second time rather than importing `permute`, so it
+is a second reading of the specification; the rho offsets and iota constants are
+imported, because those are already anchored by `core.keccak.sha3_256` matching
+`hashlib.sha3_256`, and re-deriving them would add a derivation to check rather
+than a check. `tests/test_verify_keccak_columns.py` asserts the two agree at
+every input of a fixed sample, at five round counts, and that zero rounds is the
+identity.
+
+## D-035 — an exhaustive ground truth is not a published anchor, and is not accepted as one
+
+`CaseKind.EXHAUSTIVE_GROUND_TRUTH` is a new calibration case kind: the exact
+value over the target's complete input space, computed in this repository.
+Fifteen such cases now run for Module 1 and all fifteen pass.
+
+The question this decision settles is whether such a case may stand in for the
+`PUBLISHED_GROUND_TRUTH` case that section 5 requires, which would unblock
+Module 1's calibration gate without the two citations.
+
+Chosen: no, and the refusal is enforced rather than documented. The two kinds
+answer different questions. A published anchor asks whether this repository
+agrees with an independent party. An exhaustive computation asks whether the
+instrument agrees with the truth about the function *as this repository
+implements it* — and cannot detect an error shared by the instrument and the
+target implementation, which is the failure the published anchor exists to
+catch. `CalibrationSuite.__post_init__` still requires a published case, mutant
+`EXHT-02` pins that by swapping the requirement for the exhaustive kind, and
+`tests/test_exhaustive_truth.py` asserts the gate blocks on exactly the same two
+citations, with the same reasons, as before these cases existed.
+
+What the cases are worth despite that. They are the first falsifiable check on
+the symbolic propagation rules that does not depend on a citation: the exact
+degree is computed without reusing any part of the bounding argument, so a rule
+that undercharges a non-linear step produces a bound below the truth and fails.
+The comparator is `AT_LEAST` against the exact degree — soundness — and not
+equality, because a sound bound is permitted to be loose, and a case demanding
+gap = 0 would assert a result rather than check one.
+
+They run under `run_controls`, which already excludes only the published cases,
+so no gate logic changed to let them execute.
+
+Whether the gate should ever recognise such a substitution is not mine to
+decide: ESCALATIONS.md E-09.
+
+## D-036 — two identified equivalent mutants, and two real gaps they exposed
+
+`VRFY-08` was first written as replacing the zero-coefficient guard in
+`degree_of_column` with `if False`. It survived, and it survived because it is
+semantically equivalent: with the early return gone, the weight loop falls
+through to the same `return -1`. The redundancy is real and the guard only
+avoids building the weight masks, so the mutant was changed to alter the returned
+*value* — the part that carries behaviour — and is killed. This is the third
+equivalent mutant identified in this repository rather than treated as a test
+gap; the pattern each time has been a guard whose removal is covered by a later
+path.
+
+`EXHT-03` and `EXHT-05` survived for the opposite reason, and were real gaps. Both
+mutate a check that only fires when something is wrong: the cross-check of the
+bitsliced evaluation against `core.keccak.permute`, and the computation of the
+recorded `sound` field. Nothing was wrong, so disabling either was invisible.
+Fixed by making something wrong on purpose — the runner is imported in-process,
+its evaluation is replaced with a function that returns the wrong answer, and its
+bound is replaced with a deliberately unsound one. Both mutants are now killed.
+
+The general point, worth keeping: a guard with no negative test is unexamined
+code that happens never to trigger, and a mutation run is how that becomes
+visible.

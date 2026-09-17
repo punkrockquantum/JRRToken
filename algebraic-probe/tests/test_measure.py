@@ -229,7 +229,19 @@ def test_the_control_calibration_passes_through_the_module_path() -> None:
 
     report = SPEC.suite.run_controls(SPEC.measure)
     assert report.satisfied, report.render()
-    assert len(report.outcomes) == 5
+    # Every case except the published ground truth, which has no value to
+    # compare against until it is transcribed. Stated as the complement rather
+    # than as a count, so adding a control cannot leave this test asserting
+    # something weaker than it means.
+    from harness.calibration import CaseKind
+
+    expected_ids = {
+        case.case_id
+        for case in SPEC.suite.cases
+        if case.kind is not CaseKind.PUBLISHED_GROUND_TRUTH
+    }
+    assert {o.case_id for o in report.outcomes} == expected_ids
+    assert expected_ids, "run_controls with nothing to run would pass vacuously"
 
 
 def test_the_published_ground_truth_gate_is_not_lifted_by_running_controls() -> None:

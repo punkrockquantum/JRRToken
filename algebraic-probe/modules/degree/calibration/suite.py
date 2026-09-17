@@ -9,6 +9,11 @@ Case kinds:
 
   published-ground-truth  the module must recover a value stated in the
                           literature before it is trusted on anything new
+  exhaustive-ground-truth the exact degree over the target's whole input space,
+                          computed here. Checks the certified bound for
+                          soundness -- a bound below the exact degree is wrong --
+                          and measures its tightness. Not a published anchor and
+                          not accepted as one (ESCALATIONS.md E-09).
   positive-control        g(x) = Ax over GF(2), A random invertible: degree 1,
                           fully reachable, trivially invertible. The
                           counterexample that exposed the prior instrument's
@@ -36,6 +41,14 @@ from harness.calibration import (
 from tiers.provenance import Provenance
 
 from ..citations import CITATIONS
+from .exhaustive_truth import (
+    COMPUTATION_ID_KECCAK,
+    COMPUTATION_ID_MIMC,
+    KECCAK_EXACT,
+    MIMC_EXACT,
+    MIMC_N,
+    MIMC_SEED,
+)
 
 MODULE_ID = "modules.degree"
 
@@ -116,6 +129,105 @@ def _cases() -> tuple[CalibrationCase, ...]:
                     "field": "GF(2^9)",
                     "variables": 9,
                     "constants": "c_0 = 0; c_i = SHA-256(domain || seed || n || i) mod 2^9",
+                },
+            )
+        )
+
+    # -- exhaustive ground truth ------------------------------------------
+    #
+    # The bound is compared against the exact degree with AT_MOST reversed into
+    # the module's favour: the case asserts the *exact degree* is at most the
+    # bound, which is soundness. An unsound propagation rule -- one that charges
+    # a non-linear step as linear, or loses a product term -- produces a bound
+    # below the truth and fails here. Tightness is reported by scripts/exhaust.py
+    # as the gap; it is not asserted, because a sound bound is permitted to be
+    # loose and a case that demanded gap = 0 would be asserting a result rather
+    # than checking one.
+
+    for row in KECCAK_EXACT:
+        rounds = int(row["rounds"])  # type: ignore[arg-type]
+        exact = int(row["exact_degree"])  # type: ignore[arg-type]
+        cases.append(
+            CalibrationCase(
+                case_id=f"CAL-M1-EXH-KECCAK-R{rounds}",
+                kind=CaseKind.EXHAUSTIVE_GROUND_TRUTH,
+                target_id=f"keccak-f[25] rounds={rounds}",
+                target_factory=lambda r=rounds: KeccakF.create(lane_log2=0, n_rounds=r),
+                quantity="algebraic_degree_upper_bound",
+                comparator=Comparator.AT_LEAST,
+                expected=exact,
+                expectation_provenance=Provenance(
+                    computation_id=COMPUTATION_ID_KECCAK,
+                    notes=(
+                        f"exact degree {exact} of {rounds}-round Keccak-f[25], by "
+                        "full-domain Moebius transform over all 2^25 inputs "
+                        "(verify/packed.py, evaluated through verify/keccak_columns.py "
+                        "and cross-checked against core.keccak.permute). Regenerated and "
+                        "asserted byte-equal by tests/test_exhaustive_truth.py"
+                    ),
+                ),
+                assertion=(
+                    f"the module's certified upper bound for {rounds}-round Keccak-f[25] "
+                    f"is at least the exact degree {exact} measured over the complete "
+                    "input space -- that is, the bound is sound"
+                ),
+                rationale=(
+                    "the only falsifiable check on the symbolic propagation rules that "
+                    "does not depend on a citation: the exact degree is computed without "
+                    "reusing any part of the bounding argument, so a propagation rule "
+                    "that undercharges a non-linear step is caught here. It is not a "
+                    "published anchor and does not substitute for one"
+                ),
+                parameters={
+                    "rounds": rounds,
+                    "width": 25,
+                    "variables": 25,
+                    "exact_degree": exact,
+                    "space_exhausted": "2^25",
+                },
+            )
+        )
+
+    for row in MIMC_EXACT:
+        rounds = int(row["rounds"])  # type: ignore[arg-type]
+        exact = int(row["exact_degree"])  # type: ignore[arg-type]
+        cases.append(
+            CalibrationCase(
+                case_id=f"CAL-M1-EXH-MIMC-R{rounds}",
+                kind=CaseKind.EXHAUSTIVE_GROUND_TRUTH,
+                target_id=f"mimc-gf2n n={MIMC_N} rounds={rounds}",
+                target_factory=lambda r=rounds: MiMC.create(
+                    n=MIMC_N, n_rounds=r, seed=MIMC_SEED
+                ),
+                quantity="algebraic_degree_upper_bound_derived",
+                comparator=Comparator.AT_LEAST,
+                expected=exact,
+                expectation_provenance=Provenance(
+                    computation_id=COMPUTATION_ID_MIMC,
+                    notes=(
+                        f"exact degree {exact} of {rounds}-round MiMC over GF(2^{MIMC_N}), "
+                        f"by exhaustive ANF over all 2^{MIMC_N} inputs. Also computed by "
+                        "the independent path in verify/anf.py"
+                    ),
+                ),
+                assertion=(
+                    f"the derived exponent-support bound for {rounds}-round MiMC over "
+                    f"GF(2^{MIMC_N}) is at least the exact degree {exact} measured over "
+                    "the complete input space"
+                ),
+                rationale=(
+                    "the derived bound of Stage A is tighter than doubling, and a bound "
+                    "that has been tightened is a bound that can have been tightened too "
+                    "far. This case is where that is testable rather than argued: the "
+                    "exact degree is computed without the derivation"
+                ),
+                parameters={
+                    "rounds": rounds,
+                    "field": f"GF(2^{MIMC_N})",
+                    "variables": MIMC_N,
+                    "seed": MIMC_SEED,
+                    "exact_degree": exact,
+                    "space_exhausted": f"2^{MIMC_N}",
                 },
             )
         )
