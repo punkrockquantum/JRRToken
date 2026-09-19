@@ -25,8 +25,9 @@ with every deviation reported; provenance chain verified.
 | C — blockers | C1, C2 confirmed environmental; C3 has no anchor. All escalated, none worked around |
 | D — M2–M6 | M4 built and calibration-blocked; M2/M3/M5/M6 blocked on E-03 |
 | E — synthesis | 0 candidates eligible, 0 promoted; 1 of 3 runs compliant; chains unbroken |
+| F — exhaustion | Keccak-f[25] and MiMC/GF(2^9) exhausted; bound **sound at every round**, tight at 1–4, gap 2 at round 5. No gate changed, nothing promoted |
 
-Per-stage detail in `checkpoints/`. Operator items in `ESCALATIONS.md` (7).
+Per-stage detail in `checkpoints/`. Operator items in `ESCALATIONS.md` (10).
 
 ### Stage A — the divergence was a loose bound, not a defect
 
@@ -189,6 +190,43 @@ produces rather than a claim it repeats. It is also exactly why the ground-truth
 citations matter: the literature's bound is tighter than mine, and until those
 values are transcribed I cannot show mine is competitive.
 
+### Measured tightness — the exhaustive arm
+
+Added after the run, on the instruction to convert the escalations by
+brute-force exhaustion. Keccak-f[25] has 25 free bits, which is exhaustible: the
+truth table is held one bit per input in a single integer, so the Möbius
+transform is 25 mask-shift-XOR operations over the whole space at once
+(`verify/packed.py`, `verify/keccak_columns.py`, D-034). Tier E, ~25 s,
+`python scripts/exhaust.py`.
+
+| Rounds | Exact degree | Tier P bound | Gap |
+|---|---|---|---|
+| 1 | 2 | 2 | 0 |
+| 2 | 4 | 4 | 0 |
+| 3 | 8 | 8 | 0 |
+| 4 | 16 | 16 | 0 |
+| 5 | **22** | 24 | **2** |
+| 6 | 24 | 24 | 0 — saturated at width−1 |
+
+All 25 output lanes carry the same degree at every round. For MiMC over GF(2^9),
+the mean bound gap against exact truth is 1.333 for naive doubling and 0.444 for
+the derived support bound, and both are sound at every round.
+
+Two things this establishes, neither requiring a citation. The soundness
+property above was previously checked only where `verify/anf.py` could reach
+(≤ 24 variables, and not Keccak-f[25] at all); it now holds against exact truth
+on a real primitive at every round measured. And the bound is **exactly tight at
+rounds 1–4, loose by 2 at round 5, tight again at 6** — the first measurement of
+this instrument's tightness rather than an argument about it.
+
+This did **not** change any gate. The published-ground-truth cases remain
+`PENDING_PRIMARY_SOURCE`, `python scripts/execute.py` still refuses Keccak-f[25]
+and MiMC at `T02:target-ground-truth-verified`, and nothing was promoted.
+Substituting a value computed here for a value attributed to a paper is what
+Class 2 forbids; the refusal is enforced by `CaseKind.EXHAUSTIVE_GROUND_TRUTH`
+not satisfying the anchor requirement, pinned by mutant `EXHT-02` (D-035). The
+open question is E-09.
+
 ---
 
 ## 4. What exists
@@ -339,11 +377,22 @@ cache, so the harness now purges `__pycache__` on both sides of each mutation.
    precondition and names one for M1, M3, M5 only.
 4. **Confirm or overrule** the Tier S closure (D-010) and the promotion
    threshold's dependency on an unverified citation (D-013).
+5. **Decide E-09** — whether an exhaustive in-repo ground truth may ever stand in
+   for a published anchor. Three options, recommendation against the general
+   form. Nothing turns on it unless you want Keccak-f[25]'s gate opened without
+   item 2.
 
 **Build**
 
-5. Modules 2–6.
-6. A `d_Fp` metric for the prime-field targets — see below.
+6. Modules 2–6.
+7. A `d_Fp` metric for the prime-field targets — see below.
+
+**What exhaustion could and could not reach.** On the instruction to convert
+these by brute force: it converts item 2 partially (both targets are now measured
+exactly in-repo, though the citations remain untranscribed) and touches nothing
+else. Item 1 is 2^512 and out of reach of exhaustion, of sampling, and of both
+together; items 3, 4, 5 and 7 are decisions or definitions rather than
+computations. `ESCALATIONS.md` E-10 carries the per-item arithmetic.
 
 ---
 
@@ -367,15 +416,19 @@ semantics.
 ```bash
 git clone -b algo-games https://github.com/punkrockquantum/JRRToken.git
 cd JRRToken
-pytest -q                                    # 425 passed
+pytest -q -m "not slow"                      # 541 passed, 12 deselected
 python scripts/ci_checks.py                  # checks=5 failed=0
-python scripts/mutation_test.py              # mutants=67 survivors=0
+python scripts/mutation_test.py              # mutants=90 survivors=0
 python scripts/readiness_report.py           # per-target go/no-go
 python scripts/execute.py                    # run what the gates authorise
+python scripts/exhaust.py                    # exhaustive exact degree, ~25s
 python -m modules.degree.calibration         # what Module 1 asserts
 python modules/degree/prereg/derive_thresholds.py
 python scripts/render_reports.py
 ```
+
+`pytest -q` runs the slow lane too, which includes the mutation suite and the
+regeneration check on `exhaustive_truth.py`; budget several minutes.
 
 Full history is required: the runner-precedes-prereg check is a claim about git
 ancestry, so `fetch-depth: 0` is load-bearing in CI.
@@ -399,3 +452,11 @@ untranscribed literature values. M2–M6 have no package and remain NO-GO.
 Nothing has been run against SHA-256. The ten defects — nine of them found after
 the suite was green and every mutant had died — are the strongest evidence
 available that the enforcement here is real rather than documentary.
+
+The exhaustive arm added one property the instrument did not previously have
+evidence for: its certified bound is sound at every round of a real primitive,
+measured against exact truth over the complete input space rather than argued
+from the propagation rules. It added no promotions, opened no gate, and left
+every escalation but one exactly where it was. That combination is the result,
+and it is reported as such because the run was instructed to terminate on
+completion rather than on success.
