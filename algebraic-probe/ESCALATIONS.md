@@ -69,6 +69,21 @@ SHA-256's message schedule); M3, M5, M6 calibration; the SHA-256 arm of M4.
 with its FIPS 180-4 validation committed — a different instruction from the one
 given, so I have not taken it.
 
+**Checked and ruled out, 2026-09-19.** This repository carries a branch named
+`claude/sha256-cryptanalysis-testbed-zda2ab`, which the name suggests is the
+missing testbed. It is not. Its 95 files are the JRRToken AI-infrastructure
+simulator (React/TypeScript); the only paths matching `sha` are `sharepoint/`
+bundles, and there is no cryptanalysis code, no SHA-256 implementation and no
+FIPS vectors on it. Recorded so the check is not repeated.
+
+**What a fresh implementation would and would not need.** Unlike the two
+citations in E-04, a SHA-256 implementation needs no unreachable source: it is
+fully specified by FIPS 180-4 and can be validated bit-exactly against
+`hashlib.sha256`, which is in the standard library — the same anchor that already
+pins `core/keccak.py` against `hashlib.sha3_256`. So the blocker here is an
+authorisation, not an unavailable input. The brief said vendor it and do not
+rewrite it; that instruction stands until you change it.
+
 ---
 
 ## E-04 — C2, published ground truth cannot be transcribed
