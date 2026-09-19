@@ -1,4 +1,4 @@
-commit=10eb6fe2277cf9a8efba39790cba19567a2ef19a
+commit=9d360afcd3bc18093a594ad8b5a97f7f819aaff4
 
 E1 promotion gate
   module=modules.degree calibration_blocked=True eligible_for_promotion=False
@@ -10,18 +10,19 @@ E1 promotion gate
   note=no module is calibration-clear, so no result reached criterion 1
 
 E4 compliance audit
-  runs_audited=3
+  runs_audited=4
   run=PREREG-M1.54c56266d5964c85b519ab4d5b9b30db.jsonl chain_valid=True prereg_digest_matches=True deviations=1 compliant=False
     deviation field=working_tree_clean prereg=True as_run=False recomputed_under_prereg=embedded commit does not describe the code that ran
   run=PREREG-M1.668f043aada2464abf6b6346706a56d8.jsonl chain_valid=True prereg_digest_matches=True deviations=1 compliant=False
     deviation field=working_tree_clean prereg=True as_run=False recomputed_under_prereg=embedded commit does not describe the code that ran
+  run=PREREG-M1.8227c1ae69da41fcb2bf4f7771953f9f.jsonl chain_valid=True prereg_digest_matches=True deviations=0 compliant=True
   run=PREREG-M1.d978251dd021453da8b5746124349121.jsonl chain_valid=True prereg_digest_matches=True deviations=0 compliant=True
 
 E5 provenance verification
   prereg=PREREG-M1 introduced=d84c0968324d runner=84ca87e77da6 runner_precedes=True
   prereg=PREREG-M4 introduced=1fc7af1a45c0 runner=84ca87e77da6 runner_precedes=True
   runner_introducing_commit=84ca87e77da6
-  logs_verified=3 chains_unbroken=True
+  logs_verified=4 chains_unbroken=True
   byte_identical_pairs=0
-  index_entries=2
+  index_entries=3
   run_log_files_committed=5
