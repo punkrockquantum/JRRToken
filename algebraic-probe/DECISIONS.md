@@ -810,3 +810,76 @@ bound is replaced with a deliberately unsound one. Both mutants are now killed.
 The general point, worth keeping: a guard with no negative test is unexamined
 code that happens never to trigger, and a mutation run is how that becomes
 visible.
+
+---
+
+## D-037 — the witness probe is calibrated against known truth, and D-010 is not reopened by it
+
+The exhaustive arm (D-034) produced something this repository did not previously
+have: targets whose exact algebraic degree is known over their complete input
+space. That makes the sampled witness probe measurable against truth rather than
+against its own model. `scripts/witness_calibration.py`, computation
+`M1-WITNESS-CAL-001`, 52 cells, 50 seeds each.
+
+**The deductive arm.** Degree exactly d means every derivative of order d+1
+vanishes identically, so at k > d the probe must never witness, for any seed.
+15 cells sit above the exact degree, 750 draws in total, and the witness count is
+0 in every one. This is falsifiable — a single witness there would contradict a
+theorem, not represent an unlucky draw — and it is the first check of the Tier S
+machinery against ground truth.
+
+**The sampled arm, and what it shows.** PREREG-M1 section 9 models the per-draw
+witness probability by its Schwartz-Zippel worst case, 2^-k. Measured, at
+k equal to the exact degree:
+
+| Target | rate | worst case | ratio |
+|---|---|---|---|
+| linear-map-gf2 n=13 | 1.00 | 0.5 | 2× |
+| power-map d=7 | 1.00 | 0.125 | 8× |
+| power-map d=31 | 1.00 | 0.03125 | 32× |
+| power-map d=4095 | 0.62 | 0.000244 | 2540× |
+| keccak-f[25] r=2 | 1.00 | 0.0625 | 16× |
+| keccak-f[25] r=3 | 1.00 | 0.00390625 | 256× |
+
+In all 37 cells at or below the exact degree, the Clopper-Pearson lower bound
+exceeds the worst case.
+
+**Chosen: change nothing.** D-010 closes the Tier S promotion path above probe
+dimension 2, and it stays closed. Three reasons, in order of how much they
+matter:
+
+1. These rates were measured on targets whose degree I already knew. The
+   promotion case is a target whose degree is unknown — that is the entire reason
+   a probe is needed — and a rate measured under knowledge is not evidence about
+   a rate measured without it.
+2. The targets here are structured: power maps and Keccak at one to three
+   rounds, all far from saturation. The regime D-010 was drawn for is the
+   opposite one, where the top-degree part is sparse and the probe is at its
+   weakest. Nothing measured here samples that regime.
+3. Revising a pre-registered threshold after seeing data that favours revising it
+   is the prohibited act, whatever the margin. The completion brief's route for a
+   changed analysis is to pre-register it first and evaluate it on cells not yet
+   examined.
+
+**Rejected: treating the measured rate as the new model.** A bound has to hold
+for the function being measured, not for the functions that were convenient to
+measure. 2^-k is loose here and remains the only value that is *safe* here.
+
+Recorded as evidence under E-01, which is the operator's decision, not mine. What
+the measurement licenses is a better-informed answer to that escalation; it does
+not license the answer.
+
+**One methodological note.** The gap is wide enough that the worst-case model is
+plausibly loose in general and not merely on these targets. Establishing that
+would need its own derivation and its own pre-registration, and a tighter model
+would need to hold for the sparse top-form case rather than the dense one. That
+is unbuilt, and is named here rather than half-done.
+
+**Statistics added.** `stats.clopper_pearson_interval` and
+`stats.binomial_tail_at_most`, exact and standard-library only (D-004), solved by
+bisection on the binomial tail rather than an inverse incomplete beta. The
+existing closed form `zero_witness_upper_bound` covered only zero successes;
+reporting a non-zero rate without an interval would be the single point section 3
+forbids. Pinned against textbook values, against the closed form at zero
+successes, and by the identity that relabelling success and failure mirrors the
+interval.

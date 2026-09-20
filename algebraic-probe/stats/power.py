@@ -69,6 +69,73 @@ def zero_witness_upper_bound(n_draws: int, confidence: float = 0.95) -> float:
     return 1.0 - (1.0 - confidence) ** (1.0 / n_draws)
 
 
+def binomial_tail_at_most(successes: int, n_draws: int, p: float) -> float:
+    """P(X <= successes) for X ~ Binomial(n, p), summed exactly.
+
+    ``math.comb`` is exact integer arithmetic, so the only error here is the
+    floating-point powers -- there is no normal approximation and no continuity
+    correction to argue about.
+    """
+    if not 0 <= successes <= n_draws:
+        raise ValueError("successes must be in [0, n_draws]")
+    if not 0.0 <= p <= 1.0:
+        raise ValueError("p must be in [0,1]")
+    return math.fsum(
+        math.comb(n_draws, k) * p**k * (1.0 - p) ** (n_draws - k)
+        for k in range(successes + 1)
+    )
+
+
+def clopper_pearson_interval(
+    successes: int, n_draws: int, confidence: float = 0.95
+) -> tuple[float, float]:
+    """Exact two-sided Clopper-Pearson interval for a binomial proportion.
+
+    ``zero_witness_upper_bound`` covers the one case a Tier S null needs -- zero
+    successes -- in closed form. This covers the rest, which is what reporting an
+    observed witness *rate* requires: a rate quoted without an interval is the
+    single point section 3 forbids.
+
+    Solved by bisection on the exact binomial tail rather than through an inverse
+    incomplete beta, so the whole statistical layer stays standard-library only
+    (D-004). The bounds are the standard ones: the lower is the largest p making
+    P(X >= successes) no more than (1-confidence)/2, the upper the smallest p
+    making P(X <= successes) no more than (1-confidence)/2.
+    """
+    if n_draws <= 0:
+        raise ValueError("n_draws must be positive")
+    if not 0 <= successes <= n_draws:
+        raise ValueError("successes must be in [0, n_draws]")
+    if not 0.0 < confidence < 1.0:
+        raise ValueError("confidence must be in (0,1)")
+
+    tail = (1.0 - confidence) / 2.0
+
+    def bisect(predicate) -> float:
+        lo, hi = 0.0, 1.0
+        for _ in range(200):
+            mid = (lo + hi) / 2.0
+            if predicate(mid):
+                lo = mid
+            else:
+                hi = mid
+        return (lo + hi) / 2.0
+
+    if successes == 0:
+        lower = 0.0
+    else:
+        # P(X >= s | p) = 1 - P(X <= s-1 | p), increasing in p.
+        lower = bisect(lambda p: 1.0 - binomial_tail_at_most(successes - 1, n_draws, p) <= tail)
+
+    if successes == n_draws:
+        upper = 1.0
+    else:
+        # P(X <= s | p) is decreasing in p, so bisect on its complement.
+        upper = bisect(lambda p: binomial_tail_at_most(successes, n_draws, p) > tail)
+
+    return lower, upper
+
+
 # ---------------------------------------------------------------------------
 # Normal-approximation power for a mean shift (the generic Tier S cell)
 # ---------------------------------------------------------------------------

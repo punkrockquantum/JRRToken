@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 from harness.registry import REGISTRY  # noqa: E402
 from modules.degree import spec as degree_spec  # noqa: E402  (registers the module)
 from modules.hod import spec as hod_spec  # noqa: E402  (registers the module)
-from modules.degree.calibration import exhaustive_truth  # noqa: E402
+from modules.degree.calibration import exhaustive_truth, witness_truth  # noqa: E402
 from modules.degree.calibration.suite import SUITE  # noqa: E402
 from modules.degree.prereg.derive_thresholds import render_block  # noqa: E402
 from provenance import gitinfo  # noqa: E402
@@ -94,11 +94,54 @@ def exhaustive_report() -> str:
     return "\n".join(lines) + "\n"
 
 
+def witness_report() -> str:
+    """The witness-probe calibration, rendered from the committed cells.
+
+    Two arms with different epistemic force, so the report labels each rather
+    than presenting one table of numbers: the cells above the exact degree are a
+    deductive check, the cells at or below it are a sampled rate.
+    """
+    cells = [c for e in witness_truth.WITNESS_CELLS for c in e["cells"]]
+    above = [c for c in cells if not c["witness_possible"]]
+    below = [c for c in cells if c["witness_possible"]]
+    lines = [
+        f"commit={gitinfo.head_commit()}",
+        f"computation_id={witness_truth.COMPUTATION_ID} "
+        f"seeds_per_cell={witness_truth.SEEDS_PER_CELL} "
+        f"seed_base={witness_truth.SEED_BASE} confidence={witness_truth.CONFIDENCE}",
+        f"tier_P_cells={len(above)} draws={len(above) * witness_truth.SEEDS_PER_CELL} "
+        f"witnesses={sum(int(c['witnessed']) for c in above)} "
+        f"soundness_violations={len(witness_truth.soundness_violations())}",
+        f"tier_S_cells={len(below)} "
+        f"cells_whose_interval_excludes_the_worst_case_from_below="
+        f"{sum(1 for c in below if c['ci_low'] > c['worst_case_p'])}",
+    ]
+    for entry in witness_truth.WITNESS_CELLS:
+        lines.append(
+            f"target={entry['target']} n={entry['n']} exact_degree={entry['exact_degree']}"
+        )
+        for cell in entry["cells"]:
+            lines.append("  " + " ".join(f"{k}={v}" for k, v in cell.items()))
+        for skip in entry["skipped"]:
+            lines.append(
+                f"  k={skip['k']} skipped=cost "
+                f"evaluations_per_seed={skip['cost_evaluations_per_seed']} "
+                f"guard=MAX_PROBE_DIM={witness_truth.MAX_PROBE_DIM}"
+            )
+    lines.append(
+        "scope=rates are measured on targets whose degree is known; the promotion "
+        "case is a target whose degree is unknown, so these do not bear on it. "
+        "D-010 is unchanged by this computation. escalation=E-01"
+    )
+    return "\n".join(lines) + "\n"
+
+
 REPORTS = {
     "module-registry.txt": registry_report,
     "M1-prereg.txt": prereg_report,
     "M1-calibration-manifest.txt": calibration_report,
     "M1-exhaustive.txt": exhaustive_report,
+    "M1-witness.txt": witness_report,
 }
 
 

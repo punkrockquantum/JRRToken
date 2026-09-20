@@ -750,6 +750,84 @@ CATALOGUE: tuple[Mutant, ...] = (
         "soundness is recorded as true rather than computed, so an unsound bound "
         "would be reported as sound",
     ),
+    Mutant(
+        "WTNS-01",
+        "witness",
+        "scripts/witness_calibration.py",
+        "    vanishes_deductively = k > exact",
+        "    vanishes_deductively = k > exact + 1",
+        ("tests/test_witness_calibration.py",),
+        "the deductive vanishing boundary moves up by one, so a cell where the "
+        "probe legitimately witnesses is classified as a soundness violation and "
+        "one where it must not is classified as permitted",
+    ),
+    Mutant(
+        "WTNS-02",
+        "witness",
+        "scripts/witness_calibration.py",
+        '        "soundness_violated": bool(vanishes_deductively and witnessed > 0),',
+        '        "soundness_violated": False,',
+        ("tests/test_witness_calibration.py",),
+        "the soundness flag becomes a constant, so a probe witnessing above the "
+        "exact degree is recorded as clean",
+    ),
+    Mutant(
+        "WTNS-03",
+        "witness",
+        "scripts/witness_calibration.py",
+        "        if outcome.witnessed:\n            witnessed += 1",
+        "        if outcome.witnessed:\n            witnessed += 0",
+        ("tests/test_witness_calibration.py",),
+        "witnesses are never counted, so every rate reads zero and the deductive "
+        "arm passes vacuously",
+    ),
+    Mutant(
+        "WTNS-04",
+        "witness",
+        "scripts/witness_calibration.py",
+        "    return 1 if violations else 0",
+        "    return 0",
+        ("tests/test_witness_calibration.py",),
+        "a soundness violation no longer fails the command",
+    ),
+    Mutant(
+        "WTNS-05",
+        "witness",
+        "scripts/witness_calibration.py",
+        "        if k > MAX_PROBE_DIM:\n            skipped.append({\"k\": k, \"cost_evaluations_per_seed\": 2**k})\n            continue",
+        "        if k > MAX_PROBE_DIM:\n            continue",
+        ("tests/test_witness_calibration.py",),
+        "cells too costly to run disappear silently instead of being reported "
+        "with their cost",
+    ),
+    Mutant(
+        "STAT-CP-01",
+        "witness",
+        "stats/power.py",
+        "    tail = (1.0 - confidence) / 2.0",
+        "    tail = 1.0 - confidence",
+        ("tests/test_stats_clopper_pearson.py",),
+        "the two-sided interval puts the whole tail mass in each side, so every "
+        "interval is too narrow",
+    ),
+    Mutant(
+        "STAT-CP-02",
+        "witness",
+        "stats/power.py",
+        "        lower = bisect(lambda p: 1.0 - binomial_tail_at_most(successes - 1, n_draws, p) <= tail)",
+        "        lower = bisect(lambda p: 1.0 - binomial_tail_at_most(successes, n_draws, p) <= tail)",
+        ("tests/test_stats_clopper_pearson.py",),
+        "the lower bound is solved with an off-by-one success count",
+    ),
+    Mutant(
+        "STAT-CP-03",
+        "witness",
+        "stats/power.py",
+        "        math.comb(n_draws, k) * p**k * (1.0 - p) ** (n_draws - k)\n        for k in range(successes + 1)",
+        "        math.comb(n_draws, k) * p**k * (1.0 - p) ** (n_draws - k)\n        for k in range(successes)",
+        ("tests/test_stats_clopper_pearson.py",),
+        "the binomial tail omits its last term, so it is no longer a CDF",
+    ),
     # -- reports -------------------------------------------------------------
     Mutant(
         "RPRT-01",
