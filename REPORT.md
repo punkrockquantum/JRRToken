@@ -26,6 +26,7 @@ with every deviation reported; provenance chain verified.
 | D — M2–M6 | M4 built and calibration-blocked; M2/M3/M5/M6 blocked on E-03 |
 | E — synthesis | 0 candidates eligible, 0 promoted; 1 of 3 runs compliant; chains unbroken |
 | F — exhaustion | Keccak-f[25] and MiMC/GF(2^9) exhausted; bound **sound at every round**, tight at 1–4, gap 2 at round 5. No gate changed, nothing promoted |
+| G — witness | Probe calibrated against known truth: **0 witnesses in 750 draws** above the exact degree; measured rate exceeds the worst-case model by 2×–2540×. D-010 not reopened |
 
 Per-stage detail in `checkpoints/`. Operator items in `ESCALATIONS.md` (10).
 
@@ -219,9 +220,44 @@ on a real primitive at every round measured. And the bound is **exactly tight at
 rounds 1–4, loose by 2 at round 5, tight again at 6** — the first measurement of
 this instrument's tightness rather than an argument about it.
 
-This did **not** change any gate. The published-ground-truth cases remain
-`PENDING_PRIMARY_SOURCE`, `python scripts/execute.py` still refuses Keccak-f[25]
-and MiMC at `T02:target-ground-truth-verified`, and nothing was promoted.
+### Measured probe behaviour — the witness arm
+
+The exhaustive arm made a second thing possible: targets of *known* exact degree,
+against which the sampled probe can be calibrated. `scripts/witness_calibration.py`,
+52 cells at the pre-registered 50 seeds.
+
+**The deductive half.** Degree exactly *d* means every derivative of order *d+1*
+vanishes identically, so above *d* the probe must never witness. 15 cells, 750
+draws, **0 witnesses**. First check of the Tier S machinery against ground truth,
+and it is falsifiable — a single witness there contradicts a theorem.
+
+**The sampled half.** §9 models the per-draw witness probability by its
+Schwartz–Zippel worst case, 2^−k. Measured at *k* equal to the exact degree:
+
+| Target | rate | worst case | ratio |
+|---|---|---|---|
+| linear-map-gf2 n=13 | 1.00 | 0.5 | 2× |
+| power-map-gf2n d=31 | 1.00 | 0.03125 | 32× |
+| power-map-gf2n d=4095 | 0.62 | 0.000244 | 2540× |
+| keccak-f[25] r=3 | 1.00 | 0.00390625 | 256× |
+
+In all 37 cells at or below the degree, the Clopper–Pearson lower bound excludes
+the worst case.
+
+**D-010 stays closed regardless.** These rates were measured on targets whose
+degree was already known; promotion concerns a target whose degree is unknown,
+which is the whole reason a probe exists. The targets are also far from
+saturation, while the closure was drawn for the sparse top-form regime where the
+probe is weakest. And revising a pre-registered threshold on seeing data that
+favours revising it is the prohibited act, whatever the margin. Recorded as
+evidence under E-01 — it licenses a better-informed answer, not the answer
+(D-037).
+
+### Neither arm changed a gate
+
+The published-ground-truth cases remain `PENDING_PRIMARY_SOURCE`,
+`python scripts/execute.py` still refuses Keccak-f[25] and MiMC at
+`T02:target-ground-truth-verified`, and nothing was promoted.
 Substituting a value computed here for a value attributed to a paper is what
 Class 2 forbids; the refusal is enforced by `CaseKind.EXHAUSTIVE_GROUND_TRUTH`
 not satisfying the anchor requirement, pinned by mutant `EXHT-02` (D-035). The
@@ -416,12 +452,13 @@ semantics.
 ```bash
 git clone -b algo-games https://github.com/punkrockquantum/JRRToken.git
 cd JRRToken
-pytest -q -m "not slow"                      # 541 passed, 12 deselected
+pytest -q -m "not slow"                      # 566 passed, 13 deselected
 python scripts/ci_checks.py                  # checks=5 failed=0
-python scripts/mutation_test.py              # mutants=90 survivors=0
+python scripts/mutation_test.py              # mutants=98 survivors=0
 python scripts/readiness_report.py           # per-target go/no-go
 python scripts/execute.py                    # run what the gates authorise
 python scripts/exhaust.py                    # exhaustive exact degree, ~25s
+python scripts/witness_calibration.py        # probe vs known truth, ~28s
 python -m modules.degree.calibration         # what Module 1 asserts
 python modules/degree/prereg/derive_thresholds.py
 python scripts/render_reports.py
@@ -453,10 +490,17 @@ Nothing has been run against SHA-256. The ten defects — nine of them found aft
 the suite was green and every mutant had died — are the strongest evidence
 available that the enforcement here is real rather than documentary.
 
-The exhaustive arm added one property the instrument did not previously have
-evidence for: its certified bound is sound at every round of a real primitive,
-measured against exact truth over the complete input space rather than argued
-from the propagation rules. It added no promotions, opened no gate, and left
-every escalation but one exactly where it was. That combination is the result,
+The two brute-force arms added two properties the instrument did not previously
+have evidence for. Its certified bound is sound at every round of a real
+primitive, measured against exact truth over the complete input space rather than
+argued from the propagation rules. And its sampled probe never witnesses above
+the exact degree — 750 draws, 0 witnesses — which is the first check of the
+Tier S machinery against ground truth rather than against its own model.
+
+Between them they added no promotions, opened no gate, and moved one escalation.
+They also produced the one result that argues against its own convenience: the
+worst-case witness model is loose by up to 2540× on everything measured, and
+D-010 stays closed anyway, because a rate measured on targets of known degree is
+not evidence about a target of unknown degree. That combination is the result,
 and it is reported as such because the run was instructed to terminate on
 completion rather than on success.

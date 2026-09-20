@@ -31,6 +31,45 @@ Tier P and Tier E only.
 **Not acted on.** No Tier S result has been promoted or suppressed on the basis
 of this closure while it is unconfirmed.
 
+**Evidence added 2026-09-20, and it does not change the decision.** The
+exhaustive arm made the probe measurable against known truth for the first time
+(`scripts/witness_calibration.py`, computation `M1-WITNESS-CAL-001`, 52 cells at
+50 seeds). Two findings, and they point in different directions:
+
+*The probe is sound.* 15 cells sit above the target's exact degree, where every
+derivative must vanish identically. 750 draws, 0 witnesses. This is the first
+falsifiable check of the Tier S machinery against ground truth, and it passes.
+
+*The worst-case model is loose on everything measured.* At probe dimension equal
+to the exact degree, the measured rate exceeds the Schwartz-Zippel worst case by
+2× to 2540×, and the Clopper-Pearson lower bound excludes the worst case in all
+37 cells at or below the degree.
+
+| Target | rate at k = d | worst case | ratio |
+|---|---|---|---|
+| linear-map-gf2 n=13 | 1.00 | 0.5 | 2× |
+| power-map d=31 | 1.00 | 0.03125 | 32× |
+| power-map d=4095 | 0.62 | 0.000244 | 2540× |
+| keccak-f[25] r=3 | 1.00 | 0.00390625 | 256× |
+
+**Why this is not a reason to reopen the closure, and I have not reopened it.**
+The rates were measured on targets whose degree was already known; promotion
+concerns a target whose degree is unknown, which is why a probe exists at all.
+The targets here are also structured and far from saturation, while the regime
+the closure was drawn for is the sparse top-form case where the probe is
+weakest — nothing measured here samples it. And revising a pre-registered
+threshold after seeing data that favours revising it is the prohibited act
+regardless of the margin.
+
+**What it changes for you.** The seed requirements in the table above
+(468,882 for k=16; 3.07×10^10 for k=32) are derived from the worst case. If the
+true rate on a target of interest is nearer what was measured than what was
+assumed, those numbers are enormous overestimates. Establishing that would need
+a tighter model with its own derivation and its own pre-registration, holding for
+the sparse case rather than the dense one. That is unbuilt and named rather than
+half-done (D-037). Option: commission it, and evaluate it on cells not yet
+examined.
+
 ---
 
 ## E-02 — D-013, the promotion threshold's citation dependency (unconfirmed)
