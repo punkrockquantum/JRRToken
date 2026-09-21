@@ -120,12 +120,25 @@ them, and what each one buys in TTFT, throughput and dollars.
 
 ### Site catalog
 
-66 candidate sites: Digital Realty (including Interxion, Ascenty and
+65 candidate sites: Digital Realty (including Interxion, Ascenty and
 Teraco campuses) and Equinix IBX metros across the Americas, EMEA and
-APAC, each with coordinates, power headroom, rack density, cooling, SDN
-fabric, dark fibre, on-net internet exchange and participant count,
-subsea cable landing, colo multiplier, energy price and lead time.
-Browsable and filterable in the **Site atlas** tab.
+APAC, each with coordinates, power headroom, air and liquid rack
+density, SDN fabric, dark fibre, on-net internet exchange and
+participant count, subsea cable landing, colo multiplier, energy price
+and lead time. Browsable and filterable in the **Site atlas** tab.
+
+**Rack density is a hard siting gate, not a footnote.** Densities run
+from 7 kW — classic carrier-hotel cabinets in the older interconnect
+buildings — to 100 kW liquid-ready positions in purpose-built AI halls.
+A GPU node is a chassis and cannot straddle two cabinets, so a node
+drawing more than the site's rack density does not land there at all: a
+B300 node is 8.8 kW, an MI355X node 11.2 kW, and an NVL72-class system
+is its own cabinet needing a 100 kW+ liquid-ready position. That is
+what pushes hub serving out of the densest peering metros and into the
+AI halls, and it is why a lower-power edge node is what buys you back
+into them. Cabinet counts are reported per site, because at low density
+a single node can occupy a whole rack — which costs nothing extra under
+per-kW colo but is exactly what a cabinet-priced quote keys off.
 
 ### Outputs
 

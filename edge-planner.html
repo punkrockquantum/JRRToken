@@ -442,6 +442,10 @@
               <input id="atMw" type="number" min="0" step="1" value="0" />
             </label>
             <label class="field">
+              <span class="muted">Minimum rack density (kW)</span>
+              <input id="atRack" type="number" min="0" max="100" step="1" value="0" />
+            </label>
+            <label class="field">
               <span class="muted">Must have</span>
               <select id="atCap">
                 <option value="all">Anything</option>
@@ -544,84 +548,88 @@
 
       // =========================== Site catalog ==============================
       // Columns: op, code, metro, country, region, lat, lng, campus note,
-      //          MW headroom (est.), max rack kW, flags, colo multiplier,
-      //          $/kWh, IX name, IX member count (est.), lead time (months).
-      // Flags: l = direct liquid cooling, f = SDN fabric on-net,
-      //        d = dark fibre / metro waves available, x = on-net internet
-      //        exchange, c = subsea cable landing adjacency.
+      //          MW headroom (est.), max AIR rack kW, flags, colo multiplier,
+      //          $/kWh, IX name, IX member count (est.), lead time (months),
+      //          max LIQUID-READY rack kW (0 = no DLC offered).
+      // Rack densities run 7 kW (classic carrier-hotel cabinets in the older
+      // interconnect buildings) to 100 kW (liquid-ready AI halls). Air columns
+      // assume rear-door heat exchangers at the higher end.
+      // Flags: f = SDN fabric on-net, d = dark fibre / metro waves available,
+      //        x = on-net internet exchange, c = subsea cable landing adjacency.
+      //        (Liquid availability is the rack-kW column, not a flag.)
       const SITE_COLS = [
-        ["DLR", "ACC4", "Ashburn", "US", "namE", 39.02, -77.46, "Ashburn campus (ACC2–ACC16)", 90, 150, "lfdxc", 1.0, 0.07, "Equinix IX / DE-CIX NY reach", 260, 6],
-        ["DLR", "JFK10", "New York", "US", "namE", 40.79, -74.06, "Secaucus / 111 8th reach", 18, 90, "fdx", 1.25, 0.15, "DE-CIX New York / NYIIX", 380, 9],
-        ["DLR", "ORD10", "Chicago", "US", "namC", 41.85, -87.65, "Franklin Park / 350 E Cermak reach", 40, 120, "lfdx", 0.95, 0.08, "Equinix IX Chicago", 210, 7],
-        ["DLR", "DFW11", "Dallas", "US", "namC", 32.78, -96.8, "Richardson / Infomart reach", 55, 130, "lfdx", 0.92, 0.06, "Equinix IX Dallas", 170, 6],
-        ["DLR", "IAH10", "Houston", "US", "namC", 29.76, -95.37, "Houston metro", 30, 120, "lfd", 0.95, 0.06, "—", 40, 7],
-        ["DLR", "LAX11", "Los Angeles", "US", "namW", 34.05, -118.25, "600 W 7th / One Wilshire reach", 14, 90, "fdxc", 1.2, 0.16, "Any2 California", 320, 10],
-        ["DLR", "SJC12", "Silicon Valley", "US", "namW", 37.37, -121.95, "Santa Clara campus", 22, 110, "lfdx", 1.22, 0.17, "Equinix IX Silicon Valley", 290, 9],
-        ["DLR", "ATL2", "Atlanta", "US", "namE", 33.75, -84.39, "56 Marietta reach", 20, 100, "fdx", 0.94, 0.07, "Telx/DLR peering", 120, 7],
-        ["DLR", "SEA10", "Seattle", "US", "namW", 47.61, -122.33, "Westin Building reach", 12, 90, "fdxc", 1.05, 0.08, "Seattle IX (SIX)", 430, 8],
-        ["DLR", "PHX10", "Phoenix", "US", "namW", 33.45, -112.07, "Phoenix / Chandler campus", 60, 140, "lfd", 0.88, 0.07, "—", 45, 6],
-        ["DLR", "YYZ10", "Toronto", "CA", "namE", 43.65, -79.38, "Toronto campus", 16, 100, "lfdx", 1.08, 0.09, "TorIX", 260, 8],
-        ["DLR", "LHR19", "London", "UK", "emeaW", 51.51, -0.05, "LHR19 / Interxion LON1 Brick Lane", 26, 130, "lfdx", 1.2, 0.18, "LINX / LONAP", 950, 8],
-        ["DLR", "AMS11", "Amsterdam", "NL", "emeaW", 52.36, 4.89, "Interxion AMS science park campus", 20, 130, "lfdxc", 1.1, 0.14, "AMS-IX", 890, 9],
-        ["DLR", "FRA15", "Frankfurt", "DE", "emeaW", 50.11, 8.68, "Interxion FRA campus (Kleyerstrasse)", 24, 130, "lfdx", 1.15, 0.16, "DE-CIX Frankfurt", 1100, 9],
-        ["DLR", "PAR8", "Paris", "FR", "emeaW", 48.86, 2.35, "Interxion PAR campus (La Courneuve)", 18, 120, "lfdx", 1.12, 0.12, "France-IX", 490, 9],
-        ["DLR", "MRS3", "Marseille", "FR", "emeaS", 43.3, 5.37, "Interxion MRS1–MRS5 cable hub", 12, 120, "lfdxc", 1.05, 0.12, "France-IX Marseille", 260, 8],
-        ["DLR", "MAD2", "Madrid", "ES", "emeaS", 40.42, -3.7, "Interxion MAD campus", 14, 110, "lfdx", 1.0, 0.13, "ESPANIX", 180, 8],
-        ["DLR", "DUB3", "Dublin", "IE", "emeaW", 53.35, -6.26, "Interxion DUB campus", 8, 110, "lfdxc", 1.12, 0.15, "INEX", 120, 12],
-        ["DLR", "ZUR2", "Zurich", "CH", "emeaW", 47.38, 8.54, "Interxion ZUR campus", 9, 110, "lfdx", 1.28, 0.16, "SwissIX", 150, 9],
-        ["DLR", "STO3", "Stockholm", "SE", "emeaN", 59.33, 18.07, "Interxion STO campus", 16, 120, "lfdx", 0.85, 0.09, "Netnod", 220, 7],
-        ["DLR", "CPH3", "Copenhagen", "DK", "emeaN", 55.68, 12.57, "Interxion CPH campus", 14, 120, "lfd", 0.9, 0.11, "—", 60, 7],
-        ["DLR", "VIE2", "Vienna", "AT", "emeaE", 48.21, 16.37, "Interxion VIE campus", 8, 100, "lfdx", 1.0, 0.14, "VIX", 140, 9],
-        ["DLR", "SIN11", "Singapore", "SG", "apacS", 1.35, 103.82, "Loyang / Jurong campus", 11, 120, "lfdxc", 1.3, 0.16, "Equinix IX Singapore", 310, 12],
-        ["DLR", "NRT10", "Tokyo", "JP", "apacN", 35.68, 139.69, "Osaki / Inzai campus", 13, 120, "lfdx", 1.35, 0.17, "JPIX / JPNAP", 240, 11],
-        ["DLR", "OSA1", "Osaka", "JP", "apacN", 34.69, 135.5, "Osaka metro", 9, 110, "lfd", 1.3, 0.17, "JPIX Osaka", 90, 11],
-        ["DLR", "HKG10", "Hong Kong", "HK", "apacN", 22.32, 114.17, "Tseung Kwan O campus", 7, 100, "fdxc", 1.32, 0.15, "HKIX", 300, 12],
-        ["DLR", "SYD10", "Sydney", "AU", "anz", -33.87, 151.21, "Sydney campus", 12, 110, "lfdxc", 1.24, 0.13, "IX Australia NSW", 180, 10],
-        ["DLR", "ICN2", "Seoul", "KR", "apacN", 37.57, 126.98, "Seoul metro", 8, 110, "lfd", 1.26, 0.11, "KINX", 120, 11],
-        ["DLR", "MAA10", "Chennai", "IN", "apacS", 13.08, 80.27, "Digital Connexion Chennai (cable landing)", 20, 120, "lfdxc", 0.82, 0.09, "Extreme IX", 130, 10],
-        ["DLR", "BOM10", "Mumbai", "IN", "apacS", 19.08, 72.88, "Digital Connexion Mumbai", 24, 120, "lfdxc", 0.85, 0.09, "NIXI / Extreme IX", 260, 10],
-        ["DLR", "JNB1", "Johannesburg", "ZA", "mea", -26.2, 28.05, "Teraco JB1/JB4 Isando campus", 30, 120, "lfdx", 0.9, 0.09, "NAPAfrica JNB", 640, 9],
-        ["DLR", "CPT1", "Cape Town", "ZA", "mea", -33.92, 18.42, "Teraco CT1 (cable landing)", 12, 110, "lfdxc", 0.92, 0.09, "NAPAfrica CPT", 280, 9],
-        ["DLR", "GRU10", "São Paulo", "BR", "latam", -23.55, -46.63, "Ascenty São Paulo campus", 35, 120, "lfdx", 0.95, 0.1, "IX.br São Paulo", 2200, 9],
-        ["DLR", "QRO1", "Querétaro", "MX", "latam", 20.59, -100.39, "Ascenty Querétaro campus", 28, 120, "lfd", 0.9, 0.09, "—", 35, 9],
-        ["EQX", "DC15", "Ashburn", "US", "namE", 39.02, -77.46, "DC1–DC21 Ashburn IBX campus", 26, 100, "lfdxc", 1.15, 0.08, "Equinix IX Ashburn", 420, 8],
-        ["EQX", "NY9", "New York", "US", "namE", 40.79, -74.06, "NY4/NY5/NY9 Secaucus", 14, 90, "lfdx", 1.35, 0.15, "Equinix IX New York", 400, 9],
-        ["EQX", "CH2", "Chicago", "US", "namC", 41.85, -87.65, "CH1–CH4 Cermak / Elk Grove", 12, 85, "fdx", 1.1, 0.08, "Equinix IX Chicago", 230, 9],
-        ["EQX", "DA11", "Dallas", "US", "namC", 32.78, -96.8, "DA1–DA11 Infomart campus", 16, 90, "lfdx", 1.05, 0.06, "Equinix IX Dallas", 190, 8],
-        ["EQX", "SV10", "Silicon Valley", "US", "namW", 37.4, -121.95, "SV1–SV10 San Jose campus", 10, 90, "lfdx", 1.4, 0.17, "Equinix IX Silicon Valley", 330, 10],
-        ["EQX", "LA4", "Los Angeles", "US", "namW", 34.05, -118.25, "LA1–LA4 One Wilshire adjacency", 8, 85, "fdxc", 1.35, 0.16, "Equinix IX Los Angeles", 300, 10],
-        ["EQX", "SE3", "Seattle", "US", "namW", 47.61, -122.33, "SE2/SE3 Westin adjacency", 7, 85, "fdxc", 1.2, 0.08, "Equinix IX Seattle", 250, 9],
-        ["EQX", "MI3", "Miami", "US", "namE", 25.77, -80.19, "MI1–MI3 NAP of the Americas reach", 8, 85, "fdxc", 1.18, 0.11, "Equinix IX Miami", 210, 9],
-        ["EQX", "TR2", "Toronto", "CA", "namE", 43.65, -79.38, "TR1–TR5 Toronto IBX", 9, 85, "fdx", 1.2, 0.09, "Equinix IX Toronto", 180, 9],
-        ["EQX", "LD6", "London", "UK", "emeaW", 51.51, -0.59, "LD4–LD8 Slough campus", 18, 100, "lfdx", 1.3, 0.18, "LINX / Equinix IX London", 900, 9],
-        ["EQX", "AM7", "Amsterdam", "NL", "emeaW", 52.36, 4.89, "AM5–AM11 Schepenbergweg campus", 12, 100, "lfdxc", 1.22, 0.14, "AMS-IX / Equinix IX", 870, 9],
-        ["EQX", "FR7", "Frankfurt", "DE", "emeaW", 50.11, 8.68, "FR4–FR9 Frankfurt campus", 14, 100, "lfdx", 1.28, 0.16, "DE-CIX / Equinix IX", 1050, 9],
-        ["EQX", "PA8", "Paris", "FR", "emeaW", 48.86, 2.35, "PA2–PA8 Saint-Denis campus", 10, 95, "lfdx", 1.25, 0.12, "France-IX / Equinix IX", 470, 9],
-        ["EQX", "MD2", "Madrid", "ES", "emeaS", 40.42, -3.7, "MD1–MD3 Madrid IBX", 7, 90, "fdx", 1.15, 0.13, "ESPANIX / Equinix IX", 170, 9],
-        ["EQX", "ZH5", "Zurich", "CH", "emeaW", 47.38, 8.54, "ZH2–ZH5 Zurich IBX", 6, 90, "lfdx", 1.42, 0.16, "SwissIX / Equinix IX", 160, 10],
-        ["EQX", "SK3", "Stockholm", "SE", "emeaN", 59.33, 18.07, "SK1–SK3 Stockholm IBX", 8, 95, "lfdx", 1.0, 0.09, "Netnod / Equinix IX", 210, 8],
-        ["EQX", "HE7", "Helsinki", "FI", "emeaN", 60.17, 24.94, "HE3–HE7 Helsinki IBX", 10, 95, "lfdxc", 0.95, 0.08, "FICIX / Equinix IX", 120, 8],
-        ["EQX", "WA3", "Warsaw", "PL", "emeaE", 52.23, 21.01, "WA1–WA3 Warsaw IBX", 7, 90, "fdx", 1.0, 0.13, "PLIX / Equinix IX", 180, 9],
-        ["EQX", "MU4", "Munich", "DE", "emeaW", 48.14, 11.58, "MU1–MU4 Munich IBX", 6, 90, "fdx", 1.3, 0.16, "DE-CIX Munich", 120, 10],
-        ["EQX", "DX2", "Dubai", "AE", "mea", 25.2, 55.27, "DX1–DX3 Dubai IBX", 9, 90, "lfdxc", 1.1, 0.08, "UAE-IX", 130, 10],
-        ["EQX", "SG5", "Singapore", "SG", "apacS", 1.35, 103.82, "SG1–SG5 Singapore IBX", 9, 95, "lfdxc", 1.38, 0.16, "Equinix IX Singapore", 330, 12],
-        ["EQX", "TY11", "Tokyo", "JP", "apacN", 35.68, 139.69, "TY1–TY12 Tokyo IBX", 10, 95, "lfdx", 1.42, 0.17, "Equinix IX Tokyo / JPNAP", 260, 11],
-        ["EQX", "OS3", "Osaka", "JP", "apacN", 34.69, 135.5, "OS1–OS3 Osaka IBX", 7, 90, "lfdx", 1.38, 0.17, "Equinix IX Osaka", 100, 11],
-        ["EQX", "HK5", "Hong Kong", "HK", "apacN", 22.32, 114.17, "HK1–HK5 Hong Kong IBX", 6, 90, "fdxc", 1.4, 0.15, "HKIX / Equinix IX", 310, 12],
-        ["EQX", "SY5", "Sydney", "AU", "anz", -33.87, 151.21, "SY1–SY5 Sydney IBX", 8, 90, "lfdxc", 1.32, 0.13, "Equinix IX Sydney", 200, 10],
-        ["EQX", "ME2", "Melbourne", "AU", "anz", -37.81, 144.96, "ME1–ME2 Melbourne IBX", 6, 90, "fdx", 1.28, 0.12, "IX Australia VIC", 130, 10],
-        ["EQX", "SL2", "Seoul", "KR", "apacN", 37.57, 126.98, "SL1–SL2 Seoul IBX", 6, 90, "fdx", 1.34, 0.11, "Equinix IX Seoul", 90, 11],
-        ["EQX", "MB3", "Mumbai", "IN", "apacS", 19.08, 72.88, "MB1–MB3 Mumbai IBX", 10, 95, "lfdxc", 0.95, 0.09, "Equinix IX Mumbai", 240, 10],
-        ["EQX", "SP4", "São Paulo", "BR", "latam", -23.55, -46.63, "SP1–SP4 São Paulo IBX", 9, 90, "fdx", 1.1, 0.1, "IX.br / Equinix IX", 2100, 10],
-        ["EQX", "MX2", "Mexico City", "MX", "latam", 19.43, -99.13, "MX1–MX2 Mexico City IBX", 7, 90, "fdx", 1.05, 0.09, "Equinix IX Mexico", 90, 10],
-        ["EQX", "BG2", "Bogotá", "CO", "latam", 4.71, -74.07, "BG1–BG2 Bogotá IBX", 5, 85, "fdx", 1.02, 0.11, "Equinix IX Bogotá", 70, 10],
+        ["DLR", "ACC4", "Ashburn", "US", "namE", 39.02, -77.46, "Ashburn campus (ACC2–ACC16)", 90, 30, "lfdxc", 1.0, 0.07, "Equinix IX / DE-CIX NY reach", 260, 6, 100],
+        ["DLR", "JFK10", "New York", "US", "namE", 40.79, -74.06, "Secaucus / 111 8th reach", 18, 12, "fdx", 1.25, 0.15, "DE-CIX New York / NYIIX", 380, 9, 0],
+        ["DLR", "ORD10", "Chicago", "US", "namC", 41.85, -87.65, "Franklin Park / 350 E Cermak reach", 40, 30, "lfdx", 0.95, 0.08, "Equinix IX Chicago", 210, 7, 100],
+        ["DLR", "DFW11", "Dallas", "US", "namC", 32.78, -96.8, "Richardson / Infomart reach", 55, 30, "lfdx", 0.92, 0.06, "Equinix IX Dallas", 170, 6, 100],
+        ["DLR", "IAH10", "Houston", "US", "namC", 29.76, -95.37, "Houston metro", 30, 30, "lfd", 0.95, 0.06, "—", 40, 7, 100],
+        ["DLR", "LAX11", "Los Angeles", "US", "namW", 34.05, -118.25, "600 W 7th / One Wilshire reach", 14, 10, "fdxc", 1.2, 0.16, "Any2 California", 320, 10, 0],
+        ["DLR", "SJC12", "Silicon Valley", "US", "namW", 37.37, -121.95, "Santa Clara campus", 22, 20, "lfdx", 1.22, 0.17, "Equinix IX Silicon Valley", 290, 9, 75],
+        ["DLR", "ATL2", "Atlanta", "US", "namE", 33.75, -84.39, "56 Marietta reach", 20, 12, "fdx", 0.94, 0.07, "Telx/DLR peering", 120, 7, 0],
+        ["DLR", "SEA10", "Seattle", "US", "namW", 47.61, -122.33, "Westin Building reach", 12, 10, "fdxc", 1.05, 0.08, "Seattle IX (SIX)", 430, 8, 0],
+        ["DLR", "PHX10", "Phoenix", "US", "namW", 33.45, -112.07, "Phoenix / Chandler campus", 60, 30, "lfd", 0.88, 0.07, "—", 45, 6, 100],
+        ["DLR", "YYZ10", "Toronto", "CA", "namE", 43.65, -79.38, "Toronto campus", 16, 20, "lfdx", 1.08, 0.09, "TorIX", 260, 8, 75],
+        ["DLR", "LHR19", "London", "UK", "emeaW", 51.51, -0.05, "LHR19 / Interxion LON1 Brick Lane", 26, 30, "lfdx", 1.2, 0.18, "LINX / LONAP", 950, 8, 100],
+        ["DLR", "AMS11", "Amsterdam", "NL", "emeaW", 52.36, 4.89, "Interxion AMS science park campus", 20, 30, "lfdxc", 1.1, 0.14, "AMS-IX", 890, 9, 100],
+        ["DLR", "FRA15", "Frankfurt", "DE", "emeaW", 50.11, 8.68, "Interxion FRA campus (Kleyerstrasse)", 24, 30, "lfdx", 1.15, 0.16, "DE-CIX Frankfurt", 1100, 9, 100],
+        ["DLR", "PAR8", "Paris", "FR", "emeaW", 48.86, 2.35, "Interxion PAR campus (La Courneuve)", 18, 28, "lfdx", 1.12, 0.12, "France-IX", 490, 9, 100],
+        ["DLR", "MRS3", "Marseille", "FR", "emeaS", 43.3, 5.37, "Interxion MRS1–MRS5 cable hub", 12, 22, "lfdxc", 1.05, 0.12, "France-IX Marseille", 260, 8, 85],
+        ["DLR", "MAD2", "Madrid", "ES", "emeaS", 40.42, -3.7, "Interxion MAD campus", 14, 20, "lfdx", 1.0, 0.13, "ESPANIX", 180, 8, 75],
+        ["DLR", "DUB3", "Dublin", "IE", "emeaW", 53.35, -6.26, "Interxion DUB campus", 8, 20, "lfdxc", 1.12, 0.15, "INEX", 120, 12, 75],
+        ["DLR", "ZUR2", "Zurich", "CH", "emeaW", 47.38, 8.54, "Interxion ZUR campus", 9, 18, "lfdx", 1.28, 0.16, "SwissIX", 150, 9, 70],
+        ["DLR", "STO3", "Stockholm", "SE", "emeaN", 59.33, 18.07, "Interxion STO campus", 16, 30, "lfdx", 0.85, 0.09, "Netnod", 220, 7, 100],
+        ["DLR", "CPH3", "Copenhagen", "DK", "emeaN", 55.68, 12.57, "Interxion CPH campus", 14, 25, "lfd", 0.9, 0.11, "—", 60, 7, 90],
+        ["DLR", "VIE2", "Vienna", "AT", "emeaE", 48.21, 16.37, "Interxion VIE campus", 8, 18, "lfdx", 1.0, 0.14, "VIX", 140, 9, 70],
+        ["DLR", "SIN11", "Singapore", "SG", "apacS", 1.35, 103.82, "Loyang / Jurong campus", 11, 28, "lfdxc", 1.3, 0.16, "Equinix IX Singapore", 310, 12, 100],
+        ["DLR", "NRT10", "Tokyo", "JP", "apacN", 35.68, 139.69, "Osaki / Inzai campus", 13, 28, "lfdx", 1.35, 0.17, "JPIX / JPNAP", 240, 11, 100],
+        ["DLR", "OSA1", "Osaka", "JP", "apacN", 34.69, 135.5, "Osaka metro", 9, 20, "lfd", 1.3, 0.17, "JPIX Osaka", 90, 11, 75],
+        ["DLR", "HKG10", "Hong Kong", "HK", "apacN", 22.32, 114.17, "Tseung Kwan O campus", 7, 12, "fdxc", 1.32, 0.15, "HKIX", 300, 12, 0],
+        ["DLR", "SYD10", "Sydney", "AU", "anz", -33.87, 151.21, "Sydney campus", 12, 22, "lfdxc", 1.24, 0.13, "IX Australia NSW", 180, 10, 85],
+        ["DLR", "ICN2", "Seoul", "KR", "apacN", 37.57, 126.98, "Seoul metro", 8, 20, "lfd", 1.26, 0.11, "KINX", 120, 11, 75],
+        ["DLR", "MAA10", "Chennai", "IN", "apacS", 13.08, 80.27, "Digital Connexion Chennai (cable landing)", 20, 30, "lfdxc", 0.82, 0.09, "Extreme IX", 130, 10, 100],
+        ["DLR", "BOM10", "Mumbai", "IN", "apacS", 19.08, 72.88, "Digital Connexion Mumbai", 24, 30, "lfdxc", 0.85, 0.09, "NIXI / Extreme IX", 260, 10, 100],
+        ["DLR", "JNB1", "Johannesburg", "ZA", "mea", -26.2, 28.05, "Teraco JB1/JB4 Isando campus", 30, 28, "lfdx", 0.9, 0.09, "NAPAfrica JNB", 640, 9, 100],
+        ["DLR", "CPT1", "Cape Town", "ZA", "mea", -33.92, 18.42, "Teraco CT1 (cable landing)", 12, 20, "lfdxc", 0.92, 0.09, "NAPAfrica CPT", 280, 9, 75],
+        ["DLR", "GRU10", "São Paulo", "BR", "latam", -23.55, -46.63, "Ascenty São Paulo campus", 35, 28, "lfdx", 0.95, 0.1, "IX.br São Paulo", 2200, 9, 100],
+        ["DLR", "QRO1", "Querétaro", "MX", "latam", 20.59, -100.39, "Ascenty Querétaro campus", 28, 30, "lfd", 0.9, 0.09, "—", 35, 9, 100],
+        ["EQX", "DC15", "Ashburn", "US", "namE", 39.02, -77.46, "DC1–DC21 Ashburn IBX campus", 26, 25, "lfdxc", 1.15, 0.08, "Equinix IX Ashburn", 420, 8, 100],
+        ["EQX", "NY9", "New York", "US", "namE", 40.79, -74.06, "NY4/NY5/NY9 Secaucus", 14, 15, "lfdx", 1.35, 0.15, "Equinix IX New York", 400, 9, 60],
+        ["EQX", "CH2", "Chicago", "US", "namC", 41.85, -87.65, "CH1–CH4 Cermak / Elk Grove", 12, 12, "fdx", 1.1, 0.08, "Equinix IX Chicago", 230, 9, 0],
+        ["EQX", "DA11", "Dallas", "US", "namC", 32.78, -96.8, "DA1–DA11 Infomart campus", 16, 18, "lfdx", 1.05, 0.06, "Equinix IX Dallas", 190, 8, 70],
+        ["EQX", "SV10", "Silicon Valley", "US", "namW", 37.4, -121.95, "SV1–SV10 San Jose campus", 10, 15, "lfdx", 1.4, 0.17, "Equinix IX Silicon Valley", 330, 10, 65],
+        ["EQX", "LA4", "Los Angeles", "US", "namW", 34.05, -118.25, "LA1–LA4 One Wilshire adjacency", 8, 7, "fdxc", 1.35, 0.16, "Equinix IX Los Angeles", 300, 10, 0],
+        ["EQX", "SE3", "Seattle", "US", "namW", 47.61, -122.33, "SE2/SE3 Westin adjacency", 7, 8, "fdxc", 1.2, 0.08, "Equinix IX Seattle", 250, 9, 0],
+        ["EQX", "MI3", "Miami", "US", "namE", 25.77, -80.19, "MI1–MI3 NAP of the Americas reach", 8, 8, "fdxc", 1.18, 0.11, "Equinix IX Miami", 210, 9, 0],
+        ["EQX", "TR2", "Toronto", "CA", "namE", 43.65, -79.38, "TR1–TR5 Toronto IBX", 9, 10, "fdx", 1.2, 0.09, "Equinix IX Toronto", 180, 9, 0],
+        ["EQX", "LD6", "London", "UK", "emeaW", 51.51, -0.59, "LD4–LD8 Slough campus", 18, 25, "lfdx", 1.3, 0.18, "LINX / Equinix IX London", 900, 9, 100],
+        ["EQX", "AM7", "Amsterdam", "NL", "emeaW", 52.36, 4.89, "AM5–AM11 Schepenbergweg campus", 12, 20, "lfdxc", 1.22, 0.14, "AMS-IX / Equinix IX", 870, 9, 80],
+        ["EQX", "FR7", "Frankfurt", "DE", "emeaW", 50.11, 8.68, "FR4–FR9 Frankfurt campus", 14, 20, "lfdx", 1.28, 0.16, "DE-CIX / Equinix IX", 1050, 9, 80],
+        ["EQX", "PA8", "Paris", "FR", "emeaW", 48.86, 2.35, "PA2–PA8 Saint-Denis campus", 10, 18, "lfdx", 1.25, 0.12, "France-IX / Equinix IX", 470, 9, 70],
+        ["EQX", "MD2", "Madrid", "ES", "emeaS", 40.42, -3.7, "MD1–MD3 Madrid IBX", 7, 12, "fdx", 1.15, 0.13, "ESPANIX / Equinix IX", 170, 9, 0],
+        ["EQX", "ZH5", "Zurich", "CH", "emeaW", 47.38, 8.54, "ZH2–ZH5 Zurich IBX", 6, 15, "lfdx", 1.42, 0.16, "SwissIX / Equinix IX", 160, 10, 60],
+        ["EQX", "SK3", "Stockholm", "SE", "emeaN", 59.33, 18.07, "SK1–SK3 Stockholm IBX", 8, 18, "lfdx", 1.0, 0.09, "Netnod / Equinix IX", 210, 8, 70],
+        ["EQX", "HE7", "Helsinki", "FI", "emeaN", 60.17, 24.94, "HE3–HE7 Helsinki IBX", 10, 20, "lfdxc", 0.95, 0.08, "FICIX / Equinix IX", 120, 8, 80],
+        ["EQX", "WA3", "Warsaw", "PL", "emeaE", 52.23, 21.01, "WA1–WA3 Warsaw IBX", 7, 12, "fdx", 1.0, 0.13, "PLIX / Equinix IX", 180, 9, 0],
+        ["EQX", "MU4", "Munich", "DE", "emeaW", 48.14, 11.58, "MU1–MU4 Munich IBX", 6, 12, "fdx", 1.3, 0.16, "DE-CIX Munich", 120, 10, 0],
+        ["EQX", "DX2", "Dubai", "AE", "mea", 25.2, 55.27, "DX1–DX3 Dubai IBX", 9, 18, "lfdxc", 1.1, 0.08, "UAE-IX", 130, 10, 70],
+        ["EQX", "SG5", "Singapore", "SG", "apacS", 1.35, 103.82, "SG1–SG5 Singapore IBX", 9, 20, "lfdxc", 1.38, 0.16, "Equinix IX Singapore", 330, 12, 80],
+        ["EQX", "TY11", "Tokyo", "JP", "apacN", 35.68, 139.69, "TY1–TY12 Tokyo IBX", 10, 18, "lfdx", 1.42, 0.17, "Equinix IX Tokyo / JPNAP", 260, 11, 75],
+        ["EQX", "OS3", "Osaka", "JP", "apacN", 34.69, 135.5, "OS1–OS3 Osaka IBX", 7, 15, "lfdx", 1.38, 0.17, "Equinix IX Osaka", 100, 11, 65],
+        ["EQX", "HK5", "Hong Kong", "HK", "apacN", 22.32, 114.17, "HK1–HK5 Hong Kong IBX", 6, 8, "fdxc", 1.4, 0.15, "HKIX / Equinix IX", 310, 12, 0],
+        ["EQX", "SY5", "Sydney", "AU", "anz", -33.87, 151.21, "SY1–SY5 Sydney IBX", 8, 18, "lfdxc", 1.32, 0.13, "Equinix IX Sydney", 200, 10, 70],
+        ["EQX", "ME2", "Melbourne", "AU", "anz", -37.81, 144.96, "ME1–ME2 Melbourne IBX", 6, 10, "fdx", 1.28, 0.12, "IX Australia VIC", 130, 10, 0],
+        ["EQX", "SL2", "Seoul", "KR", "apacN", 37.57, 126.98, "SL1–SL2 Seoul IBX", 6, 12, "fdx", 1.34, 0.11, "Equinix IX Seoul", 90, 11, 0],
+        ["EQX", "MB3", "Mumbai", "IN", "apacS", 19.08, 72.88, "MB1–MB3 Mumbai IBX", 10, 20, "lfdxc", 0.95, 0.09, "Equinix IX Mumbai", 240, 10, 80],
+        ["EQX", "SP4", "São Paulo", "BR", "latam", -23.55, -46.63, "SP1–SP4 São Paulo IBX", 9, 12, "fdx", 1.1, 0.1, "IX.br / Equinix IX", 2100, 10, 0],
+        ["EQX", "MX2", "Mexico City", "MX", "latam", 19.43, -99.13, "MX1–MX2 Mexico City IBX", 7, 12, "fdx", 1.05, 0.09, "Equinix IX Mexico", 90, 10, 0],
+        ["EQX", "BG2", "Bogotá", "CO", "latam", 4.71, -74.07, "BG1–BG2 Bogotá IBX", 5, 10, "fdx", 1.02, 0.11, "Equinix IX Bogotá", 70, 10, 0],
       ];
       const OP_LABEL = { DLR: "Digital Realty", EQX: "Equinix" };
       const SITES = SITE_COLS.map((r) => ({
         id: r[0].toLowerCase() + "-" + r[1].toLowerCase(),
         op: r[0], code: r[1], metro: r[2], country: r[3], region: r[4], lat: r[5], lng: r[6],
-        campus: r[7], mw: r[8], rackKw: r[9],
-        liquid: r[10].includes("l"), fabric: r[10].includes("f"), dark: r[10].includes("d"),
+        campus: r[7], mw: r[8], rackAir: r[9], rackLiq: r[16],
+        liquid: r[16] > 0, fabric: r[10].includes("f"), dark: r[10].includes("d"),
         ix: r[10].includes("x"), cable: r[10].includes("c"),
         colo: r[11], kwh: r[12], ixName: r[13], peers: r[14], lead: r[15],
         label: r[0] + " " + r[1] + " — " + r[2],
@@ -849,13 +857,14 @@
       // gpusPerNode, pf8 = PFLOPS FP8 per GPU, decode = tok/s per stream,
       // hr = amortised $/GPU-hour, kw = kW per GPU, nodeGB = VRAM per node.
       const GPUS = [
-        { id: "h200", name: "H200 (Hopper)", gpusPerNode: 8, pf8: 2.0, decode: 55, hr: 2.99, kw: 0.7, nodeGB: 1130, rackKw: 40 },
-        { id: "b200", name: "B200 (Blackwell)", gpusPerNode: 8, pf8: 4.5, decode: 85, hr: 3.99, kw: 1.0, nodeGB: 1536, rackKw: 60 },
-        { id: "b300", name: "B300 (Blackwell Ultra)", gpusPerNode: 8, pf8: 5.0, decode: 96, hr: 4.49, kw: 1.1, nodeGB: 2304, rackKw: 70 },
-        { id: "gb300", name: "GB300 NVL72 (rack-scale)", gpusPerNode: 72, pf8: 5.0, decode: 105, hr: 4.99, kw: 1.4, nodeGB: 20736, rackKw: 132, liquidOnly: true },
-        { id: "rtx6000", name: "RTX PRO 6000 (Blackwell)", gpusPerNode: 8, pf8: 1.0, decode: 30, hr: 1.25, kw: 0.6, nodeGB: 768, rackKw: 30 },
-        { id: "mi355x", name: "AMD MI355X (CDNA 4)", gpusPerNode: 8, pf8: 5.2, decode: 88, hr: 3.79, kw: 1.4, nodeGB: 2304, rackKw: 80 },
-        { id: "spark", name: "DGX Spark (GB10) — micro edge", gpusPerNode: 1, pf8: 0.25, decode: 6, hr: 0.35, kw: 0.17, nodeGB: 128, rackKw: 4 },
+        // Node draw = gpusPerNode x kw; that is what has to fit in one cabinet.
+        { id: "h200", name: "H200 (Hopper)", gpusPerNode: 8, pf8: 2.0, decode: 55, hr: 2.99, kw: 0.7, nodeGB: 1130 },
+        { id: "b200", name: "B200 (Blackwell)", gpusPerNode: 8, pf8: 4.5, decode: 85, hr: 3.99, kw: 1.0, nodeGB: 1536 },
+        { id: "b300", name: "B300 (Blackwell Ultra)", gpusPerNode: 8, pf8: 5.0, decode: 96, hr: 4.49, kw: 1.1, nodeGB: 2304 },
+        { id: "gb300", name: "GB300 NVL72 (rack-scale)", gpusPerNode: 72, pf8: 5.0, decode: 105, hr: 4.99, kw: 1.4, nodeGB: 20736, liquidOnly: true },
+        { id: "rtx6000", name: "RTX PRO 6000 (Blackwell)", gpusPerNode: 8, pf8: 1.0, decode: 30, hr: 1.25, kw: 0.6, nodeGB: 768 },
+        { id: "mi355x", name: "AMD MI355X (CDNA 4)", gpusPerNode: 8, pf8: 5.2, decode: 88, hr: 3.79, kw: 1.4, nodeGB: 2304 },
+        { id: "spark", name: "DGX Spark (GB10) — micro edge", gpusPerNode: 1, pf8: 0.25, decode: 6, hr: 0.35, kw: 0.17, nodeGB: 128 },
       ];
       const GPU_BY_ID = {};
       GPUS.forEach((g) => (GPU_BY_ID[g.id] = g));
@@ -960,12 +969,35 @@
         return Math.max(1, Math.floor((nm.replicaVram * (1 + (offload ? KV_OFFLOAD_BOOST : 0))) / nm.kvUser));
       }
 
-      // Cooling: liquid where the site and the platform allow it, else air with
-      // an 8% clock haircut (same convention as FLUX).
+      // Rack density is a hard siting constraint, not a footnote. A GPU node is
+      // a chassis: it cannot straddle two cabinets, so a node drawing more than
+      // the site's rack density simply does not land there, and a low-density
+      // hall spreads a small deployment across many half-empty cabinets.
+      const nodeKw = (g) => g.gpusPerNode * g.kw;
+      const RACK_SCALE_KW = 100; // an NVL72-class cabinet needs a 100 kW+ position
+
+      // Cooling: liquid where the site's liquid-ready density takes the node,
+      // else air with an 8% clock haircut (same convention as FLUX).
       function coolingFor(site, g) {
-        if (site.liquid && g.rackKw >= 40) return { pue: 1.13, factor: 1.0, coloAdd: 18, label: "Direct liquid (DLC)" };
-        if (g.liquidOnly) return null; // rack-scale systems cannot land air-cooled
-        return { pue: 1.42, factor: 0.92, coloAdd: 0, label: "Air + rear-door HX" };
+        const nkw = nodeKw(g);
+        const liq = site.rackLiq || 0;
+        const air = site.rackAir || 0;
+        const dense = g.kw >= 1.0; // per-GPU draw that wants liquid
+        const dlc = (density) => ({
+          pue: 1.13, factor: 1.0, coloAdd: 18, label: "Direct liquid (DLC)",
+          density, nodesPerRack: Math.max(1, Math.floor(density / nkw)),
+        });
+        // A rack-scale system ships as its own cabinet — it needs a
+        // liquid-ready position at that density or it does not land at all.
+        if (g.liquidOnly || g.gpusPerNode >= 72) return liq >= RACK_SCALE_KW ? dlc(liq) : null;
+        if (dense && liq >= nkw) return dlc(liq);
+        if (air >= nkw) {
+          return dense
+            ? { pue: 1.42, factor: 0.92, coloAdd: 0, label: "Air + rear-door HX", density: air, nodesPerRack: Math.floor(air / nkw) }
+            : { pue: 1.35, factor: 0.97, coloAdd: 0, label: "Air", density: air, nodesPerRack: Math.floor(air / nkw) };
+        }
+        if (liq >= nkw) return dlc(liq);
+        return null; // the node does not fit this site's rack density
       }
 
       // ========================== Plan evaluation ============================
@@ -974,9 +1006,13 @@
       // site, and price the result.
       function evaluate(siteIds, inp) {
         const nm = inp.nodeModel;
+        // A site is viable if ANY permitted platform fits its rack density —
+        // a hall that cannot take a hub node may still take an edge node.
+        const platforms = [nm];
+        if (inp.edgeNodeModel && inp.edgeNodeModel !== nm && inp.edgeNodeModel.ok) platforms.push(inp.edgeNodeModel);
         const sites = siteIds
           .map((id) => SITE_BY_ID[id])
-          .filter((s) => s && coolingFor(s, nm.g));
+          .filter((s) => s && platforms.some((p) => coolingFor(s, p.g)));
         if (!sites.length) return null;
         const perRep = streamsPerReplica(nm, inp.offload);
         const allowed = inp.allowed;
@@ -1062,8 +1098,6 @@
         // label decides where the storage tier lands, not what hardware a site
         // gets: tying the platform to the label made every non-leading site
         // inherit slow hardware and then lose all its demand to the leader.
-        const platforms = [nm];
-        if (inp.edgeNodeModel && inp.edgeNodeModel !== nm && inp.edgeNodeModel.ok) platforms.push(inp.edgeNodeModel);
         function sizeSite(s, users, tokensDay, isHub) {
           let best = null;
           const budget = inp.slo * 0.7; // service time must leave room for the network
@@ -1085,9 +1119,13 @@
             const kw = kwIt * cool.pue;
             const coloRate = COLO_KW_MO * s.colo + cool.coloAdd;
             const computeMo = replicas * snm.hrPerReplica * HRS_MO;
+            const nodes = replicas * snm.nodesPerReplica;
             const c = {
               snm, cool, sPerRep, replicas, rho, kvaPct, prefill, queue, kwIt, kw, coloRate, computeMo,
-              nodes: replicas * snm.nodesPerReplica,
+              nodes,
+              // Cabinets the deployment actually occupies at this site's density.
+              racks: Math.ceil(nodes / Math.max(1, cool.nodesPerRack)),
+              nodesPerRack: Math.max(1, cool.nodesPerRack),
               decodeEff: decodeEffBase * (1 - 0.35 * rho),
               service: prefill + queue + (inp.lowLatencyCpu ? 3 : 8),
               varCost: computeMo + kw * coloRate, // the part that varies by platform
@@ -1124,7 +1162,7 @@
 
         // --- size and price each site
         const live = [];
-        let totCost = 0, totRevenue = 0, totKw = 0, totOperator = 0, totNodes = 0, totTokensDay = 0;
+        let totCost = 0, totRevenue = 0, totKw = 0, totOperator = 0, totNodes = 0, totRacks = 0, totTokensDay = 0;
         sites.forEach((s) => {
           const a = assigned[s.id];
           if (a.users <= 0) {
@@ -1138,7 +1176,7 @@
           if (!z) return;
           const snm = z.snm, cool = z.cool, sPerRep = z.sPerRep;
           const replicas = z.replicas, nodes = z.nodes, rho = z.rho;
-          const kwIt = z.kwIt, kw = z.kw;
+          const kwIt = z.kwIt, kw = z.kw, racks = z.racks;
           // Latency: queueing grows with occupancy (M/M/1 waiting-time shape).
           const kvaPct = z.kvaPct;
           const prefillMs = z.prefill;
@@ -1146,13 +1184,17 @@
           const dispatchMs = inp.lowLatencyCpu ? 3 : 8;
           const decodeEff = z.decodeEff;
 
-          // Per-market TTFT for the demand this site captured.
-          let wTtft = 0, wUsers = 0, sloOk = 0;
+          // Per-market TTFT for the demand this site captured. The SLO discount
+          // is graded per market and then weighted: grading the whole
+          // non-compliant share by the site's *average* latency let a site with
+          // a comfortable average collect full price on streams that missed.
+          let wTtft = 0, wUsers = 0, sloOk = 0, wSloFactor = 0;
           const perMarket = a.markets.map((mk) => {
             const ttft = mk.d.accessRtt + mk.path.rtt + dispatchMs + queueMs + prefillMs;
             wTtft += ttft * mk.users;
             wUsers += mk.users;
             if (ttft <= inp.slo) sloOk += mk.users;
+            wSloFactor += mk.users * (ttft <= inp.slo ? 1 : clamp(1 - 0.45 * (ttft / inp.slo - 1), 0.5, 1));
             return {
               metro: mk.d.market.metro, users: mk.users, ttft, path: mk.path,
               customer: mk.d.customer, onnet: mk.d.onnet,
@@ -1187,20 +1229,21 @@
           // land inside the SLO; outside it they are discounted for credits and
           // churn, and a starved decode rate discounts them further.
           const tokensMo = (a.tokensDay * 365) / 12;
-          const sloFactor = sloShare + (1 - sloShare) * clamp(1 - 0.45 * (ttft / inp.slo - 1), 0.5, 1);
+          const sloFactor = wUsers ? wSloFactor / wUsers : 1;
           const tpsFactor = clamp(decodeEff / inp.minTps, 0.6, 1);
           const realisedRate = MARKET_PER_1M * sloFactor * tpsFactor;
           const revenue = (tokensMo / 1e6) * realisedRate;
           const operator = coloMo + xcMo + fabricMo + ixPortMo; // colo + interconnect to DLR/Equinix
 
           totCost += cost; totRevenue += revenue; totKw += kw; totOperator += operator;
-          totNodes += nodes; totTokensDay += a.tokensDay;
+          totNodes += nodes; totRacks += racks; totTokensDay += a.tokensDay;
           live.push({
             site: s, users: a.users, replicas, nodes, kw, kwIt, cool, rho, ttft, prefillMs, queueMs,
             decodeEff, sloShare, perMarket, tokensMo, cost, revenue, operator, computeMo, coloMo,
             coloRate, storMo, xcMo, xcCount, fabricMo, fabricVcs, ixPortMo, transitMo, transitMbps,
             peerShare, gbps, isHub, kvaPct, perRep: sPerRep, sloFactor, tpsFactor, nm: snm,
             platform: snm.g.name, nodesPerReplica: snm.nodesPerReplica,
+            racks, nodesPerRack: z.nodesPerRack, rackDensity: cool.density, nodeKw: nodeKw(snm.g),
             // Descriptive tier: a regional hub aggregates for its continent and
             // carries the storage tier; a metro hub runs hub-class nodes without
             // that role; an edge PoP runs the smaller edge platform.
@@ -1228,7 +1271,7 @@
           active: live.filter((x) => x.users > 0),
           idle: live.filter((x) => !x.users),
           served, unserved, unplaced, wTtft, p95, sloShare, decodeAvg, tokensMo,
-          cost: totCost, revenue: totRevenue, kw: totKw, operator: totOperator, nodes: totNodes,
+          cost: totCost, revenue: totRevenue, kw: totKw, operator: totOperator, nodes: totNodes, racks: totRacks,
           net: totRevenue - totCost,
           per1M: totCost / Math.max(1e-9, tokensMo / 1e6),
         };
@@ -1397,10 +1440,22 @@
         const baselineSite = $("epBaseline").value;
 
         const allowed = Object.assign({}, state.transports);
+        // The platforms this plan may land, hub first.
+        const planGpus = [GPU_BY_ID[cfg.gpu]];
+        if (edgeNodeModel.ok && edgeNodeModel.g !== GPU_BY_ID[cfg.gpu]) planGpus.push(edgeNodeModel.g);
+        const coolAt = (s) => {
+          for (let i = 0; i < planGpus.length; i++) {
+            const c = coolingFor(s, planGpus[i]);
+            if (c) return c;
+          }
+          return null;
+        };
         const candidate = (s) => {
           if (operator !== "both" && s.op !== operator) return false;
           if (state.filters.liquidOnly && !s.liquid) return false;
-          if (nm.ok && GPU_BY_ID[cfg.gpu].liquidOnly && !s.liquid) return false;
+          // Rack density is a hard gate: if no permitted platform fits in one
+          // of this site's cabinets, the site cannot host this deployment.
+          if (!coolAt(s)) return false;
           if (!state.regions[s.region] && residency !== "none") {
             // A site outside every in-scope region can still serve, unless
             // residency pins demand to its own region/country.
@@ -1410,7 +1465,7 @@
         };
         // How many streams a site can host before its power envelope runs out.
         const siteCapUsers = (s, kwPerStream) => {
-          const cool = coolingFor(s, GPU_BY_ID[cfg.gpu]);
+          const cool = coolAt(s);
           if (!cool) return 0;
           const mwCap = Math.min(s.mw, maxMw);
           const itKw = (mwCap * 1000) / cool.pue;
@@ -1418,6 +1473,29 @@
         };
 
         return {
+          // Sites the operator/region policy would allow but whose cabinets
+          // cannot take any permitted node — worth naming, because the fix is
+          // usually a different platform rather than a different metro.
+          densityBlocked: SITES.filter(
+            (s) =>
+              (operator === "both" || s.op === operator) &&
+              (state.regions[s.region] || residency === "none") &&
+              !coolAt(s)
+          ),
+          // Sites whose cabinets can take the hub platform at all — usually a
+          // much smaller set than the policy-eligible list.
+          policyEligible: SITES.filter(
+            (s) =>
+              (operator === "both" || s.op === operator) &&
+              (state.regions[s.region] || residency === "none")
+          ),
+          hubCapable: SITES.filter(
+            (s) =>
+              (operator === "both" || s.op === operator) &&
+              (state.regions[s.region] || residency === "none") &&
+              coolingFor(s, GPU_BY_ID[cfg.gpu])
+          ),
+          coolAt, planGpus,
           prof, cfg, nodeModel: nm, edgeNodeModel: edgeNodeModel.ok ? edgeNodeModel : nm,
           totalUsers, tokDay, duty, mode, workload, residency, accessId, slo, minTps,
           operator, maxSites, maxMw, objective, kvaPct, demand, currentSites, baselineSite, allowed,
@@ -1559,7 +1637,8 @@
         }
         const reasons = [];
         if (s.mw >= 25) reasons.push(nf(s.mw) + " MW of headroom (est.)");
-        if (s.liquid) reasons.push("direct liquid cooling");
+        if (s.liquid) reasons.push("liquid-ready cabinets to " + nf(s.rackLiq) + " kW");
+        else reasons.push("air cabinets to " + nf(s.rackAir) + " kW");
         if (s.ix) reasons.push(esc(s.ixName) + " on-net (~" + nf(s.peers) + " participants)");
         if (s.cable) reasons.push("subsea cable landing");
         if (s.colo <= 1.0) reasons.push("below-reference colo rate");
@@ -1650,7 +1729,7 @@
         h += statTile(
           "Total IT + cooling load",
           fmtPow(res.kw),
-          nf(res.nodes) + " nodes · hubs " + nf(perRep) + " streams/replica" +
+          nf(res.nodes) + " nodes in " + nf(res.racks) + " cabinets · hubs " + nf(perRep) + " streams/replica" +
             (inp.edgeNodeModel !== nm ? " · edge on " + esc(inp.edgeNodeModel.g.name) : "")
         );
         h += statTile("Tokens served / month", nf1(res.tokensMo / 1e9) + " B", nf(inp.totalUsers) + " peak streams");
@@ -1666,6 +1745,7 @@
         h += '<h4 class="sec">Sites</h4>';
         h += '<div class="tablewrap"><table class="mini"><tr>' +
           "<th>Site</th><th>Role</th><th>Status</th><th class='num'>Streams</th><th class='num'>Nodes</th>" +
+          "<th class='num'>Racks</th>" +
           "<th class='num'>Load</th><th class='num'>TTFT</th><th class='num'>Decode</th><th class='num'>SLO</th>" +
           "<th class='num'>Cost/mo</th><th class='num'>$/1M</th><th class='num'>Net/mo</th></tr>";
         const rows = res.active.slice().sort((a, b) => b.users - a.users);
@@ -1676,6 +1756,7 @@
             "<tr" + (isNew ? ' class="sel"' : "") + "><td>" + esc(x.site.op + " " + x.site.code + " — " + x.site.metro) + "</td>" +
             "<td>" + x.tier + "</td><td>" + status + "</td>" +
             "<td class='num'>" + nf(x.users) + "</td><td class='num'>" + nf(x.nodes) + "</td>" +
+            "<td class='num'>" + nf(x.racks) + " @ " + nf(x.rackDensity) + " kW</td>" +
             "<td class='num'>" + fmtPow(x.kw) + "</td><td class='num'>" + ms(x.ttft) + "</td>" +
             "<td class='num'>" + nf1(x.decodeEff) + " tok/s</td><td class='num'>" + pct(x.sloShare) + "</td>" +
             "<td class='num'>" + usd(x.cost) + "</td><td class='num'>" + usdSmart(x.per1M) + "</td>" +
@@ -1684,7 +1765,7 @@
         res.idle.forEach((x) => {
           h +=
             '<tr class="dim"><td>' + esc(x.site.op + " " + x.site.code + " — " + x.site.metro) + "</td>" +
-            "<td>—</td><td>Redundant</td><td class='num'>0</td><td class='num'>0</td><td class='num'>—</td>" +
+            "<td>—</td><td>Redundant</td><td class='num'>0</td><td class='num'>0</td><td class='num'>—</td><td class='num'>—</td>" +
             "<td class='num'>—</td><td class='num'>—</td><td class='num'>—</td><td class='num'>—</td>" +
             "<td class='num'>—</td><td class='num'>—</td></tr>";
         });
@@ -1757,6 +1838,8 @@
             '<div class="row"><span>Streams served</span><span>' + nf(x.users) + " (" + pct(x.users / Math.max(1, res.served)) + ")</span></div>" +
             '<div class="row"><span>Platform</span><span>' + esc(x.platform) + "</span></div>" +
             '<div class="row"><span>Replicas × nodes</span><span>' + nf(x.replicas) + " × " + x.nodesPerReplica + " = " + nf(x.nodes) + "</span></div>" +
+            '<div class="row"><span>Cabinets</span><span>' + nf(x.racks) + " at " + nf(x.rackDensity) + " kW (" +
+            (x.nodesPerRack === 1 ? "1 node/rack, " + nf1(x.nodeKw) + " kW each" : nf(x.nodesPerRack) + " nodes/rack") + ")</span></div>" +
             '<div class="row"><span>Load (IT / with cooling)</span><span>' + fmtPow(x.kwIt) + " / " + fmtPow(x.kw) + "</span></div>" +
             '<div class="row"><span>TTFT (prefill / queue)</span><span>' + ms(x.ttft) + " (" + ms(x.prefillMs) + " / " + ms(x.queueMs) + ")</span></div>" +
             '<div class="row"><span>Decode per stream</span><span>' + nf1(x.decodeEff) + " tok/s at " + pct(x.rho) + " occupancy</span></div>" +
@@ -1953,6 +2036,59 @@
             "<strong>Watch.</strong> " + esc(worst.site.op + " " + worst.site.code) + " runs at " +
             usd(worst.revenue - worst.cost) + "/mo — it is bought for latency, not margin. " +
             "If that market's SLO is negotiable, drop it and re-run."
+          );
+        }
+        if (res.decodeAvg < inp.minTps) {
+          const starved = res.active.filter((x) => x.decodeEff < inp.minTps);
+          bullets.push(
+            "<strong>The fleet cannot hold the decode rate you asked for.</strong> Streams average " +
+            nf1(res.decodeAvg) + " tok/s against your " + inp.minTps + " tok/s floor" +
+            (starved.length < res.active.length
+              ? " (" + esc(starved.map((x) => x.site.op + " " + x.site.code).join(", ")) + ")"
+              : " at every site") +
+            ", which discounts every token to " + usdSmart(MARKET_PER_1M * clamp(res.decodeAvg / inp.minTps, 0.6, 1)) +
+            "/1M before the SLO is even considered. That is a platform choice, not a siting one: " +
+            esc(nm.g.name) + " decodes at " + nf1(nm.decode) +
+            " tok/s per stream. Raise the accelerator, cut concurrency per node, or lower the floor if it was aspirational."
+          );
+        }
+        const hubKw = nodeKw(nm.g);
+        const edgeKw = nodeKw(inp.edgeNodeModel.g);
+        if (inp.hubCapable.length < inp.policyEligible.length) {
+          bullets.push(
+            "<strong>Rack density, not geography, sets the hub shortlist.</strong> A " + esc(nm.g.name) +
+            " node draws " + nf1(hubKw) + " kW and cannot straddle two cabinets, so only <strong>" +
+            inp.hubCapable.length + " of " + inp.policyEligible.length +
+            "</strong> policy-eligible sites have cabinets that take it" +
+            (nm.g.gpusPerNode >= 72
+              ? " — a rack-scale system is its own cabinet and needs a " + RACK_SCALE_KW + " kW+ liquid-ready position"
+              : "") +
+            ". " +
+            (edgeKw < hubKw
+              ? "The " + esc(inp.edgeNodeModel.g.name) + " edge node at " + nf1(edgeKw) +
+                " kW fits " + SITES.filter((s) => coolingFor(s, inp.edgeNodeModel.g)).length +
+                " of the catalog's " + SITES.length + " sites, which is what buys you back into the dense peering " +
+                "metros the hub platform is locked out of."
+              : "Picking a lower-power edge platform would buy you back into the dense peering metros this one is " +
+                "locked out of.") +
+            (inp.densityBlocked.length
+              ? " " + inp.densityBlocked.length + " site" + (inp.densityBlocked.length > 1 ? "s" : "") +
+                " cannot take any permitted node at all: " +
+                esc(inp.densityBlocked.slice(0, 5).map((s) => s.op + " " + s.code + " (" + nf(Math.max(s.rackAir, s.rackLiq)) + " kW)").join(", ")) +
+                (inp.densityBlocked.length > 5 ? " and " + (inp.densityBlocked.length - 5) + " more" : "") + "."
+              : "")
+          );
+        }
+        const tightRacks = res.active.filter((x) => x.nodesPerRack === 1 && x.nodes > 1);
+        if (tightRacks.length) {
+          bullets.push(
+            "<strong>Cabinet count, not kilowatts.</strong> " +
+            esc(tightRacks.map((x) => x.site.op + " " + x.site.code).join(", ")) +
+            " land one node per cabinet at their density, so the plan takes " +
+            nf(tightRacks.reduce((n, x) => n + x.racks, 0)) + " cabinets to house " +
+            nf(tightRacks.reduce((n, x) => n + x.nodes, 0)) + " nodes. Colo here is priced per kW, so that costs " +
+            "nothing extra in this model — but it is a space, cross-connect and remote-hands conversation with the " +
+            "operator, and it is the number a cabinet-priced quote will key off."
           );
         }
         if (nm.nodesPerReplica > 1) {
@@ -2218,7 +2354,7 @@
           L.push((isNew ? "[NEW] " : "[----] ") + x.site.op + " " + x.site.code + " — " + x.site.metro +
             " · " + x.tier.toLowerCase());
           L.push("       " + x.site.campus);
-          L.push("       " + nf(x.users) + " streams · " + nf(x.nodes) + " nodes · " + fmtPow(x.kw) +
+          L.push("       " + nf(x.users) + " streams · " + nf(x.nodes) + " nodes in " + nf(x.racks) + " cabinets @ " + nf(x.rackDensity) + " kW · " + fmtPow(x.kw) +
             " · TTFT " + ms(x.ttft) + " · decode " + nf1(x.decodeEff) + " tok/s");
           L.push("       cost " + usd(x.cost) + "/mo · $" + x.per1M.toFixed(2) + "/1M · net " + usd(x.revenue - x.cost) + "/mo");
           const r = [];
@@ -2260,14 +2396,14 @@
         }
         const res = LAST.out.result;
         const head = ["operator", "code", "metro", "country", "region", "role", "status", "streams", "nodes",
-          "kw", "ttft_ms", "decode_tok_s", "slo_share", "cost_mo", "usd_per_1m", "net_mo", "operator_rev_mo"];
+          "racks", "rack_kw", "kw", "ttft_ms", "decode_tok_s", "slo_share", "cost_mo", "usd_per_1m", "net_mo", "operator_rev_mo"];
         const lines = [head.join(",")];
         res.active.forEach((x) => {
           lines.push([
             x.site.op, x.site.code, '"' + x.site.metro + '"', x.site.country, x.site.region,
             '"' + x.tier + '"',
             LAST.out.added.indexOf(x.site.id) >= 0 ? "new" : "existing",
-            Math.round(x.users), x.nodes, Math.round(x.kw), x.ttft.toFixed(1), x.decodeEff.toFixed(1),
+            Math.round(x.users), x.nodes, x.racks, x.rackDensity, Math.round(x.kw), x.ttft.toFixed(1), x.decodeEff.toFixed(1),
             (x.sloShare * 100).toFixed(1), Math.round(x.cost), x.per1M.toFixed(3),
             Math.round(x.revenue - x.cost), Math.round(x.operator),
           ].join(","));
@@ -2287,21 +2423,25 @@
       function renderAtlas() {
         const op = $("atOp").value, reg = $("atRegion").value;
         const minMw = parseFloat($("atMw").value) || 0;
+        const minRack = parseFloat($("atRack").value) || 0;
         const cap = $("atCap").value;
         const rows = SITES.filter((s) => {
           if (op !== "all" && s.op !== op) return false;
           if (reg !== "all" && s.region !== reg) return false;
           if (s.mw < minMw) return false;
+          if (Math.max(s.rackAir, s.rackLiq) < minRack) return false;
           if (cap !== "all" && !s[cap]) return false;
           return true;
         });
         let h = '<table class="mini"><tr><th>Operator</th><th>Code</th><th>Metro</th><th>Campus</th>' +
-          "<th class='num'>MW (est.)</th><th class='num'>Rack kW</th><th>Cooling</th><th>Fabric</th>" +
+          "<th class='num'>MW (est.)</th><th class='num'>Rack kW — air</th><th class='num'>Rack kW — liquid</th><th>Cooling</th><th>Fabric</th>" +
           "<th>Dark fibre</th><th>Internet exchange</th><th class='num'>Peers</th>" +
           "<th class='num'>Colo $/kW-mo</th><th class='num'>$/kWh</th><th class='num'>Lead</th><th>Cable</th></tr>";
         rows.sort((a, b) => b.mw - a.mw).forEach((s) => {
           h += "<tr><td>" + OP_LABEL[s.op] + "</td><td>" + esc(s.code) + "</td><td>" + esc(s.metro) + " (" + s.country + ")</td>" +
-            "<td>" + esc(s.campus) + "</td><td class='num'>" + nf(s.mw) + "</td><td class='num'>" + nf(s.rackKw) + "</td>" +
+            "<td>" + esc(s.campus) + "</td><td class='num'>" + nf(s.mw) + "</td>" +
+            "<td class='num'>" + nf(s.rackAir) + "</td>" +
+            "<td class='num'>" + (s.rackLiq ? nf(s.rackLiq) + (s.rackLiq >= RACK_SCALE_KW ? "+" : "") : "—") + "</td>" +
             "<td>" + (s.liquid ? "DLC + air" : "Air") + "</td><td>" + (s.fabric ? (s.op === "DLR" ? "ServiceFabric" : "Equinix Fabric") : "—") + "</td>" +
             "<td>" + (s.dark ? "Yes" : "—") + "</td><td>" + esc(s.ixName) + "</td><td class='num'>" + (s.ix ? nf(s.peers) : "—") + "</td>" +
             "<td class='num'>" + nf(COLO_KW_MO * s.colo) + "</td><td class='num'>" + s.kwh.toFixed(2) + "</td>" +
@@ -2347,6 +2487,18 @@
           Math.round(KV_OFFLOAD_BOOST * 100) + "%. Each site is sized by whichever binds first — concurrency or decode " +
           "throughput at peak — and capped by the site's power envelope; overflow spills to the next-best site and, if " +
           "nowhere will take it, is reported as unplaced rather than quietly served.</p>" +
+          '<h4 class="sec">Rack density</h4>' +
+          "<p>Catalog densities run from <strong>7 kW</strong> — classic carrier-hotel cabinets in the older " +
+          "interconnect buildings — to <strong>100 kW</strong> liquid-ready positions in purpose-built AI halls, with " +
+          "air columns assuming rear-door heat exchangers at the higher end. This is a hard siting gate, not a " +
+          "footnote: a GPU node is a chassis and cannot straddle two cabinets, so a node drawing more than the site's " +
+          "rack density does not land there at all. A " + esc(GPUS[1].name) + " node is " + nf1(nodeKw(GPUS[1])) +
+          " kW, a " + esc(GPUS[2].name) + " node " + nf1(nodeKw(GPUS[2])) + " kW, and an NVL72-class system is its own " +
+          "cabinet needing a " + RACK_SCALE_KW + " kW+ liquid-ready position — which is why the densest peering metros " +
+          "in the catalog often cannot host the hub platform, and why a lower-power edge node is what buys you back " +
+          "into them. Below the liquid threshold a site can still take a dense node on air, at PUE 1.42 and an 8% " +
+          "clock haircut. Cabinet counts are reported per site: at low density a node may occupy a whole rack, which " +
+          "is a space and cross-connect conversation even when the kW figure looks small.</p>" +
           '<h4 class="sec">Economics</h4>' +
           "<ul class=\"recs\">" +
           "<li>Colo at $" + COLO_KW_MO + "/kW-month all-in × a per-site multiplier, +$18/kW-mo where direct liquid cooling " +
@@ -2569,7 +2721,7 @@
           state.customers.splice(parseInt(el.dataset.i, 10), 1);
           renderCustomers();
         });
-        ["atOp", "atRegion", "atMw", "atCap"].forEach((id) => ($(id).oninput = renderAtlas));
+        ["atOp", "atRegion", "atMw", "atRack", "atCap"].forEach((id) => ($(id).oninput = renderAtlas));
       }
       function renderCustomersNote() {
         const tot = state.customers.reduce((n, c) => n + (c.share || 0), 0);
