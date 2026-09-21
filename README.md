@@ -18,6 +18,10 @@ the advantage of a carefully designed data-centre deployment.
 A Digital Realty Solution Architecture tool in one self-contained HTML
 file: no build step, no dependencies, no backend.
 
+Four tabs: **1** Comprehensive Planner, **2** Prompt → Token → Value,
+**3** Deploy & Simulate, and **4** Edge PoP & Hub Siting — the last is
+documented as section 2 below.
+
 ### Tab 1 — Comprehensive Planner
 
 Configure a deployment layer by layer; FLUX computes feasibility,
@@ -83,7 +87,114 @@ value per answer, steady-state volume, customer margin and value to DLR.
 
 ---
 
-## 2. Sharp(er) Enterprises workshop simulator (`workshop-simulator/`)
+## 2. FLUX EDGE — Tab 4: Edge PoP & Regional Hub Siting
+
+Where tabs 1–3 size *a* deployment, tab 4 decides *where the deployments
+go*. It lives in the same `index.html` — no extra file, no build step, no
+backend. Its own sub-tabs are 4a (deployment optimiser), 4b (site atlas)
+and 4c (method & assumptions).
+
+Describe the workload and the tool returns the sites to add, how to route
+them, and what each one buys in TTFT, throughput and dollars.
+
+### Inputs
+
+- **Category and use case** — industry applications (FSI fraud scoring and
+  research copilots, life science, manufacturing, robotics/AV fleet,
+  retail CV, telco backbone, public sector), LLM providers (frontier lab,
+  model API, small-model serving) and NeoCloud (GPUaaS, training
+  capacity). Each preset sets model, context, SLO, access network,
+  residency and a metro demand tilt — everything stays editable.
+- **Model scale** — a catalog from Ministral 8B to Kimi K2 1T MoE, or a
+  custom parameter/active-parameter count; KV precision; separate hub and
+  edge accelerators (or *auto*, which picks the smallest platform that
+  still clears the SLO and the decode floor).
+- **Demand** — sized from peak concurrent streams *or* from token volume
+  per day, with a duty cycle tying the two together so they can never
+  contradict each other. Regions in scope, access network, and data
+  residency (none / in-region / in-country).
+- **Known customers** — anchor tenants pinned to a metro with a demand
+  share and an on-net flag; on-net tenants land on a cross connect inside
+  the campus instead of crossing the access network.
+- **Current edge locations** — what you run today. Their capex is sunk,
+  they set the baseline improvements are measured against, and any the new
+  topology makes redundant are flagged.
+- **Policy** — Digital Realty and/or Equinix, max new sites, MW per site,
+  permitted transports, and an objective slider from pure economics to
+  pure latency.
+
+### Site catalog
+
+65 candidate sites: Digital Realty (including Interxion, Ascenty and
+Teraco campuses) and Equinix IBX metros across the Americas, EMEA and
+APAC, each with coordinates, power headroom, air and liquid rack
+density, SDN fabric, dark fibre, on-net internet exchange and
+participant count, subsea cable landing, colo multiplier, energy price
+and lead time. Browsable and filterable in the **Site atlas** tab.
+
+**Rack density is a hard siting gate, not a footnote.** Densities run
+from 7 kW — classic carrier-hotel cabinets in the older interconnect
+buildings — to 100 kW liquid-ready positions in purpose-built AI halls.
+A GPU node is a chassis and cannot straddle two cabinets, so a node
+drawing more than the site's rack density does not land there at all: a
+B300 node is 8.8 kW, an MI355X node 11.2 kW, and an NVL72-class system
+is its own cabinet needing a 100 kW+ liquid-ready position. That is
+what pushes hub serving out of the densest peering metros and into the
+AI halls, and it is why a lower-power edge node is what buys you back
+into them. Cabinet counts are reported per site, because at low density
+a single node can occupy a whole rack — which costs nothing extra under
+per-kW colo but is exactly what a cabinet-priced quote keys off.
+
+### Outputs
+
+- **Recommended topology** — regional hubs, metro hubs and edge PoPs, each
+  with the platform it should run, replicas and nodes, load, TTFT split
+  into prefill and queue, decode per stream, cost, `$`/1M and net
+  contribution, plus a plain-language *why this site*.
+- **Routing recipe per site** — cross connects for on-net tenants,
+  ServiceFabric / Equinix Fabric virtual circuits for tenant onboarding
+  and cloud on-ramps, an IX peering port sized against eyeball traffic
+  with the transit remainder priced, and dark fibre or a managed wave back
+  to the nearest hub for weight distribution and KV warm-up.
+- **Marginal gain** — what each added site does to TTFT, coverage, SLO
+  attainment and net value, so the point of diminishing returns is visible
+  rather than asserted.
+- **TTFT by market** — planned against baseline, with the transport,
+  distance, access and network legs broken out.
+- **Demand with nowhere to land** — markets blocked by residency or power
+  envelopes, with the nearest permitted site and what the smallest viable
+  footprint there would cost.
+- **Financial position** — compute, colo, storage, cross connects, fabric,
+  IX ports and transit, baseline against plan, plus operator revenue
+  (colo + interconnect) to Digital Realty / Equinix.
+- **Training siting** — for training workloads the serving optimiser is
+  skipped entirely and sites are ranked on delivered cost per million
+  training tokens for a fixed MW block, with the honest caveat that
+  compute is ~90% of the bill and the whole site spread is a few percent.
+- Copy-as-text and CSV export.
+
+### The model behind the numbers
+
+Same physics and economics as FLUX — the linear + quadratic-attention
+prefill model, KV sizing at 0.330/0.165/0.083 MB per token, `$220`/kW-month
+colo, 35% utilisation, the `$3.50`/1M market reference — plus geography:
+
+- Propagation at 204 km/ms one-way in fibre with 1.38 route circuity,
+  doubled for the round trip; per-transport overheads (cross connect
+  +0.1 ms, dark fibre +0.4, IX +1.2, fabric +2.5) and an IP-transit
+  fallback at 1.55 circuity plus a 12 ms middle-mile penalty.
+- Access latency the user already spends: on-net 1.5 ms through to mobile
+  22 ms — on mobile access the tool will decline to add a second PoP
+  400 km from the first, and say why.
+- Demand is routed on *total* latency, not distance: sites are placed
+  once on proximity, their real service time measured, then placed again —
+  so a nearby small node never wins traffic it would answer more slowly.
+- Tokens are discounted when they land outside the TTFT SLO or below the
+  decode floor. That discount is how a latency improvement becomes a
+  financial one — and when the SLO is already met, the tool says plainly
+  that the latency gain is not being monetised.
+
+## 3. Sharp(er) Enterprises workshop simulator (`workshop-simulator/`)
 
 The full workshop application (React + Vite + TypeScript, 72 tests) for
 the AuraCopilot scenario — Llama 3.3 70B at native FP16, quantization
@@ -124,7 +235,7 @@ Tokyo hubs. Six tabs:
 Also ships `sharepoint/` — self-contained single-file builds
 (`.html`/`.aspx`) and a workshop launcher for SharePoint hosting.
 
-## 3. Original AI infrastructure simulator (`original-simulator/`)
+## 4. Original AI infrastructure simulator (`original-simulator/`)
 
 The general-purpose ancestor: model/silicon/network/cooling/datacenter
 catalogs, the roofline simulation engine, the animated prompt journey,
