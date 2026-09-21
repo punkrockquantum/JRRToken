@@ -1,0 +1,2592 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FLUX EDGE — Edge PoP &amp; Regional Hub Site Planner</title>
+    <style>
+      /* Monochrome (black & white) theme — matches FLUX (index.html). */
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #000000;
+        color: #f5f5f5;
+      }
+      header { padding: 1.25rem 1.5rem; border-bottom: 1px solid #333333; }
+      h1 { margin: 0 0 0.35rem; font-size: 1.4rem; letter-spacing: 0.02em; }
+      main { padding: 1.25rem 1.5rem; max-width: 1320px; }
+      .panel {
+        background: #0d0d0d;
+        border: 1px solid #333333;
+        border-radius: 10px;
+        padding: 1rem 1.25rem;
+      }
+      button {
+        border-radius: 8px;
+        border: 1px solid #555555;
+        color: #f5f5f5;
+        background: #1a1a1a;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 0.45rem 0.9rem;
+      }
+      button:hover { background: #2a2a2a; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .muted { color: #a3a3a3; font-size: 0.9rem; }
+      .tiny { font-size: 0.8rem; color: #a3a3a3; }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.75rem;
+      }
+      .tab-active { background: #ffffff; color: #000000; border-color: #ffffff; }
+      .tab-active:hover { background: #e5e5e5; }
+      .view { margin-top: 0.5rem; }
+      h4.sec {
+        margin: 1.1rem 0 0.3rem;
+        font-size: 0.98rem;
+        color: #f5f5f5;
+        border-top: 1px solid #333333;
+        padding-top: 0.8rem;
+      }
+      h4.sec:first-of-type { border-top: 0; padding-top: 0; margin-top: 0.2rem; }
+      h5.sub { margin: 0.9rem 0 0.3rem; font-size: 0.9rem; color: #c5c5c5; }
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+      }
+      .controls-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .field { display: flex; flex-direction: column; gap: 0.25rem; }
+      .field[hidden] { display: none; }
+      input[type="number"], input[type="text"], select {
+        border-radius: 8px;
+        border: 1px solid #555555;
+        background: #050505;
+        color: #f5f5f5;
+        padding: 0.5rem 0.6rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        width: 100%;
+      }
+      select[multiple] { font-weight: 500; }
+      select:disabled, input:disabled { opacity: 0.4; }
+      input[type="range"] { width: 100%; accent-color: #ffffff; }
+      .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.15rem 0 0.4rem; }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        border: 1px solid #555555;
+        border-radius: 9999px;
+        padding: 0.25rem 0.7rem;
+        font-size: 0.82rem;
+        cursor: pointer;
+        user-select: none;
+        background: #050505;
+      }
+      .chip input { accent-color: #ffffff; margin: 0; }
+      .chip.on { background: #ffffff; color: #000000; border-color: #ffffff; }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin: 0.25rem 0 0.75rem;
+      }
+      .stats-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+      .stat {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        background: #050505;
+        border: 1px solid #333333;
+        border-radius: 8px;
+        padding: 0.6rem 0.75rem;
+      }
+      .stat-value { font-size: 1.3rem; font-weight: 700; color: #ffffff; }
+      .stat .delta { font-size: 0.8rem; color: #a3a3a3; }
+      .notice {
+        margin: 0.4rem 0 0.75rem;
+        border: 1px solid #555555;
+        border-left: 3px solid #ffffff;
+        background: #0d0d0d;
+        border-radius: 8px;
+        padding: 0.6rem 0.85rem;
+        line-height: 1.45;
+      }
+      .notice.over { background: #ffffff; color: #000000; border-color: #ffffff; }
+      table.mini {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+      }
+      table.mini th, table.mini td {
+        border: 1px solid #333333;
+        padding: 0.32rem 0.45rem;
+        text-align: left;
+        white-space: nowrap;
+      }
+      table.mini th { color: #c5c5c5; font-weight: 600; }
+      table.mini td.num, table.mini th.num { text-align: right; }
+      tr.sel td { background: rgba(255, 255, 255, 0.1); font-weight: 700; }
+      tr.dim td { opacity: 0.5; }
+      .tablewrap { overflow-x: auto; max-width: 100%; }
+      /* Grid children default to min-width:auto, so a wide table inside one
+         widens the whole grid instead of scrolling within its own wrapper. */
+      .split > *, .cards > *, .stats > *, .controls > * { min-width: 0; }
+      ul.recs { margin: 0.25rem 0 0; padding-left: 1.1rem; display: grid; gap: 0.45rem; }
+      ul.recs li { line-height: 1.45; }
+      .go { background: #ffffff; color: #000000; border-color: #ffffff; }
+      .go:hover { background: #e5e5e5; }
+      .pill {
+        border: 1px solid #555555;
+        border-radius: 9999px;
+        padding: 0.1rem 0.55rem;
+        font-size: 0.75rem;
+        color: #a3a3a3;
+        white-space: nowrap;
+      }
+      .pill.on { color: #000000; background: #ffffff; border-color: #ffffff; }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin: 0.5rem 0 0.25rem;
+      }
+      .card {
+        background: #050505;
+        border: 1px solid #333333;
+        border-radius: 8px;
+        padding: 0.8rem 0.9rem;
+      }
+      .card h5 { margin: 0 0 0.15rem; font-size: 1rem; display: flex; justify-content: space-between; gap: 0.5rem; align-items: baseline; }
+      .card .row { display: flex; justify-content: space-between; gap: 0.6rem; font-size: 0.85rem; padding: 0.12rem 0; }
+      .card .row span:last-child { color: #ffffff; font-weight: 600; }
+      .card .why { margin: 0.5rem 0 0; font-size: 0.84rem; line-height: 1.45; color: #c5c5c5; }
+      .card .route { margin: 0.45rem 0 0; padding-left: 1rem; font-size: 0.82rem; line-height: 1.45; color: #c5c5c5; }
+      /* Single-series magnitude bars: one fill on the page surface, value
+         direct-labelled, rounded data-end anchored to a zero baseline. The
+         table beside each chart is the accessible data view. */
+      .bars { display: grid; gap: 0.3rem; margin-top: 0.5rem; }
+      .bar-row { display: grid; grid-template-columns: minmax(150px, 220px) 1fr minmax(96px, auto); gap: 0.6rem; align-items: center; font-size: 0.84rem; }
+      .bar-track { background: #141414; border: 1px solid #333333; border-radius: 4px; height: 16px; overflow: hidden; }
+      .bar-fill { height: 100%; background: #ffffff; border-radius: 0 4px 4px 0; min-width: 2px; }
+      .bar-fill.ghost { background: #4d4d4d; }
+      .bar-val { text-align: right; font-weight: 700; color: #ffffff; white-space: nowrap; }
+      .legend { display: flex; gap: 0.9rem; font-size: 0.8rem; color: #a3a3a3; margin-top: 0.4rem; }
+      .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 0.3rem; vertical-align: -1px; }
+      .legend i.now { background: #4d4d4d; }
+      .legend i.plan { background: #ffffff; }
+      .split { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+      pre.plan {
+        white-space: pre-wrap;
+        background: #050505;
+        border: 1px solid #333333;
+        border-radius: 8px;
+        padding: 0.8rem 0.9rem;
+        font-size: 0.8rem;
+        line-height: 1.5;
+        max-height: 420px;
+        overflow: auto;
+      }
+      .custrow { display: grid; grid-template-columns: 1.4fr 1.2fr 0.6fr auto auto; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem; }
+      .method p, .method li { line-height: 1.55; }
+      .method code { background: #1a1a1a; padding: 0.05rem 0.3rem; border-radius: 4px; font-size: 0.85em; }
+      @media (max-width: 1000px) {
+        .controls, .controls-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .stats, .stats-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .cards, .split { grid-template-columns: 1fr; }
+        .custrow { grid-template-columns: 1fr 1fr; }
+      }
+      @media (max-width: 620px) {
+        main { padding: 1rem; }
+        .controls, .controls-3, .stats, .stats-5 { grid-template-columns: 1fr; }
+        .bar-row { grid-template-columns: 1fr; gap: 0.2rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>FLUX EDGE — Edge PoP &amp; Regional Hub Site Planner</h1>
+      <p class="muted">
+        Site selection for AI inference and training across <strong>Digital Realty</strong> and
+        <strong>Equinix</strong> metros. Describe the workload (industry application, LLM provider or
+        NeoCloud), the model scale, the customers you already serve and the edge locations you already
+        run — the optimiser returns the sites to add, how to route them (cross connect &middot;
+        ServiceFabric / Equinix Fabric &middot; dark fibre &middot; internet exchange) and what each one
+        buys you in TTFT, throughput and dollars. Catalog metadata, prices and performance are
+        illustrative planning models, not quotes or availability commitments.
+        <a href="index.html" style="color:#ffffff">&larr; FLUX AI Workload Planner</a>
+      </p>
+    </header>
+
+    <main>
+      <section class="panel">
+        <div class="toolbar">
+          <button id="tabPlan" class="tab-active">1 &middot; Deployment optimiser</button>
+          <button id="tabAtlas">2 &middot; Site atlas</button>
+          <button id="tabMethod">3 &middot; Method &amp; assumptions</button>
+        </div>
+
+        <!-- ======================== TAB 1: OPTIMISER ======================== -->
+        <div id="planView" class="view">
+          <h4 class="sec">1 &middot; Workload &amp; model</h4>
+          <div class="controls">
+            <label class="field">
+              <span class="muted">Category</span>
+              <select id="epCat">
+                <option value="industry">Industry application</option>
+                <option value="llm">LLM provider / model serving</option>
+                <option value="neocloud">NeoCloud / GPUaaS</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">Use case</span>
+              <select id="epProfile"></select>
+            </label>
+            <label class="field">
+              <span class="muted">Workload</span>
+              <select id="epWorkload">
+                <option value="inference">Inference only</option>
+                <option value="both">Inference + training hub</option>
+                <option value="training">Training only</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">Model</span>
+              <select id="epModel"></select>
+            </label>
+            <label class="field" id="fldCustP" hidden>
+              <span class="muted">Custom parameters (B)</span>
+              <input id="epCustP" type="number" min="0.5" step="1" value="70" />
+            </label>
+            <label class="field" id="fldCustA" hidden>
+              <span class="muted">MoE active params (B, 0 = dense)</span>
+              <input id="epCustA" type="number" min="0" step="1" value="0" />
+            </label>
+            <label class="field">
+              <span class="muted">Accelerator — regional hubs</span>
+              <select id="epGpu"></select>
+            </label>
+            <label class="field">
+              <span class="muted">Accelerator — edge PoPs</span>
+              <select id="epEdgeGpu">
+                <option value="auto">Auto — smallest platform that fits the model</option>
+                <option value="same">Same as the hubs</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">Context window (tokens)</span>
+              <input id="epCtx" type="number" min="256" step="256" value="8000" />
+            </label>
+            <label class="field">
+              <span class="muted">KV precision</span>
+              <select id="epKv">
+                <option value="fp16">FP16 — 0.330 MB/token</option>
+                <option value="fp8" selected>FP8 — 0.165 MB/token</option>
+                <option value="fp4">FP4 — 0.083 MB/token</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">Size the estate from</span>
+              <select id="epDemandMode">
+                <option value="concurrency">Peak concurrent streams</option>
+                <option value="volume">Token volume per day</option>
+              </select>
+            </label>
+            <label class="field" id="fldUsers">
+              <span class="muted">Peak concurrent streams</span>
+              <input id="epUsers" type="number" min="1" step="100" value="20000" />
+            </label>
+            <label class="field" id="fldVolume" hidden>
+              <span class="muted">Output tokens per day (millions)</span>
+              <input id="epVolume" type="number" min="1" step="100" value="20000" />
+            </label>
+            <label class="field">
+              <span class="muted">Duty cycle — mean load vs peak (%)</span>
+              <input id="epDuty" type="number" min="5" max="100" step="5" value="35" />
+            </label>
+            <label class="field">
+              <span class="muted">Persistent KV cache (KVA) at hubs</span>
+              <select id="epKva">
+                <option value="0">Off</option>
+                <option value="40" selected>40% prefix reuse</option>
+                <option value="80">80% prefix reuse</option>
+              </select>
+            </label>
+          </div>
+          <p class="tiny" id="epProfileNote"></p>
+
+          <h4 class="sec">2 &middot; Demand footprint</h4>
+          <span class="muted tiny">User regions in scope — demand is weighted by metro</span>
+          <div class="chips" id="epRegions"></div>
+          <div class="controls">
+            <label class="field">
+              <span class="muted">User access network</span>
+              <select id="epAccess"></select>
+            </label>
+            <label class="field">
+              <span class="muted">Data residency</span>
+              <select id="epResidency">
+                <option value="none">None — serve from anywhere</option>
+                <option value="region">In-region (continental)</option>
+                <option value="country">In-country</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">TTFT SLO (ms)</span>
+              <input id="epSlo" type="number" min="20" step="10" value="300" />
+            </label>
+            <label class="field">
+              <span class="muted">Min decode rate per stream (tok/s)</span>
+              <input id="epTps" type="number" min="1" step="1" value="25" />
+            </label>
+          </div>
+
+          <h5 class="sub">Known customers / anchor tenants</h5>
+          <p class="tiny">
+            Anchor demand at a metro. On-net tenants land on a cross connect inside the campus
+            (≈0.1 ms, no middle mile); off-net tenants reach the site over the access network.
+            Unallocated share is spread across the in-scope metros by demand weight.
+          </p>
+          <div id="epCustRows"></div>
+          <div class="toolbar" style="margin-top:0.4rem">
+            <button id="epAddCust">+ Add customer</button>
+            <span class="tiny" id="epCustNote"></span>
+          </div>
+
+          <h4 class="sec">3 &middot; Current edge locations</h4>
+          <p class="tiny">
+            Sites you already run. They are kept in the plan (their capex is sunk), they set the
+            <em>baseline</em> that improvements are measured against, and the optimiser will flag any that
+            the new topology makes redundant. Select none to baseline against a single centralised
+            region — the "everything in one metro today" case.
+          </p>
+          <div class="controls">
+            <label class="field" style="grid-column: span 2">
+              <span class="muted">Deployed today (ctrl / cmd-click for multiple)</span>
+              <select id="epCurrent" multiple size="8"></select>
+            </label>
+            <label class="field">
+              <span class="muted">Baseline if nothing selected</span>
+              <select id="epBaseline"></select>
+            </label>
+          </div>
+
+          <h4 class="sec">4 &middot; Siting &amp; routing policy</h4>
+          <div class="controls">
+            <label class="field">
+              <span class="muted">Operator</span>
+              <select id="epOperator">
+                <option value="both">Digital Realty + Equinix</option>
+                <option value="DLR">Digital Realty only</option>
+                <option value="EQX">Equinix only</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">Max new sites</span>
+              <input id="epMaxSites" type="number" min="0" max="12" step="1" value="6" />
+            </label>
+            <label class="field">
+              <span class="muted">Max IT load per new site (MW)</span>
+              <input id="epMaxMw" type="number" min="0.05" step="0.25" value="5" />
+            </label>
+            <label class="field">
+              <span class="muted">Optimise for</span>
+              <input id="epObjective" type="range" min="0" max="100" step="5" value="50" />
+              <span class="tiny" id="epObjectiveNote">Balanced — 50% latency / 50% economics</span>
+            </label>
+          </div>
+          <span class="muted tiny">Permitted transports</span>
+          <div class="chips" id="epTransports"></div>
+          <div class="chips" id="epFilters"></div>
+
+          <div class="toolbar" style="margin-top:0.9rem">
+            <button id="epRun" class="go">Optimise deployment</button>
+            <button id="epReset">Reset to profile defaults</button>
+            <span class="tiny" id="epRunNote"></span>
+          </div>
+
+          <div id="epResults"></div>
+        </div>
+
+        <!-- ========================= TAB 2: ATLAS ========================== -->
+        <div id="atlasView" class="view" hidden>
+          <h4 class="sec">Candidate site atlas</h4>
+          <p class="tiny">
+            The catalog the optimiser draws from: Digital Realty (including Interxion, Ascenty and
+            Teraco campuses) and Equinix IBX metros. Power headroom, rack density, lead time, colo rate
+            and energy price are planning estimates for modelling — confirm availability with the
+            operator before committing a design.
+          </p>
+          <div class="controls">
+            <label class="field">
+              <span class="muted">Operator</span>
+              <select id="atOp">
+                <option value="all">All</option>
+                <option value="DLR">Digital Realty</option>
+                <option value="EQX">Equinix</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="muted">Region</span>
+              <select id="atRegion"><option value="all">All regions</option></select>
+            </label>
+            <label class="field">
+              <span class="muted">Minimum power headroom (MW)</span>
+              <input id="atMw" type="number" min="0" step="1" value="0" />
+            </label>
+            <label class="field">
+              <span class="muted">Must have</span>
+              <select id="atCap">
+                <option value="all">Anything</option>
+                <option value="liquid">Direct liquid cooling</option>
+                <option value="fabric">SDN fabric (ServiceFabric / Equinix Fabric)</option>
+                <option value="ix">On-net internet exchange</option>
+                <option value="dark">Dark fibre / metro waves</option>
+                <option value="cable">Subsea cable landing</option>
+              </select>
+            </label>
+          </div>
+          <div class="tablewrap" id="atlasTable"></div>
+        </div>
+
+        <!-- ========================= TAB 3: METHOD ========================= -->
+        <div id="methodView" class="view method" hidden></div>
+      </section>
+    </main>
+
+    <script>
+      // =======================================================================
+      // FLUX EDGE — edge PoP & regional inference hub siting optimiser.
+      //
+      // Physics and economics are kept consistent with FLUX (index.html): the
+      // same prefill model (linear + quadratic attention), the same KV-cache
+      // sizing, the same $220/kW-mo colo reference, 35% utilisation and the
+      // $3.50/1M-token market reference. What is new here is geography: real
+      // metro coordinates, fibre-speed propagation, per-transport overheads and
+      // a greedy + swap optimiser over the DLR/Equinix candidate set.
+      // =======================================================================
+
+      const $ = (id) => document.getElementById(id);
+      const nf = (n) => Math.round(n).toLocaleString("en-US");
+      const nf1 = (n) => (Math.round(n * 10) / 10).toLocaleString("en-US", { maximumFractionDigits: 1 });
+      const usd = (n) => (n < 0 ? "-$" : "$") + Math.round(Math.abs(n)).toLocaleString("en-US");
+      const usdSmart = (n) => "$" + (Math.abs(n) >= 0.1 ? n.toFixed(2) : n.toFixed(3));
+      const ms = (n) => nf1(n) + " ms";
+      const pct = (n) => nf1(n * 100) + "%";
+      const fmtPow = (kW) => (kW >= 1000 ? nf1(kW / 1000) + " MW" : nf1(kW) + " kW");
+      const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+      const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+      // --------------------------- Shared constants --------------------------
+      const COLO_KW_MO = 220;      // all-in colo reference, $/kW-month (FLUX)
+      const HRS_MO = 730;
+      const MARKET_PER_1M = 3.5;   // market reference price per 1M tokens
+      const UTIL = 0.35;           // steady-state utilisation of provisioned capacity
+      const MFU_PREFILL = 0.4;     // achievable fraction of peak FP8 compute in prefill
+      const ATTN_LD = 9360;        // layers x d_model per active-B param (Llama-70B calibrated)
+      const KVA_STREAM_GBS = 6;    // KV stream rate per GPU shard
+      const KVA_OVERHEAD_MS = 90;
+      const KVMB = { fp16: 0.33, fp8: 0.165, fp4: 0.0825 };
+      const KVLBL = { fp16: "FP16", fp8: "FP8", fp4: "FP4" };
+      const TRAIN_FACTOR = 0.3;    // training ≈ 3x FLOPs/token at similar MFU
+
+      // Propagation: ~204 km/ms one-way in fibre, x1.38 route circuity (real
+      // paths are not great circles), doubled for round trip.
+      const KM_PER_MS = 204;
+      const CIRCUITY = 1.38;
+      const TRANSIT_CIRCUITY = 1.55;   // public-internet paths detour further
+      const TRANSIT_PENALTY_MS = 12;   // middle-mile queueing / peering detours
+
+      // Interconnect price book (illustrative $/month).
+      const XC_MO = { DLR: 350, EQX: 420 };            // per cross connect
+      const FABRIC_MO = { DLR: 900, EQX: 1100 };       // per virtual circuit (100G-class)
+      const IX_PORT_MO = { g10: 900, g100: 4500 };     // port + membership + XC
+      const DARK_MIN_MO = 4000;                        // protected metro/regional wave floor
+      const DARK_PER_KM_MO = 9;
+      const DARK_MAX_KM = 1400;                        // beyond this, buy a wave not dark fibre
+      const TRANSIT_MBPS_MO = 0.3;                     // IP transit $/Mbps/month
+      const BYTES_PER_TOKEN = 5.2;                     // token + streaming protocol overhead
+      const PEAK_FACTOR = 2.4;                         // peak:mean traffic ratio for port sizing
+      const STOR_HUB_MO = 6000;                        // all-flash tier at a regional hub
+      const STOR_KVA_MO = 1800;                        // persistent KV-cache service
+      const KV_OFFLOAD_BOOST = 0.3;                    // session budget uplift from flash offload
+
+      // Transport characteristics. `add` is fixed serialisation/equipment
+      // latency on top of propagation; `eff` scales east-west efficiency.
+      const TRANSPORTS = {
+        cross: { id: "cross", label: "Cross connect", short: "XC", add: 0.1, eff: 1.0, intraOnly: true,
+          note: "passive fibre inside the campus — on-net tenants and cloud on-ramps" },
+        dark: { id: "dark", label: "Dark fibre / metro wave", short: "DF", add: 0.4, eff: 0.98,
+          note: "unlit fibre or DWDM wave between campuses — lowest long-haul latency, hub↔edge sync" },
+        ix: { id: "ix", label: "Internet exchange (peering)", short: "IX", add: 1.2, eff: 0.95,
+          note: "on-net IX port — eyeball traffic reaches users over member networks, not transit" },
+        fabric: { id: "fabric", label: "ServiceFabric / Equinix Fabric", short: "SF", add: 2.5, eff: 0.88,
+          note: "SDN virtual circuits — on-demand tenant onboarding and cloud reach" },
+        transit: { id: "transit", label: "IP transit", short: "IT", add: TRANSIT_PENALTY_MS, eff: 0.8,
+          note: "public internet fallback where nothing better is permitted or present" },
+      };
+
+      // Access network the user sits behind (last-mile RTT, ms).
+      const ACCESS = {
+        onnet: { id: "onnet", label: "On-net enterprise (cross connect / private WAN)", rtt: 1.5 },
+        wan: { id: "wan", label: "Enterprise WAN / SD-WAN branch", rtt: 6 },
+        fixed: { id: "fixed", label: "Consumer fixed broadband", rtt: 11 },
+        mobile: { id: "mobile", label: "Mobile 5G / cellular", rtt: 22 },
+        ot: { id: "ot", label: "Industrial OT / private 5G on site", rtt: 4 },
+      };
+
+      // =========================== Site catalog ==============================
+      // Columns: op, code, metro, country, region, lat, lng, campus note,
+      //          MW headroom (est.), max rack kW, flags, colo multiplier,
+      //          $/kWh, IX name, IX member count (est.), lead time (months).
+      // Flags: l = direct liquid cooling, f = SDN fabric on-net,
+      //        d = dark fibre / metro waves available, x = on-net internet
+      //        exchange, c = subsea cable landing adjacency.
+      const SITE_COLS = [
+        ["DLR", "ACC4", "Ashburn", "US", "namE", 39.02, -77.46, "Ashburn campus (ACC2–ACC16)", 90, 150, "lfdxc", 1.0, 0.07, "Equinix IX / DE-CIX NY reach", 260, 6],
+        ["DLR", "JFK10", "New York", "US", "namE", 40.79, -74.06, "Secaucus / 111 8th reach", 18, 90, "fdx", 1.25, 0.15, "DE-CIX New York / NYIIX", 380, 9],
+        ["DLR", "ORD10", "Chicago", "US", "namC", 41.85, -87.65, "Franklin Park / 350 E Cermak reach", 40, 120, "lfdx", 0.95, 0.08, "Equinix IX Chicago", 210, 7],
+        ["DLR", "DFW11", "Dallas", "US", "namC", 32.78, -96.8, "Richardson / Infomart reach", 55, 130, "lfdx", 0.92, 0.06, "Equinix IX Dallas", 170, 6],
+        ["DLR", "IAH10", "Houston", "US", "namC", 29.76, -95.37, "Houston metro", 30, 120, "lfd", 0.95, 0.06, "—", 40, 7],
+        ["DLR", "LAX11", "Los Angeles", "US", "namW", 34.05, -118.25, "600 W 7th / One Wilshire reach", 14, 90, "fdxc", 1.2, 0.16, "Any2 California", 320, 10],
+        ["DLR", "SJC12", "Silicon Valley", "US", "namW", 37.37, -121.95, "Santa Clara campus", 22, 110, "lfdx", 1.22, 0.17, "Equinix IX Silicon Valley", 290, 9],
+        ["DLR", "ATL2", "Atlanta", "US", "namE", 33.75, -84.39, "56 Marietta reach", 20, 100, "fdx", 0.94, 0.07, "Telx/DLR peering", 120, 7],
+        ["DLR", "SEA10", "Seattle", "US", "namW", 47.61, -122.33, "Westin Building reach", 12, 90, "fdxc", 1.05, 0.08, "Seattle IX (SIX)", 430, 8],
+        ["DLR", "PHX10", "Phoenix", "US", "namW", 33.45, -112.07, "Phoenix / Chandler campus", 60, 140, "lfd", 0.88, 0.07, "—", 45, 6],
+        ["DLR", "YYZ10", "Toronto", "CA", "namE", 43.65, -79.38, "Toronto campus", 16, 100, "lfdx", 1.08, 0.09, "TorIX", 260, 8],
+        ["DLR", "LHR19", "London", "UK", "emeaW", 51.51, -0.05, "LHR19 / Interxion LON1 Brick Lane", 26, 130, "lfdx", 1.2, 0.18, "LINX / LONAP", 950, 8],
+        ["DLR", "AMS11", "Amsterdam", "NL", "emeaW", 52.36, 4.89, "Interxion AMS science park campus", 20, 130, "lfdxc", 1.1, 0.14, "AMS-IX", 890, 9],
+        ["DLR", "FRA15", "Frankfurt", "DE", "emeaW", 50.11, 8.68, "Interxion FRA campus (Kleyerstrasse)", 24, 130, "lfdx", 1.15, 0.16, "DE-CIX Frankfurt", 1100, 9],
+        ["DLR", "PAR8", "Paris", "FR", "emeaW", 48.86, 2.35, "Interxion PAR campus (La Courneuve)", 18, 120, "lfdx", 1.12, 0.12, "France-IX", 490, 9],
+        ["DLR", "MRS3", "Marseille", "FR", "emeaS", 43.3, 5.37, "Interxion MRS1–MRS5 cable hub", 12, 120, "lfdxc", 1.05, 0.12, "France-IX Marseille", 260, 8],
+        ["DLR", "MAD2", "Madrid", "ES", "emeaS", 40.42, -3.7, "Interxion MAD campus", 14, 110, "lfdx", 1.0, 0.13, "ESPANIX", 180, 8],
+        ["DLR", "DUB3", "Dublin", "IE", "emeaW", 53.35, -6.26, "Interxion DUB campus", 8, 110, "lfdxc", 1.12, 0.15, "INEX", 120, 12],
+        ["DLR", "ZUR2", "Zurich", "CH", "emeaW", 47.38, 8.54, "Interxion ZUR campus", 9, 110, "lfdx", 1.28, 0.16, "SwissIX", 150, 9],
+        ["DLR", "STO3", "Stockholm", "SE", "emeaN", 59.33, 18.07, "Interxion STO campus", 16, 120, "lfdx", 0.85, 0.09, "Netnod", 220, 7],
+        ["DLR", "CPH3", "Copenhagen", "DK", "emeaN", 55.68, 12.57, "Interxion CPH campus", 14, 120, "lfd", 0.9, 0.11, "—", 60, 7],
+        ["DLR", "VIE2", "Vienna", "AT", "emeaE", 48.21, 16.37, "Interxion VIE campus", 8, 100, "lfdx", 1.0, 0.14, "VIX", 140, 9],
+        ["DLR", "SIN11", "Singapore", "SG", "apacS", 1.35, 103.82, "Loyang / Jurong campus", 11, 120, "lfdxc", 1.3, 0.16, "Equinix IX Singapore", 310, 12],
+        ["DLR", "NRT10", "Tokyo", "JP", "apacN", 35.68, 139.69, "Osaki / Inzai campus", 13, 120, "lfdx", 1.35, 0.17, "JPIX / JPNAP", 240, 11],
+        ["DLR", "OSA1", "Osaka", "JP", "apacN", 34.69, 135.5, "Osaka metro", 9, 110, "lfd", 1.3, 0.17, "JPIX Osaka", 90, 11],
+        ["DLR", "HKG10", "Hong Kong", "HK", "apacN", 22.32, 114.17, "Tseung Kwan O campus", 7, 100, "fdxc", 1.32, 0.15, "HKIX", 300, 12],
+        ["DLR", "SYD10", "Sydney", "AU", "anz", -33.87, 151.21, "Sydney campus", 12, 110, "lfdxc", 1.24, 0.13, "IX Australia NSW", 180, 10],
+        ["DLR", "ICN2", "Seoul", "KR", "apacN", 37.57, 126.98, "Seoul metro", 8, 110, "lfd", 1.26, 0.11, "KINX", 120, 11],
+        ["DLR", "MAA10", "Chennai", "IN", "apacS", 13.08, 80.27, "Digital Connexion Chennai (cable landing)", 20, 120, "lfdxc", 0.82, 0.09, "Extreme IX", 130, 10],
+        ["DLR", "BOM10", "Mumbai", "IN", "apacS", 19.08, 72.88, "Digital Connexion Mumbai", 24, 120, "lfdxc", 0.85, 0.09, "NIXI / Extreme IX", 260, 10],
+        ["DLR", "JNB1", "Johannesburg", "ZA", "mea", -26.2, 28.05, "Teraco JB1/JB4 Isando campus", 30, 120, "lfdx", 0.9, 0.09, "NAPAfrica JNB", 640, 9],
+        ["DLR", "CPT1", "Cape Town", "ZA", "mea", -33.92, 18.42, "Teraco CT1 (cable landing)", 12, 110, "lfdxc", 0.92, 0.09, "NAPAfrica CPT", 280, 9],
+        ["DLR", "GRU10", "São Paulo", "BR", "latam", -23.55, -46.63, "Ascenty São Paulo campus", 35, 120, "lfdx", 0.95, 0.1, "IX.br São Paulo", 2200, 9],
+        ["DLR", "QRO1", "Querétaro", "MX", "latam", 20.59, -100.39, "Ascenty Querétaro campus", 28, 120, "lfd", 0.9, 0.09, "—", 35, 9],
+        ["EQX", "DC15", "Ashburn", "US", "namE", 39.02, -77.46, "DC1–DC21 Ashburn IBX campus", 26, 100, "lfdxc", 1.15, 0.08, "Equinix IX Ashburn", 420, 8],
+        ["EQX", "NY9", "New York", "US", "namE", 40.79, -74.06, "NY4/NY5/NY9 Secaucus", 14, 90, "lfdx", 1.35, 0.15, "Equinix IX New York", 400, 9],
+        ["EQX", "CH2", "Chicago", "US", "namC", 41.85, -87.65, "CH1–CH4 Cermak / Elk Grove", 12, 85, "fdx", 1.1, 0.08, "Equinix IX Chicago", 230, 9],
+        ["EQX", "DA11", "Dallas", "US", "namC", 32.78, -96.8, "DA1–DA11 Infomart campus", 16, 90, "lfdx", 1.05, 0.06, "Equinix IX Dallas", 190, 8],
+        ["EQX", "SV10", "Silicon Valley", "US", "namW", 37.4, -121.95, "SV1–SV10 San Jose campus", 10, 90, "lfdx", 1.4, 0.17, "Equinix IX Silicon Valley", 330, 10],
+        ["EQX", "LA4", "Los Angeles", "US", "namW", 34.05, -118.25, "LA1–LA4 One Wilshire adjacency", 8, 85, "fdxc", 1.35, 0.16, "Equinix IX Los Angeles", 300, 10],
+        ["EQX", "SE3", "Seattle", "US", "namW", 47.61, -122.33, "SE2/SE3 Westin adjacency", 7, 85, "fdxc", 1.2, 0.08, "Equinix IX Seattle", 250, 9],
+        ["EQX", "MI3", "Miami", "US", "namE", 25.77, -80.19, "MI1–MI3 NAP of the Americas reach", 8, 85, "fdxc", 1.18, 0.11, "Equinix IX Miami", 210, 9],
+        ["EQX", "TR2", "Toronto", "CA", "namE", 43.65, -79.38, "TR1–TR5 Toronto IBX", 9, 85, "fdx", 1.2, 0.09, "Equinix IX Toronto", 180, 9],
+        ["EQX", "LD6", "London", "UK", "emeaW", 51.51, -0.59, "LD4–LD8 Slough campus", 18, 100, "lfdx", 1.3, 0.18, "LINX / Equinix IX London", 900, 9],
+        ["EQX", "AM7", "Amsterdam", "NL", "emeaW", 52.36, 4.89, "AM5–AM11 Schepenbergweg campus", 12, 100, "lfdxc", 1.22, 0.14, "AMS-IX / Equinix IX", 870, 9],
+        ["EQX", "FR7", "Frankfurt", "DE", "emeaW", 50.11, 8.68, "FR4–FR9 Frankfurt campus", 14, 100, "lfdx", 1.28, 0.16, "DE-CIX / Equinix IX", 1050, 9],
+        ["EQX", "PA8", "Paris", "FR", "emeaW", 48.86, 2.35, "PA2–PA8 Saint-Denis campus", 10, 95, "lfdx", 1.25, 0.12, "France-IX / Equinix IX", 470, 9],
+        ["EQX", "MD2", "Madrid", "ES", "emeaS", 40.42, -3.7, "MD1–MD3 Madrid IBX", 7, 90, "fdx", 1.15, 0.13, "ESPANIX / Equinix IX", 170, 9],
+        ["EQX", "ZH5", "Zurich", "CH", "emeaW", 47.38, 8.54, "ZH2–ZH5 Zurich IBX", 6, 90, "lfdx", 1.42, 0.16, "SwissIX / Equinix IX", 160, 10],
+        ["EQX", "SK3", "Stockholm", "SE", "emeaN", 59.33, 18.07, "SK1–SK3 Stockholm IBX", 8, 95, "lfdx", 1.0, 0.09, "Netnod / Equinix IX", 210, 8],
+        ["EQX", "HE7", "Helsinki", "FI", "emeaN", 60.17, 24.94, "HE3–HE7 Helsinki IBX", 10, 95, "lfdxc", 0.95, 0.08, "FICIX / Equinix IX", 120, 8],
+        ["EQX", "WA3", "Warsaw", "PL", "emeaE", 52.23, 21.01, "WA1–WA3 Warsaw IBX", 7, 90, "fdx", 1.0, 0.13, "PLIX / Equinix IX", 180, 9],
+        ["EQX", "MU4", "Munich", "DE", "emeaW", 48.14, 11.58, "MU1–MU4 Munich IBX", 6, 90, "fdx", 1.3, 0.16, "DE-CIX Munich", 120, 10],
+        ["EQX", "DX2", "Dubai", "AE", "mea", 25.2, 55.27, "DX1–DX3 Dubai IBX", 9, 90, "lfdxc", 1.1, 0.08, "UAE-IX", 130, 10],
+        ["EQX", "SG5", "Singapore", "SG", "apacS", 1.35, 103.82, "SG1–SG5 Singapore IBX", 9, 95, "lfdxc", 1.38, 0.16, "Equinix IX Singapore", 330, 12],
+        ["EQX", "TY11", "Tokyo", "JP", "apacN", 35.68, 139.69, "TY1–TY12 Tokyo IBX", 10, 95, "lfdx", 1.42, 0.17, "Equinix IX Tokyo / JPNAP", 260, 11],
+        ["EQX", "OS3", "Osaka", "JP", "apacN", 34.69, 135.5, "OS1–OS3 Osaka IBX", 7, 90, "lfdx", 1.38, 0.17, "Equinix IX Osaka", 100, 11],
+        ["EQX", "HK5", "Hong Kong", "HK", "apacN", 22.32, 114.17, "HK1–HK5 Hong Kong IBX", 6, 90, "fdxc", 1.4, 0.15, "HKIX / Equinix IX", 310, 12],
+        ["EQX", "SY5", "Sydney", "AU", "anz", -33.87, 151.21, "SY1–SY5 Sydney IBX", 8, 90, "lfdxc", 1.32, 0.13, "Equinix IX Sydney", 200, 10],
+        ["EQX", "ME2", "Melbourne", "AU", "anz", -37.81, 144.96, "ME1–ME2 Melbourne IBX", 6, 90, "fdx", 1.28, 0.12, "IX Australia VIC", 130, 10],
+        ["EQX", "SL2", "Seoul", "KR", "apacN", 37.57, 126.98, "SL1–SL2 Seoul IBX", 6, 90, "fdx", 1.34, 0.11, "Equinix IX Seoul", 90, 11],
+        ["EQX", "MB3", "Mumbai", "IN", "apacS", 19.08, 72.88, "MB1–MB3 Mumbai IBX", 10, 95, "lfdxc", 0.95, 0.09, "Equinix IX Mumbai", 240, 10],
+        ["EQX", "SP4", "São Paulo", "BR", "latam", -23.55, -46.63, "SP1–SP4 São Paulo IBX", 9, 90, "fdx", 1.1, 0.1, "IX.br / Equinix IX", 2100, 10],
+        ["EQX", "MX2", "Mexico City", "MX", "latam", 19.43, -99.13, "MX1–MX2 Mexico City IBX", 7, 90, "fdx", 1.05, 0.09, "Equinix IX Mexico", 90, 10],
+        ["EQX", "BG2", "Bogotá", "CO", "latam", 4.71, -74.07, "BG1–BG2 Bogotá IBX", 5, 85, "fdx", 1.02, 0.11, "Equinix IX Bogotá", 70, 10],
+      ];
+      const OP_LABEL = { DLR: "Digital Realty", EQX: "Equinix" };
+      const SITES = SITE_COLS.map((r) => ({
+        id: r[0].toLowerCase() + "-" + r[1].toLowerCase(),
+        op: r[0], code: r[1], metro: r[2], country: r[3], region: r[4], lat: r[5], lng: r[6],
+        campus: r[7], mw: r[8], rackKw: r[9],
+        liquid: r[10].includes("l"), fabric: r[10].includes("f"), dark: r[10].includes("d"),
+        ix: r[10].includes("x"), cable: r[10].includes("c"),
+        colo: r[11], kwh: r[12], ixName: r[13], peers: r[14], lead: r[15],
+        label: r[0] + " " + r[1] + " — " + r[2],
+      }));
+      const SITE_BY_ID = {};
+      SITES.forEach((s) => (SITE_BY_ID[s.id] = s));
+
+      const REGIONS = {
+        namE: "North America — East",
+        namC: "North America — Central",
+        namW: "North America — West",
+        latam: "Latin America",
+        emeaW: "Europe — West",
+        emeaN: "Europe — Nordics",
+        emeaS: "Europe — South",
+        emeaE: "Europe — Central / East",
+        mea: "Middle East & Africa",
+        apacN: "APAC — North",
+        apacS: "APAC — South / SEA",
+        anz: "Australia & New Zealand",
+      };
+      // Continental grouping used by the in-region residency rule.
+      const CONTINENT = {
+        namE: "AMER", namC: "AMER", namW: "AMER", latam: "AMER",
+        emeaW: "EMEA", emeaN: "EMEA", emeaS: "EMEA", emeaE: "EMEA", mea: "EMEA",
+        apacN: "APAC", apacS: "APAC", anz: "APAC",
+      };
+
+      // ========================== Demand markets =============================
+      // Metro-level demand weights (digital-economy proxy, relative units).
+      // Deliberately includes metros with no DLR/Equinix campus in the catalog,
+      // so proximity — not just "where a site exists" — drives the placement.
+      const MARKET_COLS = [
+        ["nyc", "New York", "US", "namE", 40.71, -74.01, 100],
+        ["was", "Washington DC", "US", "namE", 38.9, -77.04, 62],
+        ["bos", "Boston", "US", "namE", 42.36, -71.06, 45],
+        ["atl", "Atlanta", "US", "namE", 33.75, -84.39, 42],
+        ["mia", "Miami", "US", "namE", 25.77, -80.19, 34],
+        ["tor", "Toronto", "CA", "namE", 43.65, -79.38, 38],
+        ["mtl", "Montreal", "CA", "namE", 45.5, -73.57, 20],
+        ["chi", "Chicago", "US", "namC", 41.85, -87.65, 55],
+        ["dfw", "Dallas", "US", "namC", 32.78, -96.8, 48],
+        ["hou", "Houston", "US", "namC", 29.76, -95.37, 34],
+        ["msp", "Minneapolis", "US", "namC", 44.98, -93.27, 20],
+        ["den", "Denver", "US", "namC", 39.74, -104.99, 24],
+        ["sfo", "San Francisco Bay", "US", "namW", 37.45, -122.15, 78],
+        ["lax", "Los Angeles", "US", "namW", 34.05, -118.25, 52],
+        ["sea", "Seattle", "US", "namW", 47.61, -122.33, 40],
+        ["phx", "Phoenix", "US", "namW", 33.45, -112.07, 22],
+        ["yvr", "Vancouver", "CA", "namW", 49.28, -123.12, 16],
+        ["gru", "São Paulo", "BR", "latam", -23.55, -46.63, 46],
+        ["rio", "Rio de Janeiro", "BR", "latam", -22.91, -43.17, 18],
+        ["mex", "Mexico City", "MX", "latam", 19.43, -99.13, 32],
+        ["bog", "Bogotá", "CO", "latam", 4.71, -74.07, 18],
+        ["scl", "Santiago", "CL", "latam", -33.45, -70.67, 14],
+        ["bue", "Buenos Aires", "AR", "latam", -34.6, -58.38, 18],
+        ["lon", "London", "UK", "emeaW", 51.51, -0.13, 92],
+        ["par", "Paris", "FR", "emeaW", 48.86, 2.35, 58],
+        ["fra", "Frankfurt", "DE", "emeaW", 50.11, 8.68, 44],
+        ["ber", "Berlin", "DE", "emeaW", 52.52, 13.4, 30],
+        ["muc", "Munich", "DE", "emeaW", 48.14, 11.58, 32],
+        ["ams", "Amsterdam", "NL", "emeaW", 52.37, 4.9, 38],
+        ["bru", "Brussels", "BE", "emeaW", 50.85, 4.35, 20],
+        ["zrh", "Zurich", "CH", "emeaW", 47.38, 8.54, 24],
+        ["dub", "Dublin", "IE", "emeaW", 53.35, -6.26, 18],
+        ["mil", "Milan", "IT", "emeaS", 45.46, 9.19, 32],
+        ["rom", "Rome", "IT", "emeaS", 41.9, 12.5, 20],
+        ["mad", "Madrid", "ES", "emeaS", 40.42, -3.7, 30],
+        ["bcn", "Barcelona", "ES", "emeaS", 41.39, 2.17, 20],
+        ["lis", "Lisbon", "PT", "emeaS", 38.72, -9.14, 14],
+        ["sto", "Stockholm", "SE", "emeaN", 59.33, 18.07, 20],
+        ["osl", "Oslo", "NO", "emeaN", 59.91, 10.75, 16],
+        ["cph", "Copenhagen", "DK", "emeaN", 55.68, 12.57, 16],
+        ["hel", "Helsinki", "FI", "emeaN", 60.17, 24.94, 12],
+        ["waw", "Warsaw", "PL", "emeaE", 52.23, 21.01, 22],
+        ["vie", "Vienna", "AT", "emeaE", 48.21, 16.37, 16],
+        ["prg", "Prague", "CZ", "emeaE", 50.08, 14.44, 14],
+        ["ist", "Istanbul", "TR", "emeaE", 41.01, 28.98, 26],
+        ["dxb", "Dubai", "AE", "mea", 25.2, 55.27, 28],
+        ["ruh", "Riyadh", "SA", "mea", 24.71, 46.68, 26],
+        ["tlv", "Tel Aviv", "IL", "mea", 32.08, 34.78, 20],
+        ["jnb", "Johannesburg", "ZA", "mea", -26.2, 28.05, 24],
+        ["cpt", "Cape Town", "ZA", "mea", -33.92, 18.42, 14],
+        ["los", "Lagos", "NG", "mea", 6.52, 3.38, 18],
+        ["nbo", "Nairobi", "KE", "mea", -1.29, 36.82, 12],
+        ["nrt", "Tokyo", "JP", "apacN", 35.68, 139.69, 66],
+        ["osa", "Osaka", "JP", "apacN", 34.69, 135.5, 26],
+        ["icn", "Seoul", "KR", "apacN", 37.57, 126.98, 40],
+        ["hkg", "Hong Kong", "HK", "apacN", 22.32, 114.17, 30],
+        ["tpe", "Taipei", "TW", "apacN", 25.03, 121.57, 26],
+        ["sin", "Singapore", "SG", "apacS", 1.35, 103.82, 44],
+        ["kul", "Kuala Lumpur", "MY", "apacS", 3.14, 101.69, 20],
+        ["bkk", "Bangkok", "TH", "apacS", 13.76, 100.5, 22],
+        ["cgk", "Jakarta", "ID", "apacS", -6.21, 106.85, 28],
+        ["mnl", "Manila", "PH", "apacS", 14.6, 120.98, 22],
+        ["sgn", "Ho Chi Minh City", "VN", "apacS", 10.82, 106.63, 20],
+        ["bom", "Mumbai", "IN", "apacS", 19.08, 72.88, 44],
+        ["blr", "Bengaluru", "IN", "apacS", 12.97, 77.59, 40],
+        ["del", "Delhi NCR", "IN", "apacS", 28.61, 77.21, 34],
+        ["maa", "Chennai", "IN", "apacS", 13.08, 80.27, 22],
+        ["syd", "Sydney", "AU", "anz", -33.87, 151.21, 30],
+        ["mel", "Melbourne", "AU", "anz", -37.81, 144.96, 24],
+        ["bne", "Brisbane", "AU", "anz", -27.47, 153.03, 14],
+        ["per", "Perth", "AU", "anz", -31.95, 115.86, 10],
+        ["akl", "Auckland", "NZ", "anz", -36.85, 174.76, 10],
+      ];
+      const MARKETS = MARKET_COLS.map((r) => ({
+        id: r[0], metro: r[1], country: r[2], region: r[3], lat: r[4], lng: r[5], w: r[6],
+      }));
+      const MARKET_BY_ID = {};
+      MARKETS.forEach((m) => (MARKET_BY_ID[m.id] = m));
+
+      // ============================ Use-case profiles ========================
+      // Each profile sets the workload shape and the demand character. `tilt`
+      // re-weights metros for industries that do not follow general population
+      // (manufacturing, energy, capital markets).
+      const PROFILES = {
+        // ---- industry applications
+        fsiFraud: { cat: "industry", label: "FSI — real-time fraud / payment scoring",
+          model: "qwen332", ctx: 2048, kv: "fp8", gpu: "b300", users: 4000, duty: 8, slo: 120, tps: 40,
+          access: "onnet", residency: "country", kva: "0", workload: "inference",
+          tilt: { nyc: 1.9, lon: 1.9, sin: 1.5, hkg: 1.4, fra: 1.5, zrh: 1.6, tor: 1.3, gru: 1.3, dxb: 1.3, nrt: 1.3, chi: 1.5 },
+          anchors: [["Anchor — tier-1 card network", "nyc", 14, true], ["Anchor — European clearing bank", "lon", 10, true]],
+          desc: "Scoring must return inside the authorisation window: a compact model, a short context, on-net cross connects into the payment estate and in-country residency. TTFT is the product." },
+        fsiCopilot: { cat: "industry", label: "FSI — research & advisor copilots",
+          model: "llama70", ctx: 32000, kv: "fp8", gpu: "b300", users: 3000, duty: 20, slo: 900, tps: 28,
+          access: "onnet", residency: "region", kva: "80", workload: "inference",
+          tilt: { nyc: 1.8, lon: 1.8, zrh: 1.5, fra: 1.3, sin: 1.4, hkg: 1.3, bos: 1.3 },
+          anchors: [["Anchor — global asset manager", "nyc", 12, true]],
+          desc: "Long research contexts over a shared document corpus — prefill dominates, so persistent KV cache at a regional hub matters far more than another edge PoP." },
+        lifeSci: { cat: "industry", label: "Life science — drug discovery & trials",
+          model: "llama70", ctx: 16000, kv: "fp8", gpu: "b300", users: 1200, duty: 45, slo: 3000, tps: 20,
+          access: "wan", residency: "region", kva: "80", workload: "both",
+          tilt: { bos: 2.0, bas: 1.5, zrh: 1.6, lon: 1.4, sfo: 1.6, muc: 1.4, blr: 1.3, nrt: 1.2 },
+          anchors: [["Anchor — pharma R&D campus", "bos", 18, true]],
+          desc: "Batch-shaped screening and scientific long-context work. Latency tolerance is high, so consolidate into few large hubs with cheap power and pull data over dark fibre." },
+        mfg: { cat: "industry", label: "Manufacturing — inspection & operator copilots",
+          model: "qwen332", ctx: 4096, kv: "fp8", gpu: "b200", users: 2500, duty: 12, slo: 250, tps: 25,
+          access: "ot", residency: "country", kva: "0", workload: "inference",
+          tilt: { muc: 2.0, fra: 1.6, nrt: 1.7, icn: 1.6, chi: 1.5, dfw: 1.4, mil: 1.6, tpe: 1.6, gru: 1.3, mex: 1.4, blr: 1.3 },
+          anchors: [["Anchor — automotive plant cluster", "muc", 16, true]],
+          desc: "Plant-floor inference: deterministic latency into OT networks, in-country data handling, and a PoP near each manufacturing cluster rather than near population." },
+        robotics: { cat: "industry", label: "Robotics / AV fleet support",
+          model: "qwen38", ctx: 1024, kv: "fp8", gpu: "rtx6000", users: 8000, duty: 15, slo: 80, tps: 50,
+          access: "mobile", residency: "country", kva: "0", workload: "inference",
+          tilt: { sfo: 1.8, phx: 1.7, lax: 1.5, sea: 1.4, nrt: 1.4, icn: 1.4, muc: 1.4, sin: 1.3, dxb: 1.3 },
+          anchors: [["Anchor — AV fleet operator", "sfo", 15, false]],
+          desc: "The safety loop stays on the vehicle. These sites carry telemetry, OTA model distribution and teleoperation — every metro needs its own PoP because mobile access already spends 22 ms." },
+        retailCv: { cat: "industry", label: "Retail / computer vision at the edge",
+          model: "gemma27", ctx: 2048, kv: "fp8", gpu: "rtx6000", users: 6000, duty: 15, slo: 400, tps: 22,
+          access: "fixed", residency: "region", kva: "0", workload: "inference",
+          tilt: { nyc: 1.3, lon: 1.3, gru: 1.3, mex: 1.3, del: 1.3, bkk: 1.3, cgk: 1.3 },
+          anchors: [],
+          desc: "Short visual contexts at very high stream counts — throughput per watt, not context length, sets the node count. Cheap metros with IX presence win." },
+        telco: { cat: "industry", label: "Telco / network backbone inference",
+          model: "llama70", ctx: 8000, kv: "fp8", gpu: "b300", users: 9000, duty: 25, slo: 150, tps: 30,
+          access: "fixed", residency: "region", kva: "40", workload: "inference",
+          tilt: { lon: 1.4, fra: 1.5, ams: 1.4, sin: 1.4, nrt: 1.3, gru: 1.3, jnb: 1.3, dxb: 1.3 },
+          anchors: [["Anchor — national carrier", "fra", 12, true]],
+          desc: "Serving from inside the peering fabric: IX-dense metros keep eyeball traffic off transit and put the model one AS hop from the subscriber." },
+        publicSector: { cat: "industry", label: "Public sector / healthcare",
+          model: "qwen332", ctx: 8000, kv: "fp8", gpu: "b200", users: 3000, duty: 15, slo: 500, tps: 22,
+          access: "wan", residency: "country", kva: "40", workload: "inference",
+          tilt: { was: 1.8, lon: 1.5, par: 1.5, ber: 1.5, mad: 1.3, waw: 1.3, cbr: 1.2, ott: 1.2 },
+          anchors: [["Anchor — national agency", "was", 20, true]],
+          desc: "In-country residency is non-negotiable, which usually forces more, smaller sites than pure economics would choose. The tool prices that constraint explicitly." },
+        // ---- LLM providers
+        llmFrontier: { cat: "llm", label: "Frontier lab — flagship model serving",
+          model: "dsv3", ctx: 32000, kv: "fp8", gpu: "gb300", users: 25000, duty: 40, slo: 400, tps: 35,
+          access: "fixed", residency: "none", kva: "80", workload: "both",
+          tilt: {},
+          anchors: [],
+          desc: "A very large MoE model shards across several nodes per replica, so replicas are expensive and few: concentrate in a handful of hubs with big power blocks, then peer hard at IX-dense metros." },
+        llmApi: { cat: "llm", label: "Model API / inference provider",
+          model: "llama70", ctx: 8000, kv: "fp8", gpu: "b300", users: 12000, duty: 35, slo: 250, tps: 35,
+          access: "fixed", residency: "none", kva: "40", workload: "inference",
+          tilt: {},
+          anchors: [["Anchor — agent platform customer", "sfo", 10, false]],
+          desc: "Cost per million tokens is the headline number, but developers benchmark TTFT. Balance a cheap-power hub per continent against edge PoPs in the metros that generate the calls." },
+        llmSmall: { cat: "llm", label: "Small-model / on-device companion serving",
+          model: "ministral8", ctx: 4096, kv: "fp8", gpu: "rtx6000", users: 40000, duty: 20, slo: 150, tps: 45,
+          access: "mobile", residency: "region", kva: "0", workload: "inference",
+          tilt: {},
+          anchors: [],
+          desc: "Weights fit on a single node, so replicas are cheap and the only thing standing between the user and the first token is distance. This is the strongest case for many small edge PoPs." },
+        // ---- neocloud
+        neocloud: { cat: "neocloud", label: "NeoCloud — multi-tenant GPUaaS",
+          model: "llama70", ctx: 8000, kv: "fp8", gpu: "b200", users: 15000, duty: 45, slo: 500, tps: 25,
+          access: "fixed", residency: "none", kva: "40", workload: "both",
+          tilt: {},
+          anchors: [["Anchor — tenant: video platform", "sfo", 8, false], ["Anchor — tenant: EU SaaS", "ams", 8, true]],
+          desc: "Utilisation and $/GPU-hour drive the business; tenants arrive over the fabric. Favour big cheap-power halls, then add PoPs only where tenants demand a local SLA." },
+        neocloudTrain: { cat: "neocloud", label: "NeoCloud — training capacity (10 MW+)",
+          model: "llama405", ctx: 8000, kv: "fp8", gpu: "gb300", users: 2000, duty: 70, slo: 2000, tps: 15,
+          access: "wan", residency: "none", kva: "0", workload: "training",
+          tilt: {},
+          anchors: [],
+          desc: "Training does not care about metro latency — it cares about contiguous megawatts, liquid cooling, energy price and a fat path back to the data. Site selection collapses to power economics." },
+      };
+
+      // ========================= Models & accelerators =======================
+      // Subset of the FLUX catalog, same units: gb = FP16 weight GB, act = active
+      // weight GB for MoE models.
+      const MODELS = [
+        { id: "custommodel", label: "Custom model — define parameters", gb: 140, cust: true },
+        { id: "dsv3", label: "DeepSeek-V3 / R1 — 671B MoE (37B active)", gb: 1342, act: 74 },
+        { id: "kimik2", label: "Kimi K2 — 1T MoE (32B active)", gb: 2000, act: 64 },
+        { id: "llama405", label: "Llama 3.1 405B (Meta)", gb: 810 },
+        { id: "llama4mav", label: "Llama 4 Maverick — 400B MoE (17B active)", gb: 800, act: 34 },
+        { id: "qwen3235", label: "Qwen3 235B-A22B (Alibaba)", gb: 470, act: 44 },
+        { id: "gptoss120", label: "gpt-oss-120b (OpenAI, 5B active)", gb: 240, act: 10 },
+        { id: "llama4scout", label: "Llama 4 Scout — 109B MoE (17B active)", gb: 218, act: 34 },
+        { id: "qwen3next", label: "Qwen3-Next 80B-A3B (Alibaba)", gb: 160, act: 6 },
+        { id: "llama70", label: "Llama 3.3 70B (Meta)", gb: 140 },
+        { id: "qwen332", label: "Qwen3 32B (Alibaba)", gb: 64 },
+        { id: "gemma27", label: "Gemma 3 27B (Google)", gb: 54 },
+        { id: "mistralsmall", label: "Mistral Small 3.2 — 24B", gb: 48 },
+        { id: "gptoss20", label: "gpt-oss-20b (OpenAI, 4B active)", gb: 40, act: 7 },
+        { id: "qwen38", label: "Qwen3 8B (Alibaba)", gb: 16 },
+        { id: "ministral8", label: "Ministral 8B (Mistral, edge)", gb: 16 },
+      ];
+      const MODEL_BY_ID = {};
+      MODELS.forEach((m) => (MODEL_BY_ID[m.id] = m));
+
+      // gpusPerNode, pf8 = PFLOPS FP8 per GPU, decode = tok/s per stream,
+      // hr = amortised $/GPU-hour, kw = kW per GPU, nodeGB = VRAM per node.
+      const GPUS = [
+        { id: "h200", name: "H200 (Hopper)", gpusPerNode: 8, pf8: 2.0, decode: 55, hr: 2.99, kw: 0.7, nodeGB: 1130, rackKw: 40 },
+        { id: "b200", name: "B200 (Blackwell)", gpusPerNode: 8, pf8: 4.5, decode: 85, hr: 3.99, kw: 1.0, nodeGB: 1536, rackKw: 60 },
+        { id: "b300", name: "B300 (Blackwell Ultra)", gpusPerNode: 8, pf8: 5.0, decode: 96, hr: 4.49, kw: 1.1, nodeGB: 2304, rackKw: 70 },
+        { id: "gb300", name: "GB300 NVL72 (rack-scale)", gpusPerNode: 72, pf8: 5.0, decode: 105, hr: 4.99, kw: 1.4, nodeGB: 20736, rackKw: 132, liquidOnly: true },
+        { id: "rtx6000", name: "RTX PRO 6000 (Blackwell)", gpusPerNode: 8, pf8: 1.0, decode: 30, hr: 1.25, kw: 0.6, nodeGB: 768, rackKw: 30 },
+        { id: "mi355x", name: "AMD MI355X (CDNA 4)", gpusPerNode: 8, pf8: 5.2, decode: 88, hr: 3.79, kw: 1.4, nodeGB: 2304, rackKw: 80 },
+        { id: "spark", name: "DGX Spark (GB10) — micro edge", gpusPerNode: 1, pf8: 0.25, decode: 6, hr: 0.35, kw: 0.17, nodeGB: 128, rackKw: 4 },
+      ];
+      const GPU_BY_ID = {};
+      GPUS.forEach((g) => (GPU_BY_ID[g.id] = g));
+
+      // ============================== Geometry ===============================
+      const RAD = Math.PI / 180;
+      function haversineKm(a, b) {
+        const dLat = (b.lat - a.lat) * RAD;
+        const dLng = (b.lng - a.lng) * RAD;
+        const s =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(a.lat * RAD) * Math.cos(b.lat * RAD) * Math.sin(dLng / 2) ** 2;
+        return 6371 * 2 * Math.asin(Math.min(1, Math.sqrt(s)));
+      }
+      // Cached market -> site distances; the optimiser walks this grid many times.
+      const DIST = {};
+      MARKETS.forEach((m) => {
+        DIST[m.id] = {};
+        SITES.forEach((s) => (DIST[m.id][s.id] = haversineKm(m, s)));
+      });
+      const fibreRttMs = (km) => (km * CIRCUITY * 2) / KM_PER_MS;
+      const transitRttMs = (km) => (km * TRANSIT_CIRCUITY * 2) / KM_PER_MS + TRANSIT_PENALTY_MS;
+
+      // Which transport carries a market's traffic to a site, given policy.
+      // Same metro + on-net tenant  -> cross connect.
+      // Same metro, off-net         -> IX if present and allowed, else transit.
+      // Different metro             -> dark fibre > IX > fabric > transit.
+      function pathFor(market, site, allowed, onnet) {
+        const km = DIST[market.id][site.id];
+        const sameMetro = km < 45;
+        const pick = (id, extraKm) => {
+          const t = TRANSPORTS[id];
+          const prop = id === "transit" ? transitRttMs(extraKm) : fibreRttMs(extraKm) + t.add;
+          return { t: t, km: extraKm, rtt: prop };
+        };
+        if (sameMetro && onnet && allowed.cross) return pick("cross", km);
+        const opts = [];
+        if (allowed.dark && site.dark && km <= DARK_MAX_KM) opts.push(pick("dark", km));
+        if (allowed.ix && site.ix) opts.push(pick("ix", km));
+        if (allowed.fabric && site.fabric) opts.push(pick("fabric", km));
+        opts.push(pick("transit", km));
+        opts.sort((a, b) => a.rtt - b.rtt);
+        return opts[0];
+      }
+
+      // =========================== Node-level model ==========================
+      // Mirrors FLUX: replicas shard the weights across nodes when they do not
+      // fit in one, KV budget is what is left of VRAM, prefill is a linear term
+      // plus a quadratic attention term.
+      // An edge PoP sized in hub-class nodes is the classic siting mistake: one
+      // rack-scale system is a floor of hundreds of kW for a market that may
+      // want a few hundred streams. Pick the smallest platform that still holds
+      // the model in at most two nodes with room for a useful batch.
+      // "Smallest" is only meaningful inside the SLO: a micro node that takes
+      // 12 s to prefill is not an edge PoP, it is a way to miss every target.
+      // Filter on the commitments first, then take the smallest survivor.
+      function autoEdgeGpu(cfg, slo, minTps) {
+        const viable = GPUS.filter((g) => {
+          const t = nodeModel(cfg, g.id);
+          if (!t.ok) return false;
+          if (t.nodesPerReplica > 2) return false;              // an edge PoP should not shard wide
+          if (t.decode < minTps) return false;                  // cannot hold the per-stream floor
+          if (t.coldPrefillMs > slo * 0.6) return false;        // leave headroom for network + queue
+          return streamsPerReplica(t, false) >= 8;              // a useful batch fits
+        });
+        if (!viable.length) return null;
+        viable.sort((a, b) => nodeModel(cfg, a.id).kwPerReplica - nodeModel(cfg, b.id).kwPerReplica);
+        return viable[0];
+      }
+
+      function nodeModel(cfg, gpuId) {
+        const g = GPU_BY_ID[gpuId || cfg.gpu];
+        const m = MODEL_BY_ID[cfg.model];
+        const weights = m.gb * 1.12; // weights + activation/runtime overhead
+        const nodesPerReplica = Math.max(1, Math.ceil(weights / g.nodeGB));
+        const kvUser = (cfg.ctx * KVMB[cfg.kv]) / 1000; // GB per concurrent stream
+        const replicaVram = nodesPerReplica * g.nodeGB - weights;
+        if (replicaVram < kvUser) {
+          return { ok: false, reason: "one context does not fit beside the weights on this accelerator" };
+        }
+        // Tensor-parallel efficiency decays as a replica spans more nodes.
+        const tpEff = Math.pow(0.92, Math.log2(nodesPerReplica));
+        const gpus = nodesPerReplica * g.gpusPerNode;
+        const actGb = m.act || m.gb;
+        const actB = actGb / 2;
+        const pf = gpus * g.pf8 * MFU_PREFILL * tpEff; // effective PFLOPS
+        const linMs = (cfg.ctx / ((gpus * g.pf8 * MFU_PREFILL * tpEff * 1e6) / actGb)) * 1000;
+        const quadMs = ((4 * ATTN_LD * actB * cfg.ctx * cfg.ctx) / (pf * 1e15)) * 1000;
+        const coldPrefillMs = linMs + quadMs;
+        const kvaStream = KVA_STREAM_GBS * gpus;
+        const warmPrefillMs = Math.min(coldPrefillMs, (kvUser / kvaStream) * 1000 + KVA_OVERHEAD_MS);
+        return {
+          ok: true, g, m, weights, nodesPerReplica, tpEff, kvUser, replicaVram,
+          coldPrefillMs, warmPrefillMs, linMs, quadMs,
+          kwPerReplica: gpus * g.kw,
+          hrPerReplica: gpus * g.hr,
+          decode: g.decode * tpEff,
+        };
+      }
+      // Streams a replica holds, with the optional flash KV-offload uplift.
+      function streamsPerReplica(nm, offload) {
+        return Math.max(1, Math.floor((nm.replicaVram * (1 + (offload ? KV_OFFLOAD_BOOST : 0))) / nm.kvUser));
+      }
+
+      // Cooling: liquid where the site and the platform allow it, else air with
+      // an 8% clock haircut (same convention as FLUX).
+      function coolingFor(site, g) {
+        if (site.liquid && g.rackKw >= 40) return { pue: 1.13, factor: 1.0, coloAdd: 18, label: "Direct liquid (DLC)" };
+        if (g.liquidOnly) return null; // rack-scale systems cannot land air-cooled
+        return { pue: 1.42, factor: 0.92, coloAdd: 0, label: "Air + rear-door HX" };
+      }
+
+      // ========================== Plan evaluation ============================
+      // Given a set of sites, assign every market to its best-TTFT permitted
+      // site (subject to residency and the site's power envelope), size each
+      // site, and price the result.
+      function evaluate(siteIds, inp) {
+        const nm = inp.nodeModel;
+        const sites = siteIds
+          .map((id) => SITE_BY_ID[id])
+          .filter((s) => s && coolingFor(s, nm.g));
+        if (!sites.length) return null;
+        const perRep = streamsPerReplica(nm, inp.offload);
+        const allowed = inp.allowed;
+
+        // --- candidate paths per market
+        const ranked = inp.demand
+          .slice()
+          .sort((a, b) => b.users - a.users)
+          .map((d) => {
+            const opts = [];
+            sites.forEach((s) => {
+              if (inp.residency === "country" && s.country !== d.market.country) return;
+              if (inp.residency === "region" && CONTINENT[s.region] !== CONTINENT[d.market.region]) return;
+              const p = pathFor(d.market, s, allowed, d.onnet);
+              opts.push({ site: s, path: p, netRtt: p.rtt });
+            });
+            opts.sort((a, b) => a.netRtt - b.netRtt);
+            return { d, opts };
+          });
+
+        // --- place demand, respecting each site's power envelope.
+        // `svcOf` is the site's own service time (prefill + queue + dispatch).
+        // Routing on distance alone sends a market to the nearest site even when
+        // a further one answers sooner — a small edge node running a frontier
+        // model is slower end to end than a hub two countries away. So place
+        // once on distance, measure what each site actually costs in service
+        // time, then place again on total latency.
+        const kwPerStream = nm.kwPerReplica / perRep;
+        function place(svcOf) {
+          const asg = {};
+          sites.forEach((s) => (asg[s.id] = { site: s, users: 0, markets: [], onnetCustomers: [], tokensDay: 0 }));
+          let uns = 0;
+          const unp = [];
+          ranked.forEach(({ d, opts }) => {
+            const ordered = opts
+              .slice()
+              .sort((a, b) => a.netRtt + svcOf(a.site.id) - (b.netRtt + svcOf(b.site.id)));
+            let left = d.users;
+            for (let i = 0; i < ordered.length && left > 0; i++) {
+              const o = ordered[i];
+              const cap = inp.siteCapUsers(o.site, kwPerStream);
+              const room = Math.max(0, cap - asg[o.site.id].users);
+              if (room <= 0) continue;
+              const take = Math.min(room, left);
+              const a = asg[o.site.id];
+              a.users += take;
+              a.tokensDay += d.tokensDay * (take / d.users);
+              a.markets.push({ d, path: o.path, users: take });
+              if (d.onnet && d.customer && DIST[d.market.id][o.site.id] < 45) a.onnetCustomers.push(d.customer);
+              left -= take;
+            }
+            if (left > 0.5) {
+              unp.push({
+                market: d.market, users: left,
+                reason: opts.length
+                  ? "every site in this plan is at its power limit"
+                  : "no site in this plan sits in this market's " + (inp.residency === "country" ? "country" : "region"),
+              });
+            }
+            uns += left;
+          });
+          return { asg, unserved: uns, unplaced: unp };
+        }
+
+        // --- role: the biggest site on each continent aggregates for it (the
+        // regional hub — storage tier, persistent KV cache, weight master);
+        // everything else is an edge PoP bought for proximity.
+        function rolesOf(asg) {
+          const contLeader = {};
+          sites.forEach((s) => {
+            const c = CONTINENT[s.region];
+            const u = asg[s.id].users;
+            if (!contLeader[c] || u > contLeader[c].u) contLeader[c] = { id: s.id, u };
+          });
+          return (s) => {
+            const u = asg[s.id].users;
+            if (!u) return false;
+            const leader = contLeader[CONTINENT[s.region]] && contLeader[CONTINENT[s.region]].id === s.id;
+            return (leader && u >= inp.totalUsers * 0.08) || u >= inp.totalUsers * 0.3;
+          };
+        }
+        // Size a site on the platform that actually suits it. The hub/edge
+        // label decides where the storage tier lands, not what hardware a site
+        // gets: tying the platform to the label made every non-leading site
+        // inherit slow hardware and then lose all its demand to the leader.
+        const platforms = [nm];
+        if (inp.edgeNodeModel && inp.edgeNodeModel !== nm && inp.edgeNodeModel.ok) platforms.push(inp.edgeNodeModel);
+        function sizeSite(s, users, tokensDay, isHub) {
+          let best = null;
+          const budget = inp.slo * 0.7; // service time must leave room for the network
+          platforms.forEach((snm) => {
+            const cool = coolingFor(s, snm.g);
+            if (!cool) return;
+            const sPerRep = streamsPerReplica(snm, inp.offload);
+            let replicas = Math.ceil(users / sPerRep);
+            const peakTokS = (tokensDay / 86400) * PEAK_FACTOR;
+            const decodeEffBase = snm.decode * cool.factor;
+            replicas = Math.max(1, replicas, Math.ceil(peakTokS / Math.max(1, sPerRep * decodeEffBase * UTIL)));
+            const rho = clamp(users / (replicas * sPerRep), 0.05, 0.92);
+            // Persistent KV cache lives with the storage tier, so only the
+            // aggregating hubs get the warm-prefill path.
+            const kvaPct = isHub && snm === nm ? inp.kvaPct : 0;
+            const prefill = snm.coldPrefillMs * (1 - kvaPct / 100) + snm.warmPrefillMs * (kvaPct / 100);
+            const queue = (prefill / cool.factor) * (rho / (1 - rho)) * 0.35;
+            const kwIt = replicas * snm.kwPerReplica * cool.factor;
+            const kw = kwIt * cool.pue;
+            const coloRate = COLO_KW_MO * s.colo + cool.coloAdd;
+            const computeMo = replicas * snm.hrPerReplica * HRS_MO;
+            const c = {
+              snm, cool, sPerRep, replicas, rho, kvaPct, prefill, queue, kwIt, kw, coloRate, computeMo,
+              nodes: replicas * snm.nodesPerReplica,
+              decodeEff: decodeEffBase * (1 - 0.35 * rho),
+              service: prefill + queue + (inp.lowLatencyCpu ? 3 : 8),
+              varCost: computeMo + kw * coloRate, // the part that varies by platform
+            };
+            if (!best) { best = c; return; }
+            const cOk = c.service <= budget, bOk = best.service <= budget;
+            if (cOk !== bOk) { if (cOk) best = c; return; }   // meeting the budget wins
+            if (!cOk && !bOk) { if (c.service < best.service) best = c; return; } // else fastest
+            if (c.varCost < best.varCost) best = c;           // both fit: cheapest wins
+          });
+          return best;
+        }
+
+        // Service time each site would add, given a provisional assignment.
+        function serviceMap(asg) {
+          const hubOf = rolesOf(asg);
+          const map = {};
+          sites.forEach((s) => {
+            const a = asg[s.id];
+            if (!a.users) { map[s.id] = 0; return; }
+            const z = sizeSite(s, a.users, a.tokensDay, hubOf(s));
+            map[s.id] = z ? z.service : 0;
+          });
+          return map;
+        }
+
+        let placed = place(() => 0);
+        const svc = serviceMap(placed.asg);
+        placed = place((id) => svc[id] || 0);
+        const assigned = placed.asg;
+        const unserved = placed.unserved;
+        const unplaced = placed.unplaced;
+        const isHubSite = rolesOf(assigned);
+
+        // --- size and price each site
+        const live = [];
+        let totCost = 0, totRevenue = 0, totKw = 0, totOperator = 0, totNodes = 0, totTokensDay = 0;
+        sites.forEach((s) => {
+          const a = assigned[s.id];
+          if (a.users <= 0) {
+            live.push({ site: s, users: 0, idle: true, replicas: 0, kw: 0, cost: 0, revenue: 0, operator: 0 });
+            return;
+          }
+          // The hub/edge label picks where the storage tier lands; sizeSite
+          // picks the platform on cost and the service-time budget.
+          const isHub = isHubSite(s);
+          const z = sizeSite(s, a.users, a.tokensDay, isHub);
+          if (!z) return;
+          const snm = z.snm, cool = z.cool, sPerRep = z.sPerRep;
+          const replicas = z.replicas, nodes = z.nodes, rho = z.rho;
+          const kwIt = z.kwIt, kw = z.kw;
+          // Latency: queueing grows with occupancy (M/M/1 waiting-time shape).
+          const kvaPct = z.kvaPct;
+          const prefillMs = z.prefill;
+          const queueMs = z.queue;
+          const dispatchMs = inp.lowLatencyCpu ? 3 : 8;
+          const decodeEff = z.decodeEff;
+
+          // Per-market TTFT for the demand this site captured.
+          let wTtft = 0, wUsers = 0, sloOk = 0;
+          const perMarket = a.markets.map((mk) => {
+            const ttft = mk.d.accessRtt + mk.path.rtt + dispatchMs + queueMs + prefillMs;
+            wTtft += ttft * mk.users;
+            wUsers += mk.users;
+            if (ttft <= inp.slo) sloOk += mk.users;
+            return {
+              metro: mk.d.market.metro, users: mk.users, ttft, path: mk.path,
+              customer: mk.d.customer, onnet: mk.d.onnet,
+            };
+          });
+          const ttft = wUsers ? wTtft / wUsers : 0;
+          const sloShare = wUsers ? sloOk / wUsers : 0;
+
+          // ---- interconnect recipe & cost
+          const tokS = (a.tokensDay / 86400) * PEAK_FACTOR;
+          const gbps = (tokS * BYTES_PER_TOKEN * 8) / 1e9;
+          const mbps = gbps * 1000;
+          const eyeball = a.markets
+            .filter((mk) => !mk.d.onnet)
+            .reduce((n, mk) => n + mk.users, 0) / Math.max(1, a.users);
+          const peerShare = s.ix && allowed.ix ? clamp(0.35 + s.peers / 2500, 0, 0.85) : 0;
+          const ixPortMo = s.ix && allowed.ix ? (mbps * eyeball > 9000 ? IX_PORT_MO.g100 : IX_PORT_MO.g10) : 0;
+          const transitMbps = mbps * eyeball * (1 - peerShare);
+          const transitMo = transitMbps * TRANSIT_MBPS_MO;
+          const xcCount = a.onnetCustomers.length + 2; // tenants + redundant upstream pair
+          const xcMo = allowed.cross ? xcCount * XC_MO[s.op] : 0;
+          const fabricVcs = allowed.fabric && s.fabric ? 2 : 0;
+          const fabricMo = fabricVcs * FABRIC_MO[s.op];
+
+          const storMo = isHub ? STOR_HUB_MO + (kvaPct > 0 ? STOR_KVA_MO : 0) : 0;
+          const coloRate = COLO_KW_MO * s.colo + cool.coloAdd;
+          const coloMo = kw * coloRate;
+          const computeMo = replicas * snm.hrPerReplica * HRS_MO;
+          const cost = computeMo + coloMo + storMo + xcMo + fabricMo + ixPortMo + transitMo;
+
+          // ---- realised value: tokens are only worth the market rate when they
+          // land inside the SLO; outside it they are discounted for credits and
+          // churn, and a starved decode rate discounts them further.
+          const tokensMo = (a.tokensDay * 365) / 12;
+          const sloFactor = sloShare + (1 - sloShare) * clamp(1 - 0.45 * (ttft / inp.slo - 1), 0.5, 1);
+          const tpsFactor = clamp(decodeEff / inp.minTps, 0.6, 1);
+          const realisedRate = MARKET_PER_1M * sloFactor * tpsFactor;
+          const revenue = (tokensMo / 1e6) * realisedRate;
+          const operator = coloMo + xcMo + fabricMo + ixPortMo; // colo + interconnect to DLR/Equinix
+
+          totCost += cost; totRevenue += revenue; totKw += kw; totOperator += operator;
+          totNodes += nodes; totTokensDay += a.tokensDay;
+          live.push({
+            site: s, users: a.users, replicas, nodes, kw, kwIt, cool, rho, ttft, prefillMs, queueMs,
+            decodeEff, sloShare, perMarket, tokensMo, cost, revenue, operator, computeMo, coloMo,
+            coloRate, storMo, xcMo, xcCount, fabricMo, fabricVcs, ixPortMo, transitMo, transitMbps,
+            peerShare, gbps, isHub, kvaPct, perRep: sPerRep, sloFactor, tpsFactor, nm: snm,
+            platform: snm.g.name, nodesPerReplica: snm.nodesPerReplica,
+            // Descriptive tier: a regional hub aggregates for its continent and
+            // carries the storage tier; a metro hub runs hub-class nodes without
+            // that role; an edge PoP runs the smaller edge platform.
+            tier: isHub ? "Regional hub" : snm === nm ? "Metro hub" : "Edge PoP",
+            per1M: cost / Math.max(1e-9, tokensMo / 1e6),
+            onnetCustomers: a.onnetCustomers,
+          });
+        });
+
+        const served = live.reduce((n, x) => n + (x.users || 0), 0);
+        const wTtft = live.reduce((n, x) => n + (x.ttft || 0) * (x.users || 0), 0) / Math.max(1, served);
+        const sloShare = live.reduce((n, x) => n + (x.sloShare || 0) * (x.users || 0), 0) / Math.max(1, served);
+        const decodeAvg = live.reduce((n, x) => n + (x.decodeEff || 0) * (x.users || 0), 0) / Math.max(1, served);
+        const tokensMo = (totTokensDay * 365) / 12;
+        // p95 TTFT across the demand distribution.
+        const all = [];
+        live.forEach((x) => (x.perMarket || []).forEach((p) => all.push(p)));
+        all.sort((a, b) => a.ttft - b.ttft);
+        let acc = 0, p95 = wTtft;
+        const target = served * 0.95;
+        for (const p of all) { acc += p.users; if (acc >= target) { p95 = p.ttft; break; } }
+
+        return {
+          sites: live,
+          active: live.filter((x) => x.users > 0),
+          idle: live.filter((x) => !x.users),
+          served, unserved, unplaced, wTtft, p95, sloShare, decodeAvg, tokensMo,
+          cost: totCost, revenue: totRevenue, kw: totKw, operator: totOperator, nodes: totNodes,
+          net: totRevenue - totCost,
+          per1M: totCost / Math.max(1e-9, tokensMo / 1e6),
+        };
+      }
+
+      // ============================= Optimiser ===============================
+      // Greedy marginal-gain selection, then a swap pass. The score blends the
+      // economic result with the latency result; the slider sets the mix.
+      function scoreOf(r, base, w) {
+        if (!r) return -Infinity;
+        const vScale = Math.max(1000, Math.abs(base.net) || 1000);
+        const value = r.net / vScale;
+        const lat = base.wTtft / Math.max(1, r.wTtft);
+        const penalty = r.unserved > 0 ? (r.unserved / base.totalUsers) * 2 : 0;
+        return (1 - w) * value + w * lat - penalty;
+      }
+
+      function optimise(inp) {
+        const locked = inp.currentSites.slice();
+        const base = evaluate(locked.length ? locked : [inp.baselineSite], inp);
+        base.totalUsers = inp.totalUsers;
+        const pool = SITES.filter((s) => inp.candidate(s)).map((s) => s.id);
+        // The seed is what exists today: the current locations, or — when there
+        // are none — the single centralised region the baseline represents.
+        const seed = locked.length ? locked.slice() : [inp.baselineSite];
+        let plan = seed.slice();
+        let cur = evaluate(plan, inp);
+        const steps = [];
+        for (let k = 0; k < inp.maxSites; k++) {
+          let best = null;
+          pool.forEach((id) => {
+            if (plan.indexOf(id) >= 0) return;
+            const r = evaluate(plan.concat([id]), inp);
+            if (!r) return;
+            const sc = scoreOf(r, base, inp.objective);
+            if (!best || sc > best.sc) best = { id, sc, r };
+          });
+          if (!best) break;
+          const curSc = scoreOf(cur, base, inp.objective);
+          if (best.sc <= curSc + 1e-6) break; // diminishing returns — stop adding
+          steps.push({
+            id: best.id,
+            ttft: best.r.wTtft,
+            dTtft: cur.wTtft - best.r.wTtft,
+            net: best.r.net,
+            dNet: best.r.net - cur.net,
+            slo: best.r.sloShare,
+            served: best.r.served,
+          });
+          plan = plan.concat([best.id]);
+          cur = best.r;
+        }
+        // Swap pass: try replacing each added site with any unused candidate.
+        for (let pass = 0; pass < 2; pass++) {
+          let improved = false;
+          for (let i = seed.length; i < plan.length; i++) {
+            let bestSwap = null;
+            pool.forEach((id) => {
+              if (plan.indexOf(id) >= 0) return;
+              const trial = plan.slice();
+              trial[i] = id;
+              const r = evaluate(trial, inp);
+              const sc = scoreOf(r, base, inp.objective);
+              if (sc > scoreOf(cur, base, inp.objective) + 1e-6 && (!bestSwap || sc > bestSwap.sc)) {
+                bestSwap = { id, sc, r };
+              }
+            });
+            if (bestSwap) { plan[i] = bestSwap.id; cur = bestSwap.r; improved = true; }
+          }
+          if (!improved) break;
+        }
+        return { base, plan, seed, result: cur, steps, added: plan.filter((id) => seed.indexOf(id) < 0) };
+      }
+
+      // ========================== Input collection ===========================
+      const state = {
+        regions: { namE: true, namC: true, namW: true, emeaW: true, emeaN: true, emeaS: true, apacN: true, apacS: true, anz: true, latam: false, emeaE: false, mea: false },
+        transports: { cross: true, fabric: true, dark: true, ix: true },
+        filters: { liquidOnly: false, lowLatencyCpu: true, offload: true },
+        customers: [],
+      };
+
+      function readInputs() {
+        const prof = PROFILES[$("epProfile").value] || PROFILES.llmApi;
+        const cfg = {
+          model: $("epModel").value,
+          gpu: $("epGpu").value,
+          ctx: Math.max(256, parseInt($("epCtx").value, 10) || 8000),
+          kv: $("epKv").value,
+        };
+        if (cfg.model === "custommodel") {
+          const p = Math.max(0.5, parseFloat($("epCustP").value) || 70);
+          const a = Math.max(0, parseFloat($("epCustA").value) || 0);
+          MODEL_BY_ID.custommodel.gb = p * 2; // FP16 weights = params x 2 bytes
+          if (a > 0) MODEL_BY_ID.custommodel.act = Math.min(a, p) * 2; else delete MODEL_BY_ID.custommodel.act;
+          MODEL_BY_ID.custommodel.label =
+            "Custom — " + p + "B " + (a > 0 ? "MoE (" + Math.min(a, p) + "B active)" : "dense");
+        }
+        const nm = nodeModel(cfg);
+        const slo = Math.max(20, parseInt($("epSlo").value, 10) || 300);
+        const minTps = Math.max(1, parseInt($("epTps").value, 10) || 20);
+        const edgeSel = $("epEdgeGpu").value;
+        let edgeGpu = null;
+        if (edgeSel === "auto") { const a = autoEdgeGpu(cfg, slo, minTps); edgeGpu = a ? a.id : cfg.gpu; }
+        else if (edgeSel !== "same") edgeGpu = edgeSel;
+        const edgeNodeModel = edgeGpu && edgeGpu !== cfg.gpu ? nodeModel(cfg, edgeGpu) : nm;
+        // Concurrency and volume are two views of the same estate: a provisioned
+        // stream emits `decode` tok/s while active, and `duty` is the share of
+        // the day it is active. Size from whichever the planner actually knows;
+        // the other is derived, so the two can never contradict each other.
+        const duty = clamp((parseFloat($("epDuty").value) || 35) / 100, 0.05, 1);
+        const mode = $("epDemandMode").value;
+        const perStreamDay = Math.max(1, (nm.ok ? nm.decode : 50) * 86400 * duty);
+        let totalUsers, tokDay;
+        if (mode === "volume") {
+          const volDay = Math.max(1, parseFloat($("epVolume").value) || 1000) * 1e6;
+          totalUsers = Math.max(1, Math.round(volDay / perStreamDay));
+          tokDay = perStreamDay;
+        } else {
+          totalUsers = Math.max(1, parseInt($("epUsers").value, 10) || 1000);
+          tokDay = perStreamDay;
+        }
+        const workload = $("epWorkload").value;
+        const residency = $("epResidency").value;
+        const accessId = $("epAccess").value;
+        const operator = $("epOperator").value;
+        const maxSites = clamp(parseInt($("epMaxSites").value, 10) || 0, 0, 12);
+        const maxMw = Math.max(0.05, parseFloat($("epMaxMw").value) || 5);
+        // parseInt("0") is falsy, so `|| 50` would quietly discard the
+        // economics-only end of the slider — check for NaN explicitly.
+        const objRaw = parseInt($("epObjective").value, 10);
+        const objective = clamp(isNaN(objRaw) ? 50 : objRaw, 0, 100) / 100;
+        const kvaPct = parseInt($("epKva").value, 10) || 0;
+
+        // ---- demand: anchors first, the rest spread by weight x profile tilt
+        const inScope = MARKETS.filter((m) => state.regions[m.region]);
+        const tilt = prof.tilt || {};
+        const weights = inScope.map((m) => ({ m, w: m.w * (tilt[m.id] || 1) }));
+        const totW = weights.reduce((n, x) => n + x.w, 0) || 1;
+        const customers = state.customers.filter((c) => c.metro && c.share > 0);
+        const anchorShare = clamp(customers.reduce((n, c) => n + c.share, 0) / 100, 0, 0.95);
+        const demand = [];
+        customers.forEach((c) => {
+          const m = MARKET_BY_ID[c.metro];
+          if (!m) return;
+          const users = totalUsers * (c.share / 100);
+          demand.push({
+            market: m, users, tokensDay: users * tokDay, onnet: !!c.onnet,
+            customer: c.name || m.metro,
+            accessRtt: c.onnet ? ACCESS.onnet.rtt : ACCESS[accessId].rtt,
+          });
+        });
+        weights.forEach((x) => {
+          const users = totalUsers * (1 - anchorShare) * (x.w / totW);
+          if (users < 0.5) return;
+          demand.push({
+            market: x.m, users, tokensDay: users * tokDay, onnet: false,
+            customer: null, accessRtt: ACCESS[accessId].rtt,
+          });
+        });
+
+        const currentSites = Array.prototype.slice
+          .call($("epCurrent").selectedOptions || [])
+          .map((o) => o.value)
+          .filter((v) => SITE_BY_ID[v]);
+        const baselineSite = $("epBaseline").value;
+
+        const allowed = Object.assign({}, state.transports);
+        const candidate = (s) => {
+          if (operator !== "both" && s.op !== operator) return false;
+          if (state.filters.liquidOnly && !s.liquid) return false;
+          if (nm.ok && GPU_BY_ID[cfg.gpu].liquidOnly && !s.liquid) return false;
+          if (!state.regions[s.region] && residency !== "none") {
+            // A site outside every in-scope region can still serve, unless
+            // residency pins demand to its own region/country.
+            return false;
+          }
+          return true;
+        };
+        // How many streams a site can host before its power envelope runs out.
+        const siteCapUsers = (s, kwPerStream) => {
+          const cool = coolingFor(s, GPU_BY_ID[cfg.gpu]);
+          if (!cool) return 0;
+          const mwCap = Math.min(s.mw, maxMw);
+          const itKw = (mwCap * 1000) / cool.pue;
+          return Math.max(0, Math.floor(itKw / Math.max(1e-6, kwPerStream * cool.factor)));
+        };
+
+        return {
+          prof, cfg, nodeModel: nm, edgeNodeModel: edgeNodeModel.ok ? edgeNodeModel : nm,
+          totalUsers, tokDay, duty, mode, workload, residency, accessId, slo, minTps,
+          operator, maxSites, maxMw, objective, kvaPct, demand, currentSites, baselineSite, allowed,
+          candidate, siteCapUsers, customers,
+          offload: state.filters.offload, lowLatencyCpu: state.filters.lowLatencyCpu,
+          access: ACCESS[accessId],
+        };
+      }
+
+      // ============================ Training siting ==========================
+      // Training does not follow users. Rank on contiguous power, energy price,
+      // liquid availability and a dark-fibre path back to the inference estate.
+      function trainingSites(inp, planSites) {
+        const need = inp.workload === "training" ? 3 : 1;
+        const cands = SITES.filter((s) => inp.candidate(s) && s.liquid && s.mw >= 15);
+        const scored = cands.map((s) => {
+          const nearest = planSites.length
+            ? Math.min.apply(null, planSites.map((p) => haversineKm(s, SITE_BY_ID[p] || s)))
+            : 0;
+          const energy = 1 - clamp((s.kwh - 0.05) / 0.15, 0, 1);
+          const power = clamp(s.mw / 90, 0, 1);
+          const colo = 1 - clamp((s.colo - 0.82) / 0.6, 0, 1);
+          const reach = s.dark && nearest <= DARK_MAX_KM ? 1 : 0.6;
+          const lead = 1 - clamp((s.lead - 6) / 8, 0, 1);
+          const score = power * 0.34 + energy * 0.24 + colo * 0.18 + reach * 0.14 + lead * 0.1;
+          return { site: s, score, energy, power, nearest, reach };
+        });
+        scored.sort((a, b) => b.score - a.score);
+        return scored.slice(0, need);
+      }
+
+      // =============================== Rendering =============================
+      function statTile(label, value, delta) {
+        return (
+          '<div class="stat"><span class="muted">' + label + "</span>" +
+          '<span class="stat-value">' + value + "</span>" +
+          (delta ? '<span class="delta">' + delta + "</span>" : "") +
+          "</div>"
+        );
+      }
+      // Single-series magnitude bars (plan) with a recessive "today" ghost bar.
+      // The table underneath each chart is the accessible data view.
+      function barRows(rows, max, fmt) {
+        return (
+          '<div class="bars">' +
+          rows
+            .map((r) => {
+              const w = clamp((r.value / max) * 100, 0, 100);
+              const gw = r.ghost != null ? clamp((r.ghost / max) * 100, 0, 100) : null;
+              return (
+                '<div class="bar-row"><span title="' + esc(r.label) + '">' + esc(r.label) + "</span>" +
+                '<span class="bar-track">' +
+                (gw != null ? '<span class="bar-fill ghost" style="width:' + gw + '%;display:block;height:7px"></span>' : "") +
+                '<span class="bar-fill" style="width:' + w + "%;display:block;height:" + (gw != null ? 7 : 14) + 'px;margin-top:' + (gw != null ? 2 : 0) + 'px"></span>' +
+                "</span>" +
+                '<span class="bar-val">' + fmt(r.value) + "</span></div>"
+              );
+            })
+            .join("") +
+          "</div>"
+        );
+      }
+
+      function routingPlan(x, inp, hubIds) {
+        const s = x.site;
+        const li = [];
+        const opXc = s.op === "DLR" ? "Cross Connect" : "Equinix Cross Connect";
+        const opFab = s.op === "DLR" ? "ServiceFabric" : "Equinix Fabric";
+        if (inp.allowed.cross) {
+          li.push(
+            "<li><strong>" + opXc + " &times; " + x.xcCount + "</strong> — " +
+            (x.onnetCustomers.length
+              ? esc(x.onnetCustomers.join(", ")) + " on-net inside the campus (&asymp;0.1 ms, no middle mile), plus a redundant upstream pair"
+              : "redundant upstream pair; add one per on-net tenant as they land") +
+            " &middot; " + usd(x.xcMo) + "/mo</li>"
+          );
+        }
+        if (x.ixPortMo > 0) {
+          li.push(
+            "<li><strong>" + esc(s.ixName) + "</strong> — " + (x.ixPortMo >= IX_PORT_MO.g100 ? "100G" : "10G") +
+            " peering port reaches ~" + pct(x.peerShare) + " of eyeball traffic on-net; " +
+            nf(x.transitMbps) + " Mbps stays on transit &middot; " + usd(x.ixPortMo + x.transitMo) + "/mo</li>"
+          );
+        } else if (x.transitMo > 0) {
+          li.push(
+            "<li><strong>IP transit only</strong> — no permitted IX on-net here, so all " + nf(x.transitMbps) +
+            " Mbps of egress buys transit at " + usd(x.transitMo) + "/mo. Enabling IX peering is the cheapest single change at this site.</li>"
+          );
+        }
+        if (x.fabricVcs > 0) {
+          li.push(
+            "<li><strong>" + opFab + " &times; " + x.fabricVcs + "</strong> — on-demand virtual circuits for tenant onboarding, " +
+            "cloud on-ramps and control plane (&asymp;2.5 ms SDN overhead — never put the token path on it) &middot; " +
+            usd(x.fabricMo) + "/mo</li>"
+          );
+        }
+        if (!x.isHub && hubIds.length && inp.allowed.dark) {
+          const hub = hubIds
+            .map((id) => SITE_BY_ID[id])
+            .filter(Boolean)
+            .map((h) => ({ h, km: haversineKm(h, s) }))
+            .sort((a, b) => a.km - b.km)[0];
+          if (hub && hub.km > 45) {
+            const ok = s.dark && hub.h.dark && hub.km <= DARK_MAX_KM;
+            const cost = ok ? Math.max(DARK_MIN_MO, hub.km * DARK_PER_KM_MO) : FABRIC_MO[s.op] * 2.6;
+            li.push(
+              "<li><strong>" + (ok ? "Dark fibre / DWDM wave" : "Managed wave (no dark fibre path)") +
+              " to " + esc(hub.h.op + " " + hub.h.code) + "</strong> — " + nf(hub.km) + " km, " +
+              ms(fibreRttMs(hub.km)) + " RTT: model and adapter distribution, KV-cache warm-up and " +
+              "spill-over during regional peaks &middot; ~" + usd(cost) + "/mo</li>"
+            );
+          }
+        }
+        if (x.isHub) {
+          li.push(
+            "<li><strong>Hub role</strong> — all-flash tier" + (x.kvaPct ? " + persistent KV cache (" + x.kvaPct + "% prefix reuse)" : "") +
+            " lands here (" + usd(x.storMo) + "/mo); edge PoPs pull weights and warm prefixes from it.</li>"
+          );
+        }
+        return '<ul class="route">' + li.join("") + "</ul>";
+      }
+
+      function whySite(x, inp, base) {
+        const s = x.site;
+        const bits = [];
+        const topMarkets = (x.perMarket || []).slice().sort((a, b) => b.users - a.users).slice(0, 3);
+        if (topMarkets.length) {
+          bits.push(
+            "Captures " + nf(x.users) + " streams, mostly " +
+            topMarkets.map((m) => esc(m.metro) + " (" + ms(m.ttft) + ")").join(", ") + "."
+          );
+        }
+        const baseTtft = base.wTtft;
+        if (x.ttft < baseTtft) {
+          bits.push(
+            "That demand sees " + ms(x.ttft) + " against " + ms(baseTtft) + " on the baseline topology — " +
+            nf1(((baseTtft - x.ttft) / baseTtft) * 100) + "% off time-to-first-token."
+          );
+        }
+        const reasons = [];
+        if (s.mw >= 25) reasons.push(nf(s.mw) + " MW of headroom (est.)");
+        if (s.liquid) reasons.push("direct liquid cooling");
+        if (s.ix) reasons.push(esc(s.ixName) + " on-net (~" + nf(s.peers) + " participants)");
+        if (s.cable) reasons.push("subsea cable landing");
+        if (s.colo <= 1.0) reasons.push("below-reference colo rate");
+        if (s.kwh <= 0.1) reasons.push("$" + s.kwh.toFixed(2) + "/kWh energy");
+        if (reasons.length) bits.push("Chosen for " + reasons.join(", ") + ".");
+        bits.push("Lead time ~" + s.lead + " months (est.).");
+        return bits.join(" ");
+      }
+
+      let LAST = null;
+
+      function render() {
+        const inp = readInputs();
+        const nm = inp.nodeModel;
+        if (!nm.ok) {
+          $("epResults").innerHTML =
+            '<div class="notice over"><strong>Infeasible configuration.</strong> ' + esc(nm.reason) +
+            " — reduce the context window, drop KV precision, or pick an accelerator with more VRAM per node.</div>";
+          return;
+        }
+        // Training-only estates do not follow users at all, so the serving
+        // optimiser has nothing to say about them — show the power-led siting
+        // instead of a topology nobody asked for.
+        if (inp.workload === "training") {
+          renderTrainingOnly(inp);
+          return;
+        }
+        const out = optimise(inp);
+        LAST = { inp, out };
+        const base = out.base, res = out.result;
+        const perRep = streamsPerReplica(nm, inp.offload);
+
+        const hubIds = res.active.filter((x) => x.isHub).map((x) => x.site.id);
+        const dTtft = base.wTtft - res.wTtft;
+        const dNet = res.net - base.net;
+        const dPer1M = base.per1M - res.per1M;
+
+        let h = "";
+
+        // ---------------- headline -----------------
+        h += '<h4 class="sec">Recommended deployment</h4>';
+        const added = out.added.map((id) => SITE_BY_ID[id]);
+        h +=
+          '<div class="notice">' +
+          "<strong>" + (added.length ? added.length + " new site" + (added.length > 1 ? "s" : "") : "No new sites") + "</strong> " +
+          (added.length
+            ? "&mdash; " + added.map((s) => esc(s.op + " " + s.code + " (" + s.metro + ")")).join(", ") +
+              ", alongside " +
+              (inp.currentSites.length
+                ? inp.currentSites.length + " existing location" + (inp.currentSites.length > 1 ? "s" : "")
+                : "the centralised baseline at " + esc(SITE_BY_ID[inp.baselineSite].op + " " + SITE_BY_ID[inp.baselineSite].code)) + ". "
+            : "&mdash; the optimiser could not find a site that pays for itself under this policy. ") +
+          "Weighted TTFT " + ms(base.wTtft) + " &rarr; <strong>" + ms(res.wTtft) + "</strong>" +
+          (dTtft > 0 ? " (&minus;" + nf1((dTtft / base.wTtft) * 100) + "%)" : "") +
+          ", SLO attainment " + pct(base.sloShare) + " &rarr; <strong>" + pct(res.sloShare) + "</strong>, " +
+          "net monthly value " + usd(base.net) + " &rarr; <strong>" + usd(res.net) + "</strong>." +
+          (res.served > base.served * 1.02 && res.wTtft > base.wTtft
+            ? " <strong>TTFT rises because coverage does:</strong> the plan serves " +
+              pct(res.served / inp.totalUsers) + " of demand against " + pct(base.served / inp.totalUsers) +
+              " on the baseline, and the markets it newly reaches are further from any permitted site than the " +
+              "ones already being served. Compare the per-market table below, not the average."
+            : "") +
+          " Estate sized for " + nf(inp.totalUsers) + " peak concurrent streams at " + Math.round(inp.duty * 100) +
+          "% duty &mdash; " + nf1((inp.totalUsers * inp.tokDay) / 1e9) + "B output tokens/day" +
+          (inp.mode === "volume" ? " (concurrency derived from your volume)" : " (volume derived from your concurrency)") + "." +
+          (res.unserved > 0.5
+            ? " <strong>" + nf(res.unserved) + " streams are unplaced</strong> — power envelopes or residency rules leave nowhere to put them; raise max MW per site or relax residency."
+            : "") +
+          "</div>";
+
+        h += '<div class="stats stats-5">';
+        h += statTile("Weighted TTFT", ms(res.wTtft), "baseline " + ms(base.wTtft) + (dTtft > 0 ? " · −" + ms(dTtft) : ""));
+        h += statTile("p95 TTFT", ms(res.p95), "baseline " + ms(base.p95));
+        h += statTile("Decode per stream", nf1(res.decodeAvg) + " tok/s", "SLO floor " + inp.minTps + " tok/s");
+        h += statTile("Cost per 1M tokens", usdSmart(res.per1M), "baseline " + usdSmart(base.per1M) + (dPer1M > 0 ? " · −" + usdSmart(dPer1M) : " · +" + usdSmart(-dPer1M)));
+        h += statTile("Net value / month", usd(res.net), (dNet >= 0 ? "+" : "") + usd(dNet) + " vs baseline");
+        h += "</div>";
+        h += '<div class="stats stats-5">';
+        const tierCount = (t) => res.active.filter((x) => x.tier === t).length;
+        h += statTile(
+          "Sites in plan",
+          nf(res.active.length),
+          [["Regional hub", "regional hub"], ["Metro hub", "metro hub"], ["Edge PoP", "edge PoP"]]
+            .filter((t) => tierCount(t[0]))
+            .map((t) => tierCount(t[0]) + " " + t[1] + (tierCount(t[0]) > 1 ? "s" : ""))
+            .join(" · ")
+        );
+        h += statTile(
+          "Total IT + cooling load",
+          fmtPow(res.kw),
+          nf(res.nodes) + " nodes · hubs " + nf(perRep) + " streams/replica" +
+            (inp.edgeNodeModel !== nm ? " · edge on " + esc(inp.edgeNodeModel.g.name) : "")
+        );
+        h += statTile("Tokens served / month", nf1(res.tokensMo / 1e9) + " B", nf(inp.totalUsers) + " peak streams");
+        h += statTile(
+          "Demand served",
+          pct(res.served / inp.totalUsers),
+          "baseline " + pct(base.served / inp.totalUsers) + " · SLO attainment " + pct(res.sloShare)
+        );
+        h += statTile("Operator revenue / month", usd(res.operator), "colo + interconnect to " + (inp.operator === "both" ? "DLR / Equinix" : OP_LABEL[inp.operator]));
+        h += "</div>";
+
+        // ---------------- site table -----------------
+        h += '<h4 class="sec">Sites</h4>';
+        h += '<div class="tablewrap"><table class="mini"><tr>' +
+          "<th>Site</th><th>Role</th><th>Status</th><th class='num'>Streams</th><th class='num'>Nodes</th>" +
+          "<th class='num'>Load</th><th class='num'>TTFT</th><th class='num'>Decode</th><th class='num'>SLO</th>" +
+          "<th class='num'>Cost/mo</th><th class='num'>$/1M</th><th class='num'>Net/mo</th></tr>";
+        const rows = res.active.slice().sort((a, b) => b.users - a.users);
+        rows.forEach((x) => {
+          const isNew = out.added.indexOf(x.site.id) >= 0;
+          const status = isNew ? "New" : inp.currentSites.indexOf(x.site.id) >= 0 ? "Existing" : "Baseline region";
+          h +=
+            "<tr" + (isNew ? ' class="sel"' : "") + "><td>" + esc(x.site.op + " " + x.site.code + " — " + x.site.metro) + "</td>" +
+            "<td>" + x.tier + "</td><td>" + status + "</td>" +
+            "<td class='num'>" + nf(x.users) + "</td><td class='num'>" + nf(x.nodes) + "</td>" +
+            "<td class='num'>" + fmtPow(x.kw) + "</td><td class='num'>" + ms(x.ttft) + "</td>" +
+            "<td class='num'>" + nf1(x.decodeEff) + " tok/s</td><td class='num'>" + pct(x.sloShare) + "</td>" +
+            "<td class='num'>" + usd(x.cost) + "</td><td class='num'>" + usdSmart(x.per1M) + "</td>" +
+            "<td class='num'>" + usd(x.revenue - x.cost) + "</td></tr>";
+        });
+        res.idle.forEach((x) => {
+          h +=
+            '<tr class="dim"><td>' + esc(x.site.op + " " + x.site.code + " — " + x.site.metro) + "</td>" +
+            "<td>—</td><td>Redundant</td><td class='num'>0</td><td class='num'>0</td><td class='num'>—</td>" +
+            "<td class='num'>—</td><td class='num'>—</td><td class='num'>—</td><td class='num'>—</td>" +
+            "<td class='num'>—</td><td class='num'>—</td></tr>";
+        });
+        h += "</table></div>";
+        if (res.idle.length) {
+          h +=
+            '<p class="tiny">' + res.idle.length + " existing location" + (res.idle.length > 1 ? "s draw" : " draws") +
+            " no demand under the new topology — every market they used to serve is now closer to another site. " +
+            "Consolidate them, or keep them as failover and re-run with their capacity halved.</p>";
+        }
+
+        // ---------------- unplaced demand -----------------
+        if (res.unplaced && res.unplaced.length) {
+          const byRule = res.unplaced.filter((u) => u.reason.indexOf("no site in this plan sits") >= 0);
+          h += '<h4 class="sec">Demand with nowhere to land</h4>';
+          h +=
+            '<div class="notice over"><strong>' + nf(res.unserved) + " streams (" +
+            pct(res.unserved / inp.totalUsers) + " of demand) cannot be served by this plan.</strong> " +
+            (byRule.length
+              ? "Most of it is blocked by the <em>" + inp.residency + "</em> residency rule: these markets have no " +
+                "permitted site in their own " + (inp.residency === "country" ? "country" : "region") + ". " +
+                "That is the honest answer — either those markets need their own site (the table below prices the " +
+                "nearest option), the rule has to bend, or that demand is not addressable."
+              : "Every permitted site is at the power envelope you set. Raise the per-site MW cap, add sites, or " +
+                "move to a denser platform.") +
+            "</div>";
+          h += '<div class="tablewrap"><table class="mini"><tr><th>Market</th><th class="num">Streams</th>' +
+            "<th>Blocked by</th><th>Nearest permitted site</th><th class='num'>Distance</th>" +
+            "<th class='num'>Would add</th></tr>";
+          res.unplaced
+            .slice()
+            .sort((a, b) => b.users - a.users)
+            .slice(0, 14)
+            .forEach((u) => {
+              const inCountry = SITES.filter((s) => {
+                if (!inp.candidate(s)) return false;
+                if (inp.residency === "country") return s.country === u.market.country;
+                if (inp.residency === "region") return CONTINENT[s.region] === CONTINENT[u.market.region];
+                return true;
+              })
+                .map((s) => ({ s, km: DIST[u.market.id][s.id] }))
+                .sort((a, b) => a.km - b.km)[0];
+              const enm = inp.edgeNodeModel;
+              const cool = inCountry ? coolingFor(inCountry.s, enm.g) : null;
+              const reps = inCountry ? Math.ceil(u.users / streamsPerReplica(enm, inp.offload)) : 0;
+              const addMo = cool
+                ? reps * enm.hrPerReplica * HRS_MO +
+                  reps * enm.kwPerReplica * cool.factor * cool.pue * (COLO_KW_MO * inCountry.s.colo + cool.coloAdd)
+                : 0;
+              h += "<tr><td>" + esc(u.market.metro) + " (" + u.market.country + ")</td>" +
+                "<td class='num'>" + nf(u.users) + "</td><td>" + esc(u.reason) + "</td>" +
+                "<td>" + (inCountry ? esc(inCountry.s.op + " " + inCountry.s.code + " — " + inCountry.s.metro) : "none in scope") + "</td>" +
+                "<td class='num'>" + (inCountry ? nf(inCountry.km) + " km" : "—") + "</td>" +
+                "<td class='num'>" + (addMo ? usd(addMo) + "/mo" : "—") + "</td></tr>";
+            });
+          h += "</table></div>";
+          h += '<p class="tiny">"Would add" prices the smallest viable footprint at that site on the edge platform — ' +
+            "one replica per " + nf(streamsPerReplica(inp.edgeNodeModel, inp.offload)) + " streams, compute plus colo. " +
+            "Compare it against what the blocked demand is worth before committing to a site per country.</p>";
+        }
+
+        // ---------------- per-site cards -----------------
+        h += '<h4 class="sec">Site detail &amp; routing</h4><div class="cards">';
+        rows.forEach((x) => {
+          const isNew = out.added.indexOf(x.site.id) >= 0;
+          h +=
+            '<div class="card"><h5><span>' + esc(x.site.op + " " + x.site.code + " — " + x.site.metro) + "</span>" +
+            '<span class="pill' + (isNew ? " on" : "") + '">' + (isNew ? "NEW · " : "") + x.tier.toUpperCase() + "</span></h5>" +
+            '<p class="tiny" style="margin:0 0 0.4rem">' + esc(x.site.campus) + " · " + esc(REGIONS[x.site.region]) + " · " + esc(x.cool.label) + " (PUE " + x.cool.pue + ")</p>" +
+            '<div class="row"><span>Streams served</span><span>' + nf(x.users) + " (" + pct(x.users / Math.max(1, res.served)) + ")</span></div>" +
+            '<div class="row"><span>Platform</span><span>' + esc(x.platform) + "</span></div>" +
+            '<div class="row"><span>Replicas × nodes</span><span>' + nf(x.replicas) + " × " + x.nodesPerReplica + " = " + nf(x.nodes) + "</span></div>" +
+            '<div class="row"><span>Load (IT / with cooling)</span><span>' + fmtPow(x.kwIt) + " / " + fmtPow(x.kw) + "</span></div>" +
+            '<div class="row"><span>TTFT (prefill / queue)</span><span>' + ms(x.ttft) + " (" + ms(x.prefillMs) + " / " + ms(x.queueMs) + ")</span></div>" +
+            '<div class="row"><span>Decode per stream</span><span>' + nf1(x.decodeEff) + " tok/s at " + pct(x.rho) + " occupancy</span></div>" +
+            '<div class="row"><span>Colo</span><span>' + usd(x.coloMo) + "/mo at $" + nf(x.coloRate) + "/kW-mo</span></div>" +
+            '<div class="row"><span>Compute (amortised)</span><span>' + usd(x.computeMo) + "/mo</span></div>" +
+            '<div class="row"><span>Interconnect + transit</span><span>' + usd(x.xcMo + x.fabricMo + x.ixPortMo + x.transitMo) + "/mo</span></div>" +
+            '<div class="row"><span>Realised token value</span><span>' + usd(x.revenue) + "/mo at " + usdSmart(MARKET_PER_1M * x.sloFactor * x.tpsFactor) + "/1M</span></div>" +
+            '<div class="row"><span>Net contribution</span><span>' + usd(x.revenue - x.cost) + "/mo</span></div>" +
+            '<p class="why">' + whySite(x, inp, base) + "</p>" +
+            routingPlan(x, inp, hubIds) +
+            "</div>";
+        });
+        h += "</div>";
+
+        // ---------------- marginal gain -----------------
+        if (out.steps.length) {
+          h += '<h4 class="sec">Marginal gain — where the returns stop</h4>';
+          h += '<p class="tiny">Each bar is the TTFT the estate delivers after adding that site, against the baseline. ' +
+            "The optimiser stopped when the next site no longer paid for itself under the current objective mix.</p>";
+          const maxT = Math.max(base.wTtft, ...out.steps.map((s) => s.ttft));
+          const barData = [{ label: "Baseline", value: base.wTtft }].concat(
+            out.steps.map((s, i) => ({
+              label: "+ " + SITE_BY_ID[s.id].op + " " + SITE_BY_ID[s.id].code + " (" + SITE_BY_ID[s.id].metro + ")",
+              value: s.ttft,
+            }))
+          );
+          h += barRows(barData, maxT, (v) => ms(v));
+          h += '<div class="tablewrap"><table class="mini"><tr><th>Step</th><th>Site</th>' +
+            "<th class='num'>TTFT after</th><th class='num'>Δ TTFT</th><th class='num'>Coverage</th>" +
+            "<th class='num'>SLO after</th><th class='num'>Net value after</th><th class='num'>Δ Net value</th></tr>";
+          h += "<tr><td>0</td><td>Baseline topology</td><td class='num'>" + ms(base.wTtft) + "</td><td class='num'>—</td>" +
+            "<td class='num'>" + pct(base.served / inp.totalUsers) + "</td>" +
+            "<td class='num'>" + pct(base.sloShare) + "</td><td class='num'>" + usd(base.net) + "</td><td class='num'>—</td></tr>";
+          out.steps.forEach((s, i) => {
+            const st = SITE_BY_ID[s.id];
+            // dTtft is the reduction, so a negative value means TTFT went up —
+            // usually because the step brought new, more distant markets online.
+            h += "<tr><td>" + (i + 1) + "</td><td>" + esc(st.op + " " + st.code + " — " + st.metro) + "</td>" +
+              "<td class='num'>" + ms(s.ttft) + "</td>" +
+              "<td class='num'>" + (s.dTtft >= 0 ? "−" + ms(s.dTtft) : "+" + ms(-s.dTtft)) + "</td>" +
+              "<td class='num'>" + pct(s.served / inp.totalUsers) + "</td>" +
+              "<td class='num'>" + pct(s.slo) + "</td><td class='num'>" + usd(s.net) + "</td>" +
+              "<td class='num'>" + (s.dNet >= 0 ? "+" : "") + usd(s.dNet) + "</td></tr>";
+          });
+          h += "</table></div>";
+        }
+
+        // ---------------- TTFT by market -----------------
+        const marketRows = [];
+        res.active.forEach((x) => (x.perMarket || []).forEach((p) => marketRows.push({ p, site: x.site })));
+        marketRows.sort((a, b) => b.p.users - a.p.users);
+        const baseByMarket = {};
+        base.active.forEach((x) => (x.perMarket || []).forEach((p) => {
+          baseByMarket[p.metro] = Math.max(baseByMarket[p.metro] || 0, p.ttft);
+        }));
+        if (marketRows.length) {
+          h += '<h4 class="sec">Time to first token by market</h4>';
+          const top = marketRows.slice(0, 12);
+          const maxM = Math.max(...top.map((r) => Math.max(r.p.ttft, baseByMarket[r.p.metro] || 0)));
+          h += barRows(
+            top.map((r) => ({
+              label: r.p.metro + (r.p.customer ? " (" + r.p.customer + ")" : "") + " → " + r.site.op + " " + r.site.code,
+              value: r.p.ttft,
+              ghost: baseByMarket[r.p.metro] || null,
+            })),
+            maxM,
+            (v) => ms(v)
+          );
+          h += '<div class="legend"><span><i class="now"></i>Baseline today</span><span><i class="plan"></i>Planned</span></div>';
+          h += '<div class="tablewrap"><table class="mini"><tr><th>Market</th><th>Served from</th><th>Transport</th>' +
+            "<th class='num'>Distance</th><th class='num'>Access</th><th class='num'>Network</th>" +
+            "<th class='num'>TTFT now</th><th class='num'>TTFT planned</th><th class='num'>Streams</th></tr>";
+          marketRows.slice(0, 22).forEach((r) => {
+            const now = baseByMarket[r.p.metro];
+            h += "<tr><td>" + esc(r.p.metro) +
+              (r.p.customer ? ' <span class="pill">' + esc(r.p.customer) + (r.p.onnet ? " · on-net" : "") + "</span>" : "") +
+              "</td><td>" + esc(r.site.op + " " + r.site.code) + "</td>" +
+              "<td>" + esc(r.p.path.t.label) + "</td><td class='num'>" + nf(r.p.path.km) + " km</td>" +
+              "<td class='num'>" + ms(inp.access.rtt) + "</td><td class='num'>" + ms(r.p.path.rtt) + "</td>" +
+              "<td class='num'>" + (now ? ms(now) : "—") + "</td><td class='num'>" + ms(r.p.ttft) + "</td>" +
+              "<td class='num'>" + nf(r.p.users) + "</td></tr>";
+          });
+          h += "</table></div>";
+        }
+
+        // ---------------- training -----------------
+        if (inp.workload !== "inference") {
+          const tr = trainingSites(inp, res.active.map((x) => x.site.id));
+          h += '<h4 class="sec">Training / fine-tuning hub</h4>';
+          h += '<p class="tiny">Training does not follow users — it follows contiguous megawatts, liquid cooling, energy price ' +
+            "and a fat path back to the inference estate. These sites are ranked on that basis, independently of the serving topology.</p>";
+          h += '<div class="tablewrap"><table class="mini"><tr><th>Rank</th><th>Site</th><th>Campus</th>' +
+            "<th class='num'>Headroom</th><th class='num'>$/kWh</th><th class='num'>Colo $/kW-mo</th>" +
+            "<th class='num'>Lead</th><th>Path to estate</th></tr>";
+          tr.forEach((t, i) => {
+            h += "<tr" + (i === 0 ? ' class="sel"' : "") + "><td>" + (i + 1) + "</td>" +
+              "<td>" + esc(t.site.op + " " + t.site.code + " — " + t.site.metro) + "</td>" +
+              "<td>" + esc(t.site.campus) + "</td><td class='num'>" + nf(t.site.mw) + " MW</td>" +
+              "<td class='num'>$" + t.site.kwh.toFixed(2) + "</td><td class='num'>$" + nf(COLO_KW_MO * t.site.colo) + "</td>" +
+              "<td class='num'>" + t.site.lead + " mo</td>" +
+              "<td>" + (t.site.dark && t.nearest <= DARK_MAX_KM
+                ? "dark fibre, " + nf(t.nearest) + " km to nearest serving site"
+                : "managed wave / fabric (" + nf(t.nearest) + " km)") + "</td></tr>";
+          });
+          h += "</table></div>";
+          const t0 = tr[0];
+          if (t0) {
+            const g = GPU_BY_ID[inp.cfg.gpu];
+            const cool = coolingFor(t0.site, g) || { pue: 1.13, factor: 1, coloAdd: 18 };
+            const mw = Math.min(t0.site.mw, Math.max(1, inp.maxMw));
+            const itKw = (mw * 1000) / cool.pue;
+            const gpus = Math.floor(itKw / g.kw);
+            const nodes = Math.floor(gpus / g.gpusPerNode);
+            const thru = ((nodes * g.gpusPerNode * g.pf8 * MFU_PREFILL * 1e6) / ((MODEL_BY_ID[inp.cfg.model].act || MODEL_BY_ID[inp.cfg.model].gb)) ) * TRAIN_FACTOR;
+            const coloMo = mw * 1000 * (COLO_KW_MO * t0.site.colo + cool.coloAdd);
+            const compMo = nodes * g.gpusPerNode * g.hr * HRS_MO;
+            h += '<div class="notice"><strong>' + esc(t0.site.op + " " + t0.site.code) + "</strong> at " + nf1(mw) +
+              " MW lands ~" + nf(nodes) + " " + esc(g.name) + " nodes (" + nf(gpus) + " GPUs), about " +
+              nf1(thru / 1e6) + "M training tokens/s at " + Math.round(MFU_PREFILL * 100) + "% MFU. " +
+              "Colo " + usd(coloMo) + "/mo at $" + nf(COLO_KW_MO * t0.site.colo + cool.coloAdd) + "/kW-mo, compute " + usd(compMo) +
+              "/mo amortised. Energy at $" + t0.site.kwh.toFixed(2) + "/kWh is " +
+              usd(mw * 1000 * cool.pue * HRS_MO * t0.site.kwh) + "/mo of that all-in rate's underlying cost — the single biggest lever on a training hub.</div>";
+          }
+        }
+
+        // ---------------- economics -----------------
+        h += '<h4 class="sec">Financial position</h4>';
+        h += '<div class="split"><div>';
+        h += '<div class="tablewrap"><table class="mini"><tr><th>Monthly</th><th class="num">Baseline</th><th class="num">Planned</th><th class="num">Δ</th></tr>';
+        const fin = [
+          ["Compute (amortised)", sum(base.active, "computeMo"), sum(res.active, "computeMo")],
+          ["Colo + power", sum(base.active, "coloMo"), sum(res.active, "coloMo")],
+          ["Storage / KV cache", sum(base.active, "storMo"), sum(res.active, "storMo")],
+          ["Cross connects", sum(base.active, "xcMo"), sum(res.active, "xcMo")],
+          ["Fabric virtual circuits", sum(base.active, "fabricMo"), sum(res.active, "fabricMo")],
+          ["IX ports", sum(base.active, "ixPortMo"), sum(res.active, "ixPortMo")],
+          ["IP transit", sum(base.active, "transitMo"), sum(res.active, "transitMo")],
+          ["Total cost", base.cost, res.cost],
+          ["Realised token value", base.revenue, res.revenue],
+          ["Net value", base.net, res.net],
+        ];
+        fin.forEach((r) => {
+          const d = r[2] - r[1];
+          const good = r[0] === "Realised token value" || r[0] === "Net value" ? d >= 0 : d <= 0;
+          h += "<tr" + (r[0].indexOf("Total") === 0 || r[0] === "Net value" ? ' class="sel"' : "") + "><td>" + r[0] + "</td>" +
+            "<td class='num'>" + usd(r[1]) + "</td><td class='num'>" + usd(r[2]) + "</td>" +
+            "<td class='num'>" + (d >= 0 ? "+" : "") + usd(d) + (good ? "" : " ⚠") + "</td></tr>";
+        });
+        h += "</table></div>";
+        h += "</div><div>";
+        const transitSaved = sum(base.active, "transitMo") - sum(res.active, "transitMo");
+        const annual = (res.net - base.net) * 12;
+        const bullets = [];
+        bullets.push(
+          "<strong>Token economics.</strong> Cost per 1M tokens moves " + usdSmart(base.per1M) + " → " + usdSmart(res.per1M) +
+          ". Realised price moves " + usdSmart(base.revenue / Math.max(1e-9, base.tokensMo / 1e6)) + " → " +
+          usdSmart(res.revenue / Math.max(1e-9, res.tokensMo / 1e6)) + " per 1M because " + pct(res.sloShare) +
+          " of streams now land inside the " + inp.slo + " ms SLO (was " + pct(base.sloShare) + ")."
+        );
+        if (Math.abs(transitSaved) > 100) {
+          bullets.push(
+            "<strong>Traffic economics.</strong> Peering at the new metros moves " + nf(Math.abs(transitSaved) / TRANSIT_MBPS_MO) +
+            " Mbps " + (transitSaved > 0 ? "off" : "onto") + " IP transit, worth " + usd(Math.abs(transitSaved)) + "/mo " +
+            (transitSaved > 0 ? "saved" : "added") + " — before counting the latency the transit path was costing."
+          );
+        }
+        bullets.push(
+          "<strong>Run rate.</strong> " + (annual >= 0 ? "Improvement" : "Cost") + " of " + usd(Math.abs(annual)) +
+          " per year in net value. Colo and interconnect spend with " +
+          (inp.operator === "both" ? "Digital Realty / Equinix" : OP_LABEL[inp.operator]) + " moves " +
+          usd(base.operator) + " → " + usd(res.operator) + " per month."
+        );
+        if (dNet < 0 && dTtft > 0) {
+          bullets.push(
+            "<strong>The latency gain is not being monetised.</strong> The plan takes " + nf1((dTtft / base.wTtft) * 100) +
+            "% off TTFT but costs " + usd(-dNet) + "/mo more, because " + pct(base.sloShare) +
+            " of demand already cleared the " + inp.slo + " ms SLO on the baseline — under this model, latency only turns " +
+            "into money when it moves streams from outside the SLO to inside it. Either the SLO is set too loose for " +
+            "what the product actually needs (tighten it and re-run), or these PoPs are a product decision rather than " +
+            "a financial one. Sliding the objective toward economics will stop the optimiser buying them."
+          );
+        }
+        if (dNet > 0 && dTtft < 0 && res.served <= base.served * 1.02) {
+          bullets.push(
+            "<strong>This plan trades latency for cost.</strong> TTFT rises " + ms(-dTtft) + " while net value improves " +
+            usd(dNet) + "/mo: the optimiser moved demand onto cheaper power and, with the SLO at " + inp.slo +
+            " ms, nothing was penalised for it. That is only the right answer if the SLO is real — if users feel the " +
+            "difference before " + inp.slo + " ms, tighten it and re-run."
+          );
+        }
+        const worst = res.active.slice().sort((a, b) => a.revenue - a.cost - (b.revenue - b.cost))[0];
+        if (worst && worst.revenue - worst.cost < 0) {
+          bullets.push(
+            "<strong>Watch.</strong> " + esc(worst.site.op + " " + worst.site.code) + " runs at " +
+            usd(worst.revenue - worst.cost) + "/mo — it is bought for latency, not margin. " +
+            "If that market's SLO is negotiable, drop it and re-run."
+          );
+        }
+        if (nm.nodesPerReplica > 1) {
+          bullets.push(
+            "<strong>Model scale.</strong> " + esc(MODEL_BY_ID[inp.cfg.model].label) + " needs " + nm.nodesPerReplica +
+            " nodes per replica at " + nf1(nm.weights) + " GB of weights, so the smallest viable PoP is " +
+            fmtPow(nm.kwPerReplica * 1.13) + " and tensor-parallel efficiency is " + pct(nm.tpEff) + ". " +
+            "A distilled model at the edge with this one at the hub is usually cheaper than replicating it everywhere."
+          );
+        }
+        h += '<ul class="recs">' + bullets.map((b) => "<li>" + b + "</li>").join("") + "</ul>";
+        h += "</div></div>";
+
+        h += '<div class="toolbar" style="margin-top:0.9rem">' +
+          '<button id="epCopy">Copy plan as text</button>' +
+          '<button id="epCsv">Download sites CSV</button>' +
+          '<span class="tiny">Figures are an illustrative planning model — confirm power, space and interconnect availability with the operator.</span>' +
+          "</div><pre class=\"plan\" id=\"epPlanText\" hidden></pre>";
+
+        $("epResults").innerHTML = h;
+        $("epCopy").onclick = copyPlan;
+        $("epCsv").onclick = downloadCsv;
+        $("epRunNote").textContent =
+          "Evaluated " + SITES.filter((s) => inp.candidate(s)).length + " candidate sites against " +
+          inp.demand.length + " demand markets.";
+      }
+
+      const sum = (arr, k) => arr.reduce((n, x) => n + (x[k] || 0), 0);
+
+      // ===================== Training-only siting view =======================
+      // Cost a fixed MW block at a site and report what it buys.
+      function trainBuild(site, inp, mw) {
+        const g = GPU_BY_ID[inp.cfg.gpu];
+        const cool = coolingFor(site, g);
+        if (!cool) return null;
+        const usable = Math.min(site.mw, mw);
+        const itKw = (usable * 1000) / cool.pue;
+        const gpus = Math.floor((itKw / (g.kw * cool.factor)) / g.gpusPerNode) * g.gpusPerNode;
+        const nodes = gpus / g.gpusPerNode;
+        if (nodes < 1) return null;
+        const m = MODEL_BY_ID[inp.cfg.model];
+        const actGb = m.act || m.gb;
+        // Same throughput model as FLUX: prefill-rate tokens x the training
+        // factor (fwd+bwd ≈ 3x FLOPs), scaled by fabric efficiency.
+        const fabricEff = site.dark ? 1.0 : 0.97;
+        const thru = ((gpus * g.pf8 * MFU_PREFILL * cool.factor * 1e6) / actGb) * TRAIN_FACTOR * fabricEff;
+        const coloRate = COLO_KW_MO * site.colo + cool.coloAdd;
+        const coloMo = usable * 1000 * coloRate;
+        const computeMo = gpus * g.hr * HRS_MO;
+        const energyMo = usable * 1000 * HRS_MO * site.kwh; // underlying energy inside the all-in rate
+        const interMo = (inp.allowed.cross ? 2 * XC_MO[site.op] : 0) +
+          (inp.allowed.fabric && site.fabric ? FABRIC_MO[site.op] * 2.6 : 0);
+        const storMo = STOR_HUB_MO;
+        const costMo = coloMo + computeMo + interMo + storMo;
+        const tokensMo = thru * 3600 * HRS_MO * clamp(inp.duty, 0.05, 1);
+        return {
+          site, cool, usable, gpus, nodes, thru, coloRate, coloMo, computeMo, energyMo, interMo,
+          storMo, costMo, tokensMo, per1M: costMo / Math.max(1e-9, tokensMo / 1e6),
+          operator: coloMo + interMo,
+        };
+      }
+
+      function renderTrainingOnly(inp) {
+        const mw = Math.max(0.25, inp.maxMw);
+        const cands = SITES.filter((s) => inp.candidate(s) && coolingFor(s, GPU_BY_ID[inp.cfg.gpu]))
+          .map((s) => trainBuild(s, inp, mw))
+          .filter(Boolean);
+        if (!cands.length) {
+          $("epResults").innerHTML =
+            '<div class="notice over"><strong>No candidate site can host this build.</strong> ' +
+            "The chosen accelerator needs direct liquid cooling — relax the operator or region policy, " +
+            "or pick an air-coolable platform.</div>";
+          return;
+        }
+        // Rank on delivered cost per token, which folds power price, colo rate
+        // and cooling efficiency into one number.
+        cands.sort((a, b) => a.per1M - b.per1M);
+        const baseSite = SITE_BY_ID[inp.currentSites[0] || inp.baselineSite];
+        const baseBuild = trainBuild(baseSite, inp, mw) || cands[cands.length - 1];
+        const best = cands[0];
+        LAST = { inp, training: { cands, best, baseBuild } };
+
+        let h = '<h4 class="sec">Training hub siting</h4>';
+        h +=
+          '<div class="notice"><strong>Training does not follow users.</strong> No edge PoPs are proposed here: ' +
+          "a training hub is chosen on contiguous megawatts, cooling, energy price and the path back to the data. " +
+          "Ranked on delivered cost per million training tokens for a <strong>" + nf1(mw) + " MW</strong> block of " +
+          esc(GPU_BY_ID[inp.cfg.gpu].name) + " running " + esc(MODEL_BY_ID[inp.cfg.model].label) + " at " +
+          Math.round(inp.duty * 100) + "% scheduled duty. Switch the workload to <em>Inference + training hub</em> " +
+          "to plan a serving topology alongside it.</div>";
+
+        const dCost = baseBuild.costMo - best.costMo;
+        h += '<div class="stats stats-5">';
+        h += statTile("Best site", best.site.op + " " + best.site.code, best.site.metro + " · " + nf1(best.usable) + " MW");
+        h += statTile("Cluster", nf(best.gpus) + " GPUs", nf(best.nodes) + " nodes · " + esc(best.cool.label));
+        h += statTile("Training throughput", nf1(best.thru / 1e6) + "M tok/s", nf1(best.tokensMo / 1e9) + "B tokens/mo");
+        h += statTile("Cost per 1M tokens", usdSmart(best.per1M), "vs " + usdSmart(baseBuild.per1M) + " at " + baseBuild.site.code);
+        h += statTile("Monthly cost", usd(best.costMo), (dCost >= 0 ? "saves " : "costs ") + usd(Math.abs(dCost)) + "/mo vs " + baseBuild.site.code);
+        h += "</div>";
+
+        h += '<div class="tablewrap"><table class="mini"><tr><th>Rank</th><th>Site</th><th>Campus</th>' +
+          "<th class='num'>Block</th><th class='num'>GPUs</th><th class='num'>Tok/s</th>" +
+          "<th class='num'>Colo $/kW-mo</th><th class='num'>$/kWh</th><th class='num'>Colo/mo</th>" +
+          "<th class='num'>Cost/mo</th><th class='num'>$/1M</th><th class='num'>vs best</th><th class='num'>Lead</th></tr>";
+        cands.slice(0, 15).forEach((c, i) => {
+          h += "<tr" + (i === 0 ? ' class="sel"' : "") + "><td>" + (i + 1) + "</td>" +
+            "<td>" + esc(c.site.op + " " + c.site.code + " — " + c.site.metro) + "</td>" +
+            "<td>" + esc(c.site.campus) + "</td><td class='num'>" + nf1(c.usable) + " MW</td>" +
+            "<td class='num'>" + nf(c.gpus) + "</td><td class='num'>" + nf1(c.thru / 1e6) + "M</td>" +
+            "<td class='num'>$" + nf(c.coloRate) + "</td><td class='num'>$" + c.site.kwh.toFixed(2) + "</td>" +
+            "<td class='num'>" + usd(c.coloMo) + "</td><td class='num'>" + usd(c.costMo) + "</td>" +
+            "<td class='num'>" + usdSmart(c.per1M) + "</td>" +
+            "<td class='num'>" + (i === 0 ? "—" : "+" + usd(c.costMo - best.costMo)) + "</td>" +
+            "<td class='num'>" + c.site.lead + " mo</td></tr>";
+        });
+        h += "</table></div>";
+
+        // Delivered $/1M barely moves between sites — the accelerator fleet is
+        // the same everywhere and dwarfs the facility line — so plotting it
+        // gives eight identical bars. Plot the premium over the best site,
+        // which is what the choice actually costs, anchored at zero.
+        const top = cands.slice(0, 8);
+        const maxPrem = Math.max(1, Math.max.apply(null, top.map((c) => c.costMo - best.costMo)));
+        h += '<h4 class="sec">What each site costs against the best one</h4>';
+        h += '<p class="tiny">Monthly premium over ' + esc(best.site.op + " " + best.site.code) +
+          " for the same " + nf1(mw) + " MW block. Delivered cost per million tokens sits between " +
+          usdSmart(best.per1M) + " and " + usdSmart(cands[Math.min(14, cands.length - 1)].per1M) +
+          " across this whole list — the fleet is identical everywhere, so the facility is the only thing moving.</p>";
+        h += barRows(
+          top.map((c) => ({
+            label: c.site.op + " " + c.site.code + " — " + c.site.metro,
+            value: c.costMo - best.costMo,
+          })),
+          maxPrem,
+          (v) => (v <= 0 ? "best" : "+" + usd(v) + "/mo")
+        );
+
+        h += '<h4 class="sec">Where the money goes at ' + esc(best.site.op + " " + best.site.code) + "</h4>";
+        h += '<div class="split"><div><div class="tablewrap"><table class="mini">' +
+          "<tr><th>Monthly</th><th class='num'>" + esc(best.site.code) + "</th><th class='num'>" +
+          esc(baseBuild.site.code) + "</th><th class='num'>Δ</th></tr>";
+        [
+          ["Colo (all-in)", best.coloMo, baseBuild.coloMo],
+          ["— of which energy", best.energyMo, baseBuild.energyMo],
+          ["Compute (amortised)", best.computeMo, baseBuild.computeMo],
+          ["Storage tier", best.storMo, baseBuild.storMo],
+          ["Interconnect", best.interMo, baseBuild.interMo],
+          ["Total", best.costMo, baseBuild.costMo],
+        ].forEach((r) => {
+          h += "<tr" + (r[0] === "Total" ? ' class="sel"' : "") + "><td>" + r[0] + "</td>" +
+            "<td class='num'>" + usd(r[1]) + "</td><td class='num'>" + usd(r[2]) + "</td>" +
+            "<td class='num'>" + (r[1] - r[2] >= 0 ? "+" : "") + usd(r[1] - r[2]) + "</td></tr>";
+        });
+        h += "</table></div></div><div>";
+
+        const reach = inp.currentSites.length
+          ? inp.currentSites.map((id) => SITE_BY_ID[id]).filter(Boolean)
+            .map((s) => ({ s, km: haversineKm(s, best.site) })).sort((a, b) => a.km - b.km)[0]
+          : null;
+        const bullets = [];
+        bullets.push(
+          "<strong>Why " + esc(best.site.code) + ".</strong> " + nf(best.site.mw) + " MW of headroom (est.), $" +
+          best.site.kwh.toFixed(2) + "/kWh, " + esc(best.cool.label) + " at PUE " + best.cool.pue +
+          ", colo at $" + nf(best.coloRate) + "/kW-mo. Energy alone is " + usd(best.energyMo) +
+          "/mo of the " + usd(best.coloMo) + "/mo colo line — at this scale a $0.02/kWh difference is " +
+          usd(best.usable * 1000 * HRS_MO * 0.02) + "/mo."
+        );
+        if (reach) {
+          const ok = best.site.dark && reach.s.dark && reach.km <= DARK_MAX_KM;
+          bullets.push(
+            "<strong>Path to the data.</strong> Nearest existing location is " + esc(reach.s.op + " " + reach.s.code) +
+            " at " + nf(reach.km) + " km (" + ms(fibreRttMs(reach.km)) + " RTT) — " +
+            (ok
+              ? "a dark fibre pair or DWDM wave carries checkpoints and datasets at ~" +
+                usd(Math.max(DARK_MIN_MO, reach.km * DARK_PER_KM_MO)) + "/mo."
+              : "beyond a practical dark fibre span, so budget a managed wave and expect checkpoint egress to matter.")
+          );
+        } else {
+          bullets.push(
+            "<strong>Path to the data.</strong> No current locations were selected, so nothing constrains the data " +
+            "path here. Select your existing sites under step 3 and the ranking will weigh the fibre route back to them."
+          );
+        }
+        const worstTop = cands[Math.min(14, cands.length - 1)];
+        bullets.push(
+          "<strong>Keep the site decision in proportion.</strong> Compute is " +
+          pct(best.computeMo / best.costMo) + " of the monthly bill and is identical wherever the fleet lands, so " +
+          "the entire spread across these fifteen sites is " + usd(worstTop.costMo - best.costMo) + "/mo (" +
+          usd((worstTop.costMo - best.costMo) * 12) + "/year) — real money, but never a reason to accept a worse " +
+          "delivery date or a worse data path. Site choice here is a power and schedule decision that happens to " +
+          "carry a facility saving, not the other way round."
+        );
+        const cheapest = cands.slice().sort((a, b) => a.site.kwh - b.site.kwh)[0];
+        if (cheapest.site.id !== best.site.id) {
+          bullets.push(
+            "<strong>Cheapest power is not the answer.</strong> " + esc(cheapest.site.op + " " + cheapest.site.code) +
+            " has the lowest energy price at $" + cheapest.site.kwh.toFixed(2) + "/kWh, against $" +
+            best.site.kwh.toFixed(2) + " here, yet still costs " + usd(cheapest.costMo - best.costMo) +
+            "/mo more — the colo rate and cooling efficiency move more dollars than the kWh line at " +
+            Math.round(inp.duty * 100) + "% duty."
+          );
+        }
+        const slow = cands.slice(0, 5).sort((a, b) => a.site.lead - b.site.lead)[0];
+        bullets.push(
+          "<strong>Lead time.</strong> " + esc(best.site.code) + " is ~" + best.site.lead + " months to power (est.)" +
+          (slow.site.id !== best.site.id
+            ? "; " + esc(slow.site.op + " " + slow.site.code) + " in the top five is ~" + slow.site.lead +
+              " months at " + usdSmart(slow.per1M) + "/1M, which is the trade if the schedule binds."
+            : " — the fastest of the top five.")
+        );
+        h += '<ul class="recs">' + bullets.map((b) => "<li>" + b + "</li>").join("") + "</ul></div></div>";
+
+        h += '<div class="toolbar" style="margin-top:0.9rem">' +
+          '<button id="epCopy">Copy plan as text</button>' +
+          '<button id="epCsv">Download sites CSV</button>' +
+          '<span class="tiny">Illustrative planning model — confirm power, cooling and delivery dates with the operator.</span>' +
+          '</div><pre class="plan" id="epPlanText" hidden></pre>';
+        $("epResults").innerHTML = h;
+        $("epCopy").onclick = copyPlan;
+        $("epCsv").onclick = downloadCsv;
+        $("epRunNote").textContent = "Ranked " + cands.length + " candidate sites on delivered cost per training token.";
+      }
+
+      // ============================== Export =================================
+      function planText() {
+        if (!LAST) return "";
+        const { inp, out } = LAST;
+        if (LAST.training) {
+          const t = LAST.training;
+          const L = ["FLUX EDGE — training hub siting"];
+          L.push("Profile: " + inp.prof.label + " · " + MODEL_BY_ID[inp.cfg.model].label + " on " + GPU_BY_ID[inp.cfg.gpu].name);
+          L.push("Block: " + nf1(inp.maxMw) + " MW at " + Math.round(inp.duty * 100) + "% scheduled duty");
+          L.push("");
+          t.cands.slice(0, 10).forEach((c, i) => {
+            L.push((i + 1) + ". " + c.site.op + " " + c.site.code + " — " + c.site.metro +
+              " · " + nf(c.gpus) + " GPUs · " + usdSmart(c.per1M) + "/1M · " + usd(c.costMo) + "/mo");
+            L.push("     " + c.site.campus + " · $" + c.site.kwh.toFixed(2) + "/kWh · $" + nf(c.coloRate) +
+              "/kW-mo · " + c.cool.label + " · ~" + c.site.lead + " mo lead");
+          });
+          L.push("");
+          L.push("Illustrative planning model — not a quote or an availability commitment.");
+          return L.join("\n");
+        }
+        const res = out.result, base = out.base;
+        const L = [];
+        L.push("FLUX EDGE — deployment plan");
+        L.push("Profile: " + inp.prof.label + " · " + inp.workload + " · " + MODEL_BY_ID[inp.cfg.model].label);
+        L.push("Context " + nf(inp.cfg.ctx) + " tokens, KV " + KVLBL[inp.cfg.kv] + ", " + GPU_BY_ID[inp.cfg.gpu].name);
+        L.push("Demand: " + nf(inp.totalUsers) + " peak concurrent streams at " + Math.round(inp.duty * 100) +
+          "% duty = " + nf1((inp.totalUsers * inp.tokDay) / 1e9) + "B output tokens/day, access " + inp.access.label);
+        L.push("Policy: " + (inp.operator === "both" ? "DLR + Equinix" : OP_LABEL[inp.operator]) +
+          ", residency " + inp.residency + ", SLO " + inp.slo + " ms, max " + inp.maxSites + " new sites at " + inp.maxMw + " MW");
+        L.push("Transports: " + Object.keys(inp.allowed).filter((k) => inp.allowed[k]).map((k) => TRANSPORTS[k].label).join(", "));
+        L.push("");
+        L.push("RESULT  TTFT " + ms(base.wTtft) + " -> " + ms(res.wTtft) + " (p95 " + ms(base.p95) + " -> " + ms(res.p95) + ")");
+        L.push("        SLO attainment " + pct(base.sloShare) + " -> " + pct(res.sloShare));
+        L.push("        Cost/1M " + usdSmart(base.per1M) + " -> " + usdSmart(res.per1M));
+        L.push("        Net value/mo " + usd(base.net) + " -> " + usd(res.net));
+        L.push("        Operator revenue/mo " + usd(base.operator) + " -> " + usd(res.operator));
+        L.push("");
+        res.active.slice().sort((a, b) => b.users - a.users).forEach((x) => {
+          const isNew = out.added.indexOf(x.site.id) >= 0;
+          L.push((isNew ? "[NEW] " : "[----] ") + x.site.op + " " + x.site.code + " — " + x.site.metro +
+            " · " + x.tier.toLowerCase());
+          L.push("       " + x.site.campus);
+          L.push("       " + nf(x.users) + " streams · " + nf(x.nodes) + " nodes · " + fmtPow(x.kw) +
+            " · TTFT " + ms(x.ttft) + " · decode " + nf1(x.decodeEff) + " tok/s");
+          L.push("       cost " + usd(x.cost) + "/mo · $" + x.per1M.toFixed(2) + "/1M · net " + usd(x.revenue - x.cost) + "/mo");
+          const r = [];
+          if (x.xcMo) r.push(x.xcCount + "x cross connect");
+          if (x.ixPortMo) r.push(x.site.ixName + " peering port");
+          if (x.fabricMo) r.push(x.fabricVcs + "x " + (x.site.op === "DLR" ? "ServiceFabric" : "Equinix Fabric") + " VC");
+          if (x.transitMo) r.push(nf(x.transitMbps) + " Mbps transit");
+          L.push("       routing: " + r.join(" · "));
+        });
+        if (res.idle.length) {
+          L.push("");
+          L.push("REDUNDANT under this topology: " + res.idle.map((x) => x.site.op + " " + x.site.code).join(", "));
+        }
+        L.push("");
+        L.push("Illustrative planning model — not a quote or an availability commitment.");
+        return L.join("\n");
+      }
+      function copyPlan() {
+        const t = planText();
+        const pre = $("epPlanText");
+        pre.hidden = false;
+        pre.textContent = t;
+        if (navigator.clipboard) navigator.clipboard.writeText(t).catch(() => {});
+      }
+      function downloadCsv() {
+        if (!LAST) return;
+        if (LAST.training) {
+          const head = ["rank", "operator", "code", "metro", "country", "mw", "gpus", "nodes", "tok_s",
+            "colo_usd_kw_mo", "usd_kwh", "colo_mo", "compute_mo", "cost_mo", "usd_per_1m", "lead_months"];
+          const lines = [head.join(",")];
+          LAST.training.cands.forEach((c, i) => {
+            lines.push([i + 1, c.site.op, c.site.code, '"' + c.site.metro + '"', c.site.country,
+              c.usable.toFixed(2), c.gpus, c.nodes, Math.round(c.thru), Math.round(c.coloRate),
+              c.site.kwh.toFixed(2), Math.round(c.coloMo), Math.round(c.computeMo), Math.round(c.costMo),
+              c.per1M.toFixed(3), c.site.lead].join(","));
+          });
+          saveCsv(lines.join("\n"), "flux-edge-training-sites.csv");
+          return;
+        }
+        const res = LAST.out.result;
+        const head = ["operator", "code", "metro", "country", "region", "role", "status", "streams", "nodes",
+          "kw", "ttft_ms", "decode_tok_s", "slo_share", "cost_mo", "usd_per_1m", "net_mo", "operator_rev_mo"];
+        const lines = [head.join(",")];
+        res.active.forEach((x) => {
+          lines.push([
+            x.site.op, x.site.code, '"' + x.site.metro + '"', x.site.country, x.site.region,
+            '"' + x.tier + '"',
+            LAST.out.added.indexOf(x.site.id) >= 0 ? "new" : "existing",
+            Math.round(x.users), x.nodes, Math.round(x.kw), x.ttft.toFixed(1), x.decodeEff.toFixed(1),
+            (x.sloShare * 100).toFixed(1), Math.round(x.cost), x.per1M.toFixed(3),
+            Math.round(x.revenue - x.cost), Math.round(x.operator),
+          ].join(","));
+        });
+        saveCsv(lines.join("\n"), "flux-edge-sites.csv");
+      }
+      function saveCsv(text, name) {
+        const blob = new Blob([text], { type: "text/csv" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }
+
+      // ============================== Atlas ==================================
+      function renderAtlas() {
+        const op = $("atOp").value, reg = $("atRegion").value;
+        const minMw = parseFloat($("atMw").value) || 0;
+        const cap = $("atCap").value;
+        const rows = SITES.filter((s) => {
+          if (op !== "all" && s.op !== op) return false;
+          if (reg !== "all" && s.region !== reg) return false;
+          if (s.mw < minMw) return false;
+          if (cap !== "all" && !s[cap]) return false;
+          return true;
+        });
+        let h = '<table class="mini"><tr><th>Operator</th><th>Code</th><th>Metro</th><th>Campus</th>' +
+          "<th class='num'>MW (est.)</th><th class='num'>Rack kW</th><th>Cooling</th><th>Fabric</th>" +
+          "<th>Dark fibre</th><th>Internet exchange</th><th class='num'>Peers</th>" +
+          "<th class='num'>Colo $/kW-mo</th><th class='num'>$/kWh</th><th class='num'>Lead</th><th>Cable</th></tr>";
+        rows.sort((a, b) => b.mw - a.mw).forEach((s) => {
+          h += "<tr><td>" + OP_LABEL[s.op] + "</td><td>" + esc(s.code) + "</td><td>" + esc(s.metro) + " (" + s.country + ")</td>" +
+            "<td>" + esc(s.campus) + "</td><td class='num'>" + nf(s.mw) + "</td><td class='num'>" + nf(s.rackKw) + "</td>" +
+            "<td>" + (s.liquid ? "DLC + air" : "Air") + "</td><td>" + (s.fabric ? (s.op === "DLR" ? "ServiceFabric" : "Equinix Fabric") : "—") + "</td>" +
+            "<td>" + (s.dark ? "Yes" : "—") + "</td><td>" + esc(s.ixName) + "</td><td class='num'>" + (s.ix ? nf(s.peers) : "—") + "</td>" +
+            "<td class='num'>" + nf(COLO_KW_MO * s.colo) + "</td><td class='num'>" + s.kwh.toFixed(2) + "</td>" +
+            "<td class='num'>" + s.lead + " mo</td><td>" + (s.cable ? "Landing" : "—") + "</td></tr>";
+        });
+        h += "</table>";
+        $("atlasTable").innerHTML = h + '<p class="tiny">' + rows.length + " of " + SITES.length + " sites shown.</p>";
+      }
+
+      // ============================== Method =================================
+      function renderMethod() {
+        $("methodView").innerHTML =
+          '<h4 class="sec">What the optimiser does</h4>' +
+          "<p>Every market in scope is assigned to the permitted site that gives it the lowest time to first token, " +
+          "subject to data residency and the site's power envelope. Each site is then sized to the demand it captured, " +
+          "priced, and scored. Sites are added one at a time, each time picking the candidate with the best marginal " +
+          "score, and the run stops when the next site no longer pays for itself. A swap pass then tries every unused " +
+          "candidate in place of each chosen one. The objective slider mixes the economic score (net monthly value) " +
+          "with the latency score (weighted TTFT against the baseline).</p>" +
+          '<h4 class="sec">Latency</h4>' +
+          "<ul class=\"recs\">" +
+          "<li><strong>Propagation</strong> — great-circle distance × " + CIRCUITY + " route circuity, at " + KM_PER_MS +
+          " km/ms one-way in fibre, doubled for the round trip. A London→Frankfurt path is therefore ~8 ms, not ~4.</li>" +
+          "<li><strong>Transport overhead</strong> — cross connect +" + TRANSPORTS.cross.add + " ms, dark fibre / wave +" +
+          TRANSPORTS.dark.add + " ms, internet exchange +" + TRANSPORTS.ix.add + " ms, ServiceFabric / Equinix Fabric +" +
+          TRANSPORTS.fabric.add + " ms. IP transit takes " + TRANSIT_CIRCUITY + "× circuity plus a " + TRANSIT_PENALTY_MS +
+          " ms middle-mile penalty, which is why an un-peered metro loses to a further-away peered one.</li>" +
+          "<li><strong>Access</strong> — the last mile the user already spends: on-net enterprise " + ACCESS.onnet.rtt +
+          " ms, enterprise WAN " + ACCESS.wan.rtt + " ms, fixed broadband " + ACCESS.fixed.rtt + " ms, mobile " +
+          ACCESS.mobile.rtt + " ms. On mobile access, two edge PoPs 400 km apart are nearly indistinguishable — the tool " +
+          "will tell you so by refusing to add the second.</li>" +
+          "<li><strong>Prefill</strong> — the FLUX model: a linear term (2 FLOPs × active parameters per token) plus a " +
+          "quadratic attention term (≈4 × layers × d_model × context², Llama-70B calibrated) at " +
+          Math.round(MFU_PREFILL * 100) + "% MFU. Persistent KV cache (KVA) replaces recompute with a " + KVA_STREAM_GBS +
+          " GB/s per-shard stream plus " + KVA_OVERHEAD_MS + " ms of management, and is never slower than recompute.</li>" +
+          "<li><strong>Queueing</strong> — service time × ρ/(1−ρ), damped, so a site run hot pays for it in TTFT rather " +
+          "than silently absorbing demand.</li>" +
+          "</ul>" +
+          '<h4 class="sec">Capacity</h4>' +
+          "<p>Weights take VRAM before any user does: a replica spans <code>ceil(weights × 1.12 ÷ node VRAM)</code> nodes, " +
+          "and tensor-parallel efficiency decays 8% per doubling. What is left divided by <code>context × MB/token</code> " +
+          "(FP16 0.330, FP8 0.165, FP4 0.083 MB/token) gives the streams a replica holds; flash KV offload adds " +
+          Math.round(KV_OFFLOAD_BOOST * 100) + "%. Each site is sized by whichever binds first — concurrency or decode " +
+          "throughput at peak — and capped by the site's power envelope; overflow spills to the next-best site and, if " +
+          "nowhere will take it, is reported as unplaced rather than quietly served.</p>" +
+          '<h4 class="sec">Economics</h4>' +
+          "<ul class=\"recs\">" +
+          "<li>Colo at $" + COLO_KW_MO + "/kW-month all-in × a per-site multiplier, +$18/kW-mo where direct liquid cooling " +
+          "is used; PUE 1.13 liquid, 1.42 air with an 8% clock haircut.</li>" +
+          "<li>Compute amortised at the per-GPU-hour rates in the accelerator catalog × 730 h.</li>" +
+          "<li>Interconnect: cross connect $" + XC_MO.DLR + "/$" + XC_MO.EQX + " (DLR/EQX), fabric virtual circuit $" +
+          FABRIC_MO.DLR + "/$" + FABRIC_MO.EQX + ", IX port $" + nf(IX_PORT_MO.g10) + " (10G) or $" + nf(IX_PORT_MO.g100) +
+          " (100G) all-in, dark fibre max($" + nf(DARK_MIN_MO) + ", $" + DARK_PER_KM_MO + "/km) per month, IP transit $" +
+          TRANSIT_MBPS_MO + "/Mbps. Traffic is " + BYTES_PER_TOKEN + " bytes per token at a " + PEAK_FACTOR +
+          "× peak ratio; an on-net IX carries 35% + peers/2500 of eyeball traffic, capped at 85%.</li>" +
+          "<li>Tokens are valued at the $" + MARKET_PER_1M.toFixed(2) + "/1M market reference, discounted when they land " +
+          "outside the TTFT SLO (down to 50%) or when decode falls below the per-stream floor (down to 60%). That discount " +
+          "is the whole point: it is how a latency improvement becomes a financial one.</li>" +
+          "<li>Operator revenue is colo + interconnect — what the deployment is worth to Digital Realty or Equinix, " +
+          "separately from what it is worth to the customer.</li>" +
+          "</ul>" +
+          '<h4 class="sec">Provenance</h4>' +
+          "<p>Site codes, campuses, cooling, fabric and internet-exchange presence reflect published operator and exchange " +
+          "information. <strong>Power headroom, rack density, lead times, colo multipliers, energy prices, peering member " +
+          "counts and every price in the book above are planning estimates</strong> for modelling only — they are not " +
+          "quotes, inventory or availability commitments, and they will differ from what either operator will sell you on " +
+          "the day. Model sizes for proprietary models are estimates. Use this to rank options and frame a conversation, " +
+          "then confirm the shortlist with the operator.</p>";
+      }
+
+      // ============================ UI wiring ================================
+      function buildSelects() {
+        const modelSel = $("epModel");
+        modelSel.innerHTML = MODELS.map((m) => '<option value="' + m.id + '">' + esc(m.label) + "</option>").join("");
+        const gpuOpts = GPUS.map((g) => '<option value="' + g.id + '">' + esc(g.name) + " — " + nf(g.nodeGB) + " GB/node</option>").join("");
+        $("epGpu").innerHTML = gpuOpts;
+        $("epEdgeGpu").innerHTML =
+          '<option value="auto">Auto — smallest platform that fits the model</option>' +
+          '<option value="same">Same as the hubs</option>' + gpuOpts;
+        $("epAccess").innerHTML = Object.keys(ACCESS)
+          .map((k) => '<option value="' + k + '">' + esc(ACCESS[k].label) + " — " + ACCESS[k].rtt + " ms</option>")
+          .join("");
+        const siteOpts = SITES.slice()
+          .sort((a, b) => (a.op + a.metro).localeCompare(b.op + b.metro))
+          .map((s) => '<option value="' + s.id + '">' + esc(s.op + " " + s.code + " — " + s.metro + " (" + s.country + ")") + "</option>")
+          .join("");
+        $("epCurrent").innerHTML = siteOpts;
+        $("epBaseline").innerHTML = siteOpts;
+        $("epBaseline").value = "dlr-acc4";
+        $("atRegion").innerHTML =
+          '<option value="all">All regions</option>' +
+          Object.keys(REGIONS).map((k) => '<option value="' + k + '">' + esc(REGIONS[k]) + "</option>").join("");
+
+        $("epRegions").innerHTML = Object.keys(REGIONS)
+          .map((k) => '<label class="chip' + (state.regions[k] ? " on" : "") + '" data-region="' + k + '">' +
+            '<input type="checkbox" ' + (state.regions[k] ? "checked" : "") + " /> " + esc(REGIONS[k]) + "</label>")
+          .join("");
+        $("epTransports").innerHTML = ["cross", "fabric", "dark", "ix"]
+          .map((k) => '<label class="chip' + (state.transports[k] ? " on" : "") + '" data-transport="' + k + '" title="' +
+            esc(TRANSPORTS[k].note) + '"><input type="checkbox" ' + (state.transports[k] ? "checked" : "") + " /> " +
+            esc(TRANSPORTS[k].label) + "</label>")
+          .join("");
+        $("epFilters").innerHTML = [
+          ["liquidOnly", "Liquid-cooled sites only"],
+          ["lowLatencyCpu", "Latency-tuned hosts (3 ms dispatch)"],
+          ["offload", "Flash KV offload (+30% streams/node)"],
+        ]
+          .map((f) => '<label class="chip' + (state.filters[f[0]] ? " on" : "") + '" data-filter="' + f[0] + '">' +
+            '<input type="checkbox" ' + (state.filters[f[0]] ? "checked" : "") + " /> " + f[1] + "</label>")
+          .join("");
+      }
+
+      function buildProfileSelect() {
+        const cat = $("epCat").value;
+        const ids = Object.keys(PROFILES).filter((k) => PROFILES[k].cat === cat);
+        $("epProfile").innerHTML = ids.map((k) => '<option value="' + k + '">' + esc(PROFILES[k].label) + "</option>").join("");
+        applyProfile();
+      }
+
+      function applyProfile() {
+        const p = PROFILES[$("epProfile").value];
+        if (!p) return;
+        $("epModel").value = p.model;
+        $("epGpu").value = p.gpu;
+        $("epCtx").value = p.ctx;
+        $("epKv").value = p.kv;
+        $("epUsers").value = p.users;
+        $("epDuty").value = p.duty;
+        $("epDemandMode").value = "concurrency";
+        toggleDemandMode();
+        $("epSlo").value = p.slo;
+        $("epTps").value = p.tps;
+        $("epAccess").value = p.access;
+        $("epResidency").value = p.residency;
+        $("epKva").value = p.kva;
+        $("epWorkload").value = p.workload;
+        $("epProfileNote").textContent = p.desc;
+        state.customers = (p.anchors || []).map((a) => ({ name: a[0], metro: a[1], share: a[2], onnet: a[3] }));
+        renderCustomers();
+        toggleCustom();
+      }
+
+      function toggleCustom() {
+        const isCust = $("epModel").value === "custommodel";
+        $("fldCustP").hidden = !isCust;
+        $("fldCustA").hidden = !isCust;
+      }
+
+      function toggleDemandMode() {
+        const vol = $("epDemandMode").value === "volume";
+        $("fldUsers").hidden = vol;
+        $("fldVolume").hidden = !vol;
+        // Seed the hidden side of the pair so switching modes is continuous.
+        const nm = nodeModel({
+          model: $("epModel").value, gpu: $("epGpu").value,
+          ctx: Math.max(256, parseInt($("epCtx").value, 10) || 8000), kv: $("epKv").value,
+        });
+        const duty = clamp((parseFloat($("epDuty").value) || 35) / 100, 0.05, 1);
+        const perStreamDay = Math.max(1, (nm.ok ? nm.decode : 50) * 86400 * duty);
+        // The visible field is the authority; only the hidden one is rewritten.
+        if (vol) {
+          const volDay = Math.max(1, parseFloat($("epVolume").value) || 1000) * 1e6;
+          $("epUsers").value = Math.max(1, Math.round(volDay / perStreamDay));
+        } else {
+          const users = Math.max(1, parseInt($("epUsers").value, 10) || 1000);
+          $("epVolume").value = Math.round((users * perStreamDay) / 1e6);
+        }
+      }
+
+      function renderCustomers() {
+        const opts = MARKETS.slice()
+          .sort((a, b) => a.metro.localeCompare(b.metro))
+          .map((m) => '<option value="' + m.id + '">' + esc(m.metro + " (" + m.country + ")") + "</option>")
+          .join("");
+        $("epCustRows").innerHTML = state.customers
+          .map((c, i) =>
+            '<div class="custrow">' +
+            '<input type="text" data-cust="name" data-i="' + i + '" value="' + esc(c.name || "") + '" placeholder="Customer / tenant name" />' +
+            '<select data-cust="metro" data-i="' + i + '">' + opts + "</select>" +
+            '<input type="number" data-cust="share" data-i="' + i + '" min="0" max="100" step="1" value="' + c.share + '" title="% of total demand" />' +
+            '<label class="chip' + (c.onnet ? " on" : "") + '" data-cust="onnet" data-i="' + i + '">' +
+            '<input type="checkbox" ' + (c.onnet ? "checked" : "") + " /> on-net</label>" +
+            '<button data-cust="del" data-i="' + i + '">×</button>' +
+            "</div>"
+          )
+          .join("");
+        state.customers.forEach((c, i) => {
+          const sel = $("epCustRows").querySelector('select[data-i="' + i + '"]');
+          if (sel) sel.value = c.metro;
+        });
+        const tot = state.customers.reduce((n, c) => n + (c.share || 0), 0);
+        $("epCustNote").textContent =
+          tot > 0
+            ? nf1(tot) + "% of demand is anchored; the remaining " + nf1(Math.max(0, 100 - tot)) + "% spreads across the in-scope metros."
+            : "No anchors — demand spreads across the in-scope metros by weight.";
+      }
+
+      function wire() {
+        ["tabPlan", "tabAtlas", "tabMethod"].forEach((t, i) => {
+          $(t).onclick = () => {
+            ["tabPlan", "tabAtlas", "tabMethod"].forEach((x) => $(x).classList.remove("tab-active"));
+            $(t).classList.add("tab-active");
+            $("planView").hidden = i !== 0;
+            $("atlasView").hidden = i !== 1;
+            $("methodView").hidden = i !== 2;
+            if (i === 1) renderAtlas();
+          };
+        });
+        $("epCat").onchange = buildProfileSelect;
+        $("epProfile").onchange = applyProfile;
+        $("epModel").onchange = () => { toggleCustom(); toggleDemandMode(); };
+        $("epDemandMode").onchange = toggleDemandMode;
+        ["epGpu", "epCtx", "epKv", "epDuty"].forEach((id) => ($(id).onchange = toggleDemandMode));
+        $("epRun").onclick = render;
+        $("epReset").onclick = () => { applyProfile(); render(); };
+        $("epObjective").oninput = () => {
+          const v = parseInt($("epObjective").value, 10);
+          $("epObjectiveNote").textContent =
+            v <= 15 ? "Economics first — consolidate into the cheapest viable sites"
+            : v <= 40 ? "Cost-leaning — " + (100 - v) + "% economics / " + v + "% latency"
+            : v <= 60 ? "Balanced — " + (100 - v) + "% economics / " + v + "% latency"
+            : v <= 85 ? "Latency-leaning — " + v + "% latency / " + (100 - v) + "% economics"
+            : "Latency first — buy every PoP that measurably shortens TTFT";
+        };
+        // Each chip is a <label> wrapping its checkbox, so the browser already
+        // toggles it on click — listen for the resulting change and mirror it
+        // into state. (Toggling it here as well would cancel the native one.)
+        const chipSync = (host, attr, bucket) =>
+          $(host).addEventListener("change", (e) => {
+            const chip = e.target.closest("[data-" + attr + "]");
+            if (!chip) return;
+            const box = chip.querySelector("input");
+            bucket[chip.dataset[attr]] = box.checked;
+            chip.classList.toggle("on", box.checked);
+          });
+        chipSync("epRegions", "region", state.regions);
+        chipSync("epTransports", "transport", state.transports);
+        chipSync("epFilters", "filter", state.filters);
+        $("epAddCust").onclick = () => {
+          state.customers.push({ name: "", metro: MARKETS[0].id, share: 5, onnet: true });
+          renderCustomers();
+        };
+        $("epCustRows").addEventListener("input", (e) => {
+          const el = e.target.closest("[data-cust]");
+          if (!el) return;
+          const i = parseInt(el.dataset.i, 10);
+          const k = el.dataset.cust;
+          if (!state.customers[i]) return;
+          if (k === "name") state.customers[i].name = el.value;
+          if (k === "metro") state.customers[i].metro = el.value;
+          if (k === "share") state.customers[i].share = clamp(parseFloat(el.value) || 0, 0, 100);
+          renderCustomersNote();
+        });
+        $("epCustRows").addEventListener("change", (e) => {
+          const el = e.target.closest('[data-cust="onnet"]');
+          if (!el) return;
+          const i = parseInt(el.dataset.i, 10);
+          if (!state.customers[i]) return;
+          state.customers[i].onnet = el.querySelector("input").checked;
+          el.classList.toggle("on", state.customers[i].onnet);
+        });
+        $("epCustRows").addEventListener("click", (e) => {
+          const el = e.target.closest('[data-cust="del"]');
+          if (!el) return;
+          state.customers.splice(parseInt(el.dataset.i, 10), 1);
+          renderCustomers();
+        });
+        ["atOp", "atRegion", "atMw", "atCap"].forEach((id) => ($(id).oninput = renderAtlas));
+      }
+      function renderCustomersNote() {
+        const tot = state.customers.reduce((n, c) => n + (c.share || 0), 0);
+        $("epCustNote").textContent =
+          tot > 0
+            ? nf1(tot) + "% of demand is anchored; the remaining " + nf1(Math.max(0, 100 - tot)) + "% spreads across the in-scope metros."
+            : "No anchors — demand spreads across the in-scope metros by weight.";
+      }
+
+      buildSelects();
+      wire();
+      buildProfileSelect();
+      $("epProfile").value = "llmApi";
+      $("epCat").value = "llm";
+      buildProfileSelect();
+      renderMethod();
+      render();
+    </script>
+  </body>
+</html>
