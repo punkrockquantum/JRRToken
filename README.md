@@ -8,7 +8,6 @@ the advantage of a carefully designed data-centre deployment.
 | App | Where | Run | Port |
 | --- | --- | --- | --- |
 | FLUX — AI Workload Planner | `index.html` (repo root) | `python3 -m http.server 8902` or open the file | 8902 |
-| FLUX EDGE — Edge PoP & Regional Hub Site Planner | `edge-planner.html` (repo root) | same server, or open the file | 8902 |
 | Sharp(er) Enterprises workshop simulator | `workshop-simulator/` | `npm install && npm run dev` | 5200 |
 | Original AI infrastructure simulator | `original-simulator/` | `npm install && npm run dev` | 5173 |
 
@@ -18,6 +17,10 @@ the advantage of a carefully designed data-centre deployment.
 
 A Digital Realty Solution Architecture tool in one self-contained HTML
 file: no build step, no dependencies, no backend.
+
+Four tabs: **1** Comprehensive Planner, **2** Prompt → Token → Value,
+**3** Deploy & Simulate, and **4** Edge PoP & Hub Siting — the last is
+documented as section 2 below.
 
 ### Tab 1 — Comprehensive Planner
 
@@ -84,10 +87,12 @@ value per answer, steady-state volume, customer margin and value to DLR.
 
 ---
 
-## 2. FLUX EDGE — Edge PoP & Regional Hub Site Planner (`edge-planner.html`)
+## 2. FLUX EDGE — Tab 4: Edge PoP & Regional Hub Siting
 
-Where FLUX sizes *a* deployment, FLUX EDGE decides *where the deployments
-go*. Another self-contained HTML file — no build step, no backend.
+Where tabs 1–3 size *a* deployment, tab 4 decides *where the deployments
+go*. It lives in the same `index.html` — no extra file, no build step, no
+backend. Its own sub-tabs are 4a (deployment optimiser), 4b (site atlas)
+and 4c (method & assumptions).
 
 Describe the workload and the tool returns the sites to add, how to route
 them, and what each one buys in TTFT, throughput and dollars.
