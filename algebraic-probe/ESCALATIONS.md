@@ -320,3 +320,62 @@ bound for Keccak-f[25] is exactly tight at rounds 1–4, loose by 2 at round 5, 
 exact again at 6. That is the first measurement of this instrument's tightness
 against exact truth on a real primitive, it needed no citation, and it holds
 whichever way E-09 is decided.
+
+---
+
+## E-11 — the recorded null was incomplete, and the fix enlarges it rather than closing it
+
+New, 2026-09-20. Raised by an objection from outside this repository and acted on
+rather than deflected (D-038).
+
+**The objection, corrected.** As put to me it concerned lag-1 autocorrelation.
+This instrument computes no autocorrelation and no lag statistic; the only grep
+hit is prose describing the *prior* tool that the linear-map control exists to
+expose. But the structural point transfers intact: a measure that reports "no
+structure" may be reporting only that it measures one kind of structure.
+
+**It was right.** Module 1's three blindness classes all name algebraic structure
+the Boolean degree cannot see. None named geometric structure in the search
+landscape. A fourth class now does, and it is the first one added in response to
+an outside challenge rather than found from the inside.
+
+**The measurement** (`python scripts/landscape.py`, ~1 s, Tier E, n = 14, cluster
+counts 1 to 1024):
+
+```
+algebraic degree     separates 0 of 5 hierarchical cells   profile (14,13) throughout
+local minima         separates 5 of 5                      32-47% below the i.i.d. prediction
+overlap P(q)         separates 4 of 5                      blind at 1024 clusters
+density of states    separates 1 of 5                      a finite-cluster artefact
+```
+
+The i.i.d. prediction 2^n/(n+1) is derived in-repo (`M1-LAND-DERIVE-001`) from
+exchangeability alone, and tested by enumerating every ordering of the energies
+at n = 1, 2, 3 and asserting the mean count as an exact rational. No citation is
+relied on and none is claimed, which matters here because the spin-glass
+literature is behind the same egress block as E-04.
+
+**What this does to the standing result.** It makes the null *weaker*, not
+stronger. Every negative this instrument records now carries a fourth named
+blindness, and the combined blindness statement in REPORT.md §Stage E has been
+extended accordingly. Nothing was promoted, no gate moved, no threshold changed.
+
+**The decisions, which are yours:**
+
+1. **Accept the enlarged blindness statement and stop there.** The class is
+   built, run and passing; the map of what is unexamined is now more honest by
+   one entry. Nothing further is needed.
+2. **Commission a landscape module (M7).** The local-minimum count separates
+   every hierarchical cell in this sweep and is cheap. Making it a module means a
+   pre-registration, a calibration suite and an anchor — and section 5 requires a
+   *published* anchor, which E-04's egress block makes unavailable, so it would
+   ship calibration-blocked exactly as M4 does under E-05. Say whether that is
+   worth it.
+3. **Neither, and record the limit.** The sweep already shows every statistic
+   has a blind cell, including the ones proposed as replacements. A landscape
+   module would not remove blindness; it would move it. That is an argument for
+   option 1 and I am making it rather than leaving it implied.
+
+**Not done pending your answer.** No module was created, no prereg written, and
+the landscape statistics live in `verify/` as a blindness demonstration, not in
+`modules/` as a measurement path with a promotion route.

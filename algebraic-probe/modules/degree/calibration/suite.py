@@ -29,6 +29,7 @@ Case kinds:
 from __future__ import annotations
 
 from core.keccak import KeccakF
+from core.landscape import HierarchicalEnergy
 from core.mimc import MiMC
 from core.targets import InverseMap, LinearMapGF2, PowerMap, RandomFunction
 from harness.calibration import (
@@ -63,6 +64,15 @@ LINEAR_N = 12
 POWER_N = 11
 RANDOM_N = 12
 INVERSE_N = 11
+
+# The landscape blindness case. n is inside the module's exact-ANF guard, and
+# n_outer = 4 gives 16 clusters -- a regime where the sweep shows the overlap
+# statistic separating, so the counterexample demonstrably carries structure.
+LANDSCAPE_N = 12
+LANDSCAPE_N_OUTER = 4
+LANDSCAPE_OUTER_WEIGHT = 0.7
+LANDSCAPE_SEED = 20260920
+LANDSCAPE_COMPUTATION_ID = "M1-LANDSCAPE-001"
 
 # wt(31) = 5, strictly inside (1, POWER_N - 1) = (1, 10).
 POWER_EXPONENT_MID = 31
@@ -373,6 +383,73 @@ def _cases() -> tuple[CalibrationCase, ...]:
                 "n": INVERSE_N,
                 "implicit_system": "x*y = 1 for x != 0",
                 "solving_cost": "one field inversion",
+            },
+        )
+    )
+
+    # A second blindness case, of a different kind from the one above. The
+    # inverse map shows the degree measure missing *algebraic* structure. This
+    # one shows it missing *geometric* structure in the search landscape: a
+    # hierarchical energy and a structureless one return the same degree, while
+    # the local-minimum count separates them at every cluster count measured.
+    #
+    # The case asserts the half a single-valued calibration case can assert --
+    # that the hierarchical landscape returns the saturated null. The other half,
+    # that the structure is really there and the measure really cannot separate
+    # the two, needs two targets and two measures and lives in
+    # tests/test_blindness_landscape.py, which is where section 6(c) asks for it.
+
+    cases.append(
+        CalibrationCase(
+            case_id="CAL-M1-BLIND-LANDSCAPE",
+            kind=CaseKind.BLINDNESS,
+            target_id=(
+                f"hierarchical-energy n={LANDSCAPE_N} n_outer={LANDSCAPE_N_OUTER} "
+                f"outer_weight={LANDSCAPE_OUTER_WEIGHT}"
+            ),
+            target_factory=lambda: HierarchicalEnergy.generalised_random_energy_model(
+                LANDSCAPE_N,
+                n_outer=LANDSCAPE_N_OUTER,
+                outer_weight=LANDSCAPE_OUTER_WEIGHT,
+                seed=LANDSCAPE_SEED,
+            ),
+            quantity="algebraic_degree",
+            comparator=Comparator.EQUAL,
+            expected=LANDSCAPE_N,
+            expectation_provenance=Provenance(
+                computation_id=LANDSCAPE_COMPUTATION_ID,
+                notes=(
+                    "the Boolean view is the energy pushed through its own CDF and "
+                    "quantised, so its marginal law is uniform and the degree saturates "
+                    f"at n = {LANDSCAPE_N} for a non-permutation. Established in-repo by "
+                    "exhaustive ANF; the full sweep over cluster count is in "
+                    "modules/degree/calibration/landscape_truth.py"
+                ),
+            ),
+            assertion=(
+                f"the module reports algebraic degree exactly {LANDSCAPE_N} -- the same "
+                "value it reports for the structureless landscape at the same "
+                "parameters -- for a two-level hierarchical energy whose low-energy "
+                "states are organised into blocks"
+            ),
+            rationale=(
+                "section 6(b) and 6(c), for a class of structure none of the earlier "
+                "blindness classes covers. Those name algebraic structure the Boolean "
+                "degree cannot see; this names geometric structure in the search "
+                "landscape. Across six cluster counts from 1 to 1024 the degree profile "
+                "is identical, while a local-minimum count derived in-repo departs from "
+                "its structureless prediction by 32 to 47 per cent in every hierarchical "
+                "cell. Recording the degree null as 'no structure' would be an error of "
+                "scope, and this case is where that is exhibited rather than asserted"
+            ),
+            parameters={
+                "n": LANDSCAPE_N,
+                "n_outer": LANDSCAPE_N_OUTER,
+                "outer_weight": LANDSCAPE_OUTER_WEIGHT,
+                "seed": LANDSCAPE_SEED,
+                "n_clusters": 1 << LANDSCAPE_N_OUTER,
+                "structure_not_seen": "hierarchical organisation of low-energy states",
+                "sweep": "modules/degree/calibration/landscape_truth.py",
             },
         )
     )

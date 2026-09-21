@@ -1,5 +1,5 @@
-commit=a19e9964ac02bb4fd05ebd1e90e7410a20774335
-calibration_suite module=modules.degree n_cases=26
+commit=6a5066855f98d7291ef3452beda4019537167f4b
+calibration_suite module=modules.degree n_cases=27
   case=CAL-M1-GT-KECCAK-R1 kind=published-ground-truth target=keccak-f[25] rounds=1 quantity=algebraic_degree_upper_bound asserts=algebraic_degree_upper_bound == PENDING_PRIMARY_SOURCE rounds=1 variables=25 width=25 provenance=citation=CITE-BCD11
     assertion=the module's certified upper bound on the algebraic degree of 1-round Keccak-f[25] equals the per-round bound stated for that round in CITE-BCD11
     rationale=an iterated permutation whose only non-linear step is chi, of degree 2, so the trivial bound is 2^r; the published bound is tighter for larger r and a module that reproduces only the trivial bound is measurably weaker than the literature
@@ -78,6 +78,9 @@ calibration_suite module=modules.degree n_cases=26
   case=CAL-M1-BLIND-INVERSE kind=blindness target=inverse-map-gf2n n=11 quantity=algebraic_degree asserts=algebraic_degree == 10 implicit_system=x*y = 1 for x != 0 n=11 solving_cost=one field inversion provenance=computation=M1-CTRL-INV-001
     assertion=the module reports algebraic degree exactly 10 -- the maximum for a permutation, i.e. the same null a degree-saturated round function produces -- for x -> x^(-1) over GF(2^11), which is described exactly by the single quadratic relation x*y = 1
     rationale=section 6(b) and 6(c): a concrete function class that has the property being searched for -- complete algebraic tractability -- and still returns the null under this measurement. The measurement's blindness is a property of the measurement, and this case is where it is exhibited rather than asserted
+  case=CAL-M1-BLIND-LANDSCAPE kind=blindness target=hierarchical-energy n=12 n_outer=4 outer_weight=0.7 quantity=algebraic_degree asserts=algebraic_degree == 12 n=12 n_clusters=16 n_outer=4 outer_weight=0.7 seed=20260920 structure_not_seen=hierarchical organisation of low-energy states sweep=modules/degree/calibration/landscape_truth.py provenance=computation=M1-LANDSCAPE-001
+    assertion=the module reports algebraic degree exactly 12 -- the same value it reports for the structureless landscape at the same parameters -- for a two-level hierarchical energy whose low-energy states are organised into blocks
+    rationale=section 6(b) and 6(c), for a class of structure none of the earlier blindness classes covers. Those name algebraic structure the Boolean degree cannot see; this names geometric structure in the search landscape. Across six cluster counts from 1 to 1024 the degree profile is identical, while a local-minimum count derived in-repo departs from its structureless prediction by 32 to 47 per cent in every hierarchical cell. Recording the degree null as 'no structure' would be an error of scope, and this case is where that is exhibited rather than asserted
   citations:
     [CITE-BCD11] Christina Boura, Anne Canteaut, Christophe De Cannière. Higher-Order Differential Properties of Keccak and Luffa. Fast Software Encryption (FSE) 2011, 2011. IACR ePrint 2010/589. verification=unverified
       claim=upper bounds on the algebraic degree of r rounds of Keccak-f and of its inverse, per round; and a bound on the degree of iterated permutations whose non-linear layer is parallel applications of smaller balanced S-boxes
