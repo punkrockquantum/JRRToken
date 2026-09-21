@@ -512,31 +512,13 @@ CATALOGUE: tuple[Mutant, ...] = (
         "the saturation blindness test passes for any measurement",
     ),
     Mutant(
-        "MEAS-07",
+        "MEAS-12",
         "measure",
         "modules/degree/measure.py",
         "    k = m.bit_length()",
         "    k = m.bit_length() + 1",
         ("tests/test_stage_a.py",),
         "the derived bound overstates the reachable Hamming weight",
-    ),
-    Mutant(
-        "MEAS-08",
-        "measure",
-        "modules/degree/measure.py",
-        "    reach = min(3**target.n_rounds, modulus_order)",
-        "    reach = min(2**target.n_rounds, modulus_order)",
-        ("tests/test_stage_a.py",),
-        "the exponent support is computed for squaring not cubing, making the derived bound unsound",
-    ),
-    Mutant(
-        "MEAS-09",
-        "measure",
-        "modules/degree/blindness/saturated_power.py",
-        "    return observed_degree == n - 1",
-        "    return True",
-        ("tests/test_stage_a.py",),
-        "the saturation blindness test passes for any measurement",
     ),
     Mutant(
         "MEAS-10",
@@ -828,6 +810,87 @@ CATALOGUE: tuple[Mutant, ...] = (
         ("tests/test_stats_clopper_pearson.py",),
         "the binomial tail omits its last term, so it is no longer a CDF",
     ),
+    # -- landscape -----------------------------------------------------------
+    Mutant(
+        "LAND-01",
+        "landscape",
+        "verify/landscape.py",
+        "    return (1 << n) / (n + 1)",
+        "    return (1 << n) / n",
+        ("tests/test_verify_landscape.py",),
+        "the i.i.d. local-minimum prediction loses its +1, so the falsifiable "
+        "anchor of the whole landscape arm is wrong",
+    ),
+    Mutant(
+        "LAND-02",
+        "landscape",
+        "verify/landscape.py",
+        "            if values[x ^ (1 << bit)] <= here:",
+        "            if values[x ^ (1 << bit)] < here:",
+        ("tests/test_verify_landscape.py",),
+        "ties stop disqualifying a state, so a plateau counts as a basin of local "
+        "minima and the count no longer matches the continuous prediction",
+    ),
+    Mutant(
+        "LAND-03",
+        "landscape",
+        "verify/landscape.py",
+        "    return 1.0 - 2.0 * (x ^ y).bit_count() / n",
+        "    return 1.0 - (x ^ y).bit_count() / n",
+        ("tests/test_verify_landscape.py",),
+        "the overlap drops its factor of two, so complementary states read as "
+        "q = 0 instead of q = -1 and the scale is wrong everywhere",
+    ),
+    Mutant(
+        "LAND-04",
+        "landscape",
+        "verify/landscape.py",
+        "    return sorted(range(len(values)), key=lambda x: values[x])[:count]",
+        "    return sorted(range(len(values)), key=lambda x: -values[x])[:count]",
+        ("tests/test_verify_landscape.py",),
+        "the overlap distribution is computed over the highest-energy states "
+        "instead of the lowest",
+    ),
+    Mutant(
+        "LAND-05",
+        "landscape",
+        "core/landscape.py",
+        "        a = self.outer_weight\n        return math.sqrt(a) * outer + math.sqrt(1.0 - a) * inner",
+        "        a = self.outer_weight\n        return math.sqrt(1.0 - a) * inner",
+        ("tests/test_blindness_landscape.py",),
+        "the hierarchy is dropped from the energy, so the counterexample silently "
+        "becomes the control and the blindness class is vacuous",
+    ),
+    Mutant(
+        "LAND-06",
+        "landscape",
+        "core/landscape.py",
+        "        return math.sqrt(self.outer_weight / self.n_clusters)",
+        "        return math.sqrt(self.outer_weight * self.n_clusters)",
+        ("tests/test_blindness_landscape.py",),
+        "the predicted density-of-states fluctuation grows with cluster count "
+        "instead of shrinking, inverting the explanation it exists to give",
+    ),
+    Mutant(
+        "LAND-07",
+        "landscape",
+        "modules/degree/blindness/landscape_geometry.py",
+        "    return degree_hierarchical == degree_control",
+        "    return True",
+        ("tests/test_blindness_landscape.py",),
+        "the blindness class stops checking that the degree measure is actually "
+        "blind, becoming a tautology",
+    ),
+    Mutant(
+        "LAND-08",
+        "landscape",
+        "modules/degree/blindness/landscape_geometry.py",
+        "    return mean_overlap_hierarchical > mean_overlap_control + margin",
+        "    return True",
+        ("tests/test_blindness_landscape.py",),
+        "the blindness class stops checking that the counterexample carries any "
+        "structure, so it would pass against a structureless landscape",
+    ),
     # -- reports -------------------------------------------------------------
     Mutant(
         "RPRT-01",
@@ -1007,6 +1070,36 @@ def apply_mutant(mutant: Mutant) -> tuple[bool, str]:
     return (code != 0), ("killed" if code != 0 else "SURVIVED")
 
 
+#: Tracked files a mutant's test run can write to as a side effect. Restoring the
+#: mutated source is not enough: RPRT-07 exists precisely to make the renderer
+#: write into the tracked report directory, so running it leaves those files
+#: rewritten with a fresh commit stamp even though the mutant itself is undone.
+#: A dirty tree then falsifies the provenance of anything run afterwards (D-033),
+#: so the run snapshots them and puts them back.
+SIDE_EFFECT_GLOBS = ("reports/out/*.txt",)
+
+
+def snapshot_side_effects() -> dict[Path, bytes]:
+    snapshot: dict[Path, bytes] = {}
+    for pattern in SIDE_EFFECT_GLOBS:
+        for path in sorted(ROOT.glob(pattern)):
+            snapshot[path] = path.read_bytes()
+    return snapshot
+
+
+def restore_side_effects(snapshot: dict[Path, bytes]) -> list[str]:
+    """Put back anything a mutant's test run rewrote. Returns what was restored."""
+    restored = []
+    for path, content in snapshot.items():
+        if not path.exists() or path.read_bytes() != content:
+            path.write_bytes(content)
+            try:
+                restored.append(str(path.relative_to(ROOT)))
+            except ValueError:
+                restored.append(str(path))
+    return restored
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--layer", default=None)
@@ -1023,15 +1116,21 @@ def main() -> int:
             print(f"{mutant.mutant_id} layer={mutant.layer} defect={mutant.defect}")
         return 0
 
+    baseline = snapshot_side_effects()
+
     survivors: list[str] = []
-    for mutant in catalogue:
-        killed, detail = apply_mutant(mutant)
-        print(
-            f"mutant={mutant.mutant_id} layer={mutant.layer} file={mutant.path} "
-            f"killed={killed} detail={detail} defect={mutant.defect}"
-        )
-        if not killed:
-            survivors.append(mutant.mutant_id)
+    try:
+        for mutant in catalogue:
+            killed, detail = apply_mutant(mutant)
+            print(
+                f"mutant={mutant.mutant_id} layer={mutant.layer} file={mutant.path} "
+                f"killed={killed} detail={detail} defect={mutant.defect}"
+            )
+            if not killed:
+                survivors.append(mutant.mutant_id)
+    finally:
+        restored = restore_side_effects(baseline)
+        print(f"side_effect_files_restored={len(restored)} {restored}")
 
     for layer, count in sorted(layers.items()):
         print(f"layer={layer} mutants={count} minimum_required=5 meets_minimum={count >= 5}")

@@ -27,6 +27,7 @@ with every deviation reported; provenance chain verified.
 | E — synthesis | 0 candidates eligible, 0 promoted; 1 of 3 runs compliant; chains unbroken |
 | F — exhaustion | Keccak-f[25] and MiMC/GF(2^9) exhausted; bound **sound at every round**, tight at 1–4, gap 2 at round 5. No gate changed, nothing promoted |
 | G — witness | Probe calibrated against known truth: **0 witnesses in 750 draws** above the exact degree; measured rate exceeds the worst-case model by 2×–2540×. D-010 not reopened |
+| H — landscape | The null **was** incomplete. Degree separates **0 of 5** hierarchical landscapes; a local-minimum count separates 5 of 5. Fourth blindness class added; nothing promoted |
 
 Per-stage detail in `checkpoints/`. Operator items in `ESCALATIONS.md` (10).
 
@@ -61,12 +62,17 @@ not, at every round.
 
 ### Stage E — combined blindness
 
-Three implemented, run and passing blindness classes. Their union is the honest
-description of what remains unexamined: anything expressible as a small implicit
-relation system over the extension field; anything over multiplicative or
-non-affine subsets (a distinguisher on **7** inputs where the degree measure
-demands **2^9**); all of SHA-256; differential, MITM and rotational structure;
-and degree over prime fields, where the metric is undefined.
+**Four** implemented, run and passing blindness classes. Their union is the
+honest description of what remains unexamined: anything expressible as a small
+implicit relation system over the extension field; anything over multiplicative
+or non-affine subsets (a distinguisher on **7** inputs where the degree measure
+demands **2^9**); **any hierarchical organisation of the search landscape, which
+the degree measure fails to see in 5 of 5 cluster counts tested**; all of
+SHA-256; differential, MITM and rotational structure; and degree over prime
+fields, where the metric is undefined.
+
+The fourth was added after the run, in response to an outside challenge that the
+null might be incomplete. It was — see Stage H.
 
 ---
 
@@ -252,6 +258,58 @@ probe is weakest. And revising a pre-registered threshold on seeing data that
 favours revising it is the prohibited act, whatever the margin. Recorded as
 evidence under E-01 — it licenses a better-informed answer, not the answer
 (D-037).
+
+### Is the null complete? — the landscape arm
+
+Put to me from outside: statistical mechanics describes landscapes that are
+locally indistinguishable from random while globally organised, so "no local
+signal" may have been recorded as "no structure".
+
+**The premise needed one correction.** The objection was framed around lag-1
+autocorrelation. This instrument computes no autocorrelation and no lag
+statistic — the only grep hit is prose describing the *prior* tool that the
+linear-map control exists to expose. But the structural point transfers intact,
+and it was right.
+
+Module 1's three blindness classes all named *algebraic* structure the Boolean
+degree cannot see. None named *geometric* structure in the search landscape.
+`core/landscape.py` builds the pair that exposes it: one energy construction,
+E(x) = √a·z_outer(block) + √(1−a)·z_inner(x), with the Boolean view being the
+energy pushed through its own CDF, so the output's marginal law — and hence the
+degree — is identical whether or not the hierarchy is there.
+
+`python scripts/landscape.py`, n = 14, six cluster counts from 1 to 1024, Tier E:
+
+| Statistic | Cells separated |
+|---|---|
+| **algebraic degree** | **0 of 5** — profile (14,13) throughout |
+| local minima | 5 of 5 — 32–47% below the i.i.d. prediction |
+| overlap P(q) | 4 of 5 — blind at 1024 clusters |
+| density of states | 1 of 5 — a finite-cluster artefact |
+
+The prediction 2^n/(n+1) is derived in-repo from exchangeability alone
+(`M1-LAND-DERIVE-001`) and tested by enumerating *every* ordering of the energies
+at n = 1, 2, 3 and asserting the mean as an exact rational — no citation, which
+matters because the spin-glass literature sits behind the same egress block as
+E-04.
+
+**So the answer is yes: the null was incomplete.** A fourth blindness class now
+records it (`CAL-M1-BLIND-LANDSCAPE`), which makes every negative this instrument
+emits *weaker*, not stronger.
+
+**Two claims of mine the measurement refuted**, recorded because I made them
+before testing them. I wrote that the density of states cannot separate the
+regimes since both are standard normal — true of the marginal, false of the
+empirical density over one hypercube, where the outer level supplies only
+2^n_outer draws and the mean fluctuates by √(a/2^n_outer). And I wrote that the
+overlap stays separated at every cluster count; at 1024 clusters of 16 states the
+low-energy sample spans many clusters and it returns to baseline.
+
+**The general finding is the stronger one.** Every statistic measured here has a
+regime where it reports "no structure" about a landscape that has structure by
+construction. The degree measure is blind in all five cells; each proposed
+replacement is blind in some. A landscape module would not remove blindness — it
+would move it. That is an argument against building one, and it is E-11.
 
 ### Neither arm changed a gate
 
@@ -452,13 +510,14 @@ semantics.
 ```bash
 git clone -b algo-games https://github.com/punkrockquantum/JRRToken.git
 cd JRRToken
-pytest -q -m "not slow"                      # 566 passed, 13 deselected
+pytest -q -m "not slow"                      # 638 passed, 13 deselected
 python scripts/ci_checks.py                  # checks=5 failed=0
-python scripts/mutation_test.py              # mutants=98 survivors=0
+python scripts/mutation_test.py              # mutants=104 survivors=0
 python scripts/readiness_report.py           # per-target go/no-go
 python scripts/execute.py                    # run what the gates authorise
 python scripts/exhaust.py                    # exhaustive exact degree, ~25s
 python scripts/witness_calibration.py        # probe vs known truth, ~28s
+python scripts/landscape.py                  # what the degree measure cannot see, ~1s
 python -m modules.degree.calibration         # what Module 1 asserts
 python modules/degree/prereg/derive_thresholds.py
 python scripts/render_reports.py

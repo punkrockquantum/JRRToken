@@ -883,3 +883,203 @@ reporting a non-zero rate without an interval would be the single point section 
 forbids. Pinned against textbook values, against the closed form at zero
 successes, and by the identity that relabelling success and failure mirrors the
 interval.
+
+---
+
+## D-038 — the degree null was incomplete, and the missing blindness class is geometric
+
+Raised by an objection from outside this repository: that a landscape can have
+no local correlation and still carry exploitable hierarchical structure, so "no
+local signal" may have been recorded as "no structure".
+
+**First, the premise as stated does not apply here.** The objection was framed
+around lag-1 autocorrelation. This instrument computes no autocorrelation and no
+lag statistic of any kind; a grep for them returns one hit, in a rationale string
+describing the *prior* instrument that the linear-map positive control exists to
+expose. The objection came from a different tool.
+
+**The structural criticism does apply, and it was right.** Module 1's null is
+"the algebraic degree has saturated", a statement about the algebraic normal
+form. Three blindness classes already stood against it, and all three name
+*algebraic* structure the Boolean degree cannot see: a small implicit relation
+system over the extension field, univariate tractability under saturation,
+multiplicative structure. None names *geometric* structure in the associated
+search landscape. That was a gap in the blindness map, not a gap in the
+measurement.
+
+**What was built.** `core.landscape.HierarchicalEnergy`: one construction,
+E(x) = sqrt(a)*z_outer(block) + sqrt(1-a)*z_inner(x), with the Boolean view being
+the energy pushed through its own CDF and quantised. At a = 0 it is a
+structureless landscape; above it, states sharing a block share an offset. The
+marginal law of the output is uniform either way, so the degree saturates in
+both. `verify/landscape.py` measures local minima, the overlap distribution and
+the density of states, exhaustively.
+
+**The result** (`scripts/landscape.py`, n = 14, six cluster counts from 1 to 1024):
+
+| statistic | cells where it separates |
+|---|---|
+| **algebraic degree** | **0 of 5** |
+| local minima | 5 of 5 |
+| overlap P(q) | 4 of 5 |
+| density of states | 1 of 5 |
+
+The degree profile is (14, 13) for every landscape in the sweep. A local-minimum
+count departs from its structureless prediction by 32 to 47 per cent in every
+hierarchical cell. So the answer to "has no degree deficiency been mistaken for
+no structure" is **yes, it had been**, and the gap is now measured rather than
+argued.
+
+**Two claims of mine that the measurement refuted, recorded because I made them
+before testing them.** I wrote that the density of states cannot separate the two
+regimes, because both are standard normal by construction. That is true of the
+marginal under a random seed and false of the empirical density over one
+exhausted hypercube: the outer level supplies only `2^n_outer` draws, so the
+empirical mean fluctuates by about `sqrt(a / 2^n_outer)`, which is 0.42 at four
+clusters and 0.03 at 1024. The separation is a finite-cluster artefact that fades,
+not a signature. And I wrote that the overlap distribution stays separated at
+every cluster count; it does not. At 1024 clusters of 16 states the 64
+lowest-energy states are drawn from many different clusters, so pairs share no
+block and the mean overlap returns to baseline while the hierarchy is still there
+by construction.
+
+**The general finding is stronger than the specific one.** Every statistic
+measured here has a regime in which it reports "no structure" about a landscape
+that has structure by construction. The degree measure is blind in all five
+cells; the others are each blind in some. That is the honest shape of the result
+and it is what the sweep is for.
+
+**What did not change.** No gate, no promotion, no threshold. A section 6
+blindness class has no promotion path by construction. The separation criteria in
+`scripts/landscape.py` were fixed after the sweep was run and are labelled in its
+own output as descriptive rather than a pre-registered test.
+
+## D-039 — three defects in the mutation harness, found by testing the harness
+
+Running the full catalogue left five committed reports rewritten. Diagnosed:
+mutant `RPRT-07` exists to make the renderer ignore `--out-dir` and write into
+the tracked directory, and `apply_mutant` restored the mutated *source* but not
+the files that mutant caused to be written. A dirty tree falsifies the provenance
+of everything run afterwards, which is D-033 arriving by another route. Fixed
+with a snapshot and restore around the run, reported as
+`side_effect_files_restored=` rather than done silently.
+
+Writing tests for that turned up two more, both pre-existing:
+
+**Three duplicate mutant ids.** `MEAS-07`, `MEAS-08` and `MEAS-09` each appeared
+twice. `MEAS-08` and `MEAS-09` were byte-identical copies, costing a test run
+each for no coverage. The second `MEAS-07` was a genuinely different mutation
+wearing a colliding id, so a survivor report naming `MEAS-07` would have been
+ambiguous about which defect survived. The duplicates are deleted and the
+distinct mutant is renumbered `MEAS-12`. The catalogue is 104 entries with 104
+unique ids, asserted by a test rather than by counting.
+
+**The harness cannot mutate itself.** `LAND-09` was written to pin the new
+restoration logic, and its anchor matched twice: once in the code and once inside
+its own catalogue entry, since both live in `scripts/mutation_test.py`. This is
+structural — any anchor naming a line of that file also appears in the entry
+quoting it — so the mutant was removed and the behaviour is covered directly by
+`tests/test_mutation_harness.py`. Recorded as a limitation of the mechanism
+rather than worked around.
+
+A new fast test also asserts every anchor still matches exactly once. A drifted
+anchor was previously visible only by running the whole catalogue, which takes
+tens of minutes; it is now caught in a second.
+
+---
+
+## D-040 — three corrections from outside review, all accepted, all checked first
+
+Outside review made three claims about this repository. Each was verified against
+the code before anything was changed, because a criticism of my own work is not
+self-evidently right and accepting one uncritically is the same failure as
+rejecting it.
+
+### 1. "The statistics are calibrated for a failure mode that is not the field's"
+
+**Verified, and the numbers are worse than the claim.** The committed run logs
+carry **35 Tier P results, 19 Tier E, and 0 Tier S**. Benjamini-Hochberg appears
+outside its own tests in exactly one place — `provenance/audit.py`, which
+*recomputes* a declared correction to check a run against its pre-registration,
+not to correct a family of findings. The Tobit censored regression appears
+nowhere outside its tests. The entire statistical layer has produced no result.
+
+The reviewer's framing is right: a degree bound is deductive and a distinguisher
+either runs or it does not. Tier P and Tier E need none of this machinery. And
+the layer's only customer, Tier S, is closed above probe dimension 2 by
+PREREG-M1 §9.1 (D-010).
+
+**Chosen: say so in the README, prominently, and leave the code in place.**
+Removing it would be a scope change the operator has not authorised, and D-037's
+measurement is a live reason the closure might be revisited. But the README now
+states that the statistical layer is unexercised, that Tier S has produced
+nothing, and that on the current pre-registration it has almost no promotion
+path. Whether to keep carrying it is E-01.
+
+**Rejected: deleting `stats/`.** It is tested, mutation-checked, and would have
+to be rebuilt if E-01 resolves the other way. Carrying unexercised code is a cost
+to be disclosed, not concealed by deletion.
+
+### 2. "The mint-token pattern is a discipline aid, not a guarantee"
+
+**Verified by reproducing it.** `object.__new__(Result)` followed by
+`object.__setattr__` produces a fully-formed Tier P result that never went near a
+derivation, and relabels a sampled result as proven. The patched `__setattr__`
+and the mint check both go through the normal attribute protocol, and
+`object.__setattr__` goes around it. There is no way to close this from inside a
+CPython process.
+
+**Chosen: pin the limitation as passing tests.** `tests/test_tiers_bypass.py`
+asserts that each bypass *succeeds*. If someone later hardens `tiers/result.py`,
+those tests fail, and the failure is the prompt to update the README rather than
+a regression to fix. A further test asserts that neither bypass appears anywhere
+in the repository outside that file and the frozen-dataclass machinery itself, so
+the claim "not by accident" is checked rather than asserted.
+
+**Rejected: a keyed digest over the fields, verified at serialisation.** It raises
+the cost of forgery slightly and would let the README keep a stronger word. But
+the key is module-private and therefore readable in-process, so it would be
+theatre — a guarantee-shaped object that is not a guarantee. Better to state the
+bound honestly.
+
+Also accepted: the README now argues the construction-time-versus-review-time
+distinction against IACR artifact evaluation at FSE/ToSC and CHES, rather than
+implying no comparable practice exists. The argument is stated *with* its
+counter-argument, which is item 2 itself.
+
+### 3. "Drop or demote ARX"
+
+**Verified, and the mismatch was total.** Of the seven declared M1 targets, the
+only ARX one is `sha256-compression-parametrised`, which has never been available
+(E-03). Keccak-f is bit-oriented — AND, XOR, rotate, no modular addition — so it
+is not ARX either. **100% of what this instrument has measured is
+arithmetisation-oriented, bit-oriented, or synthetic.** The title claimed a scope
+the work did not have.
+
+**Chosen: demote ARX to a blocked secondary target and name AO as primary.**
+
+The positive reason is this repository's own Tier E data, which is the substantive
+cross-reference. Exact MiMC degree over GF(2^n), exhaustive:
+
+```
+n=9    2, 2, 4, 4, 6, 8, 8, 8, 8, 8        doubling: 2, 4, 8, 8, ...
+n=11   2, 2, 4, 4, 6, 8, 10, 10, 10, 10    doubling: 2, 4, 8, 10, ...
+n=13   2, 2, 4, 4, 6, 8, 10, 10, 12, 12    doubling: 2, 4, 8, 12, ...
+```
+
+Per-round increments never exceed 2 and average below 2 before the permutation
+cap, where a doubling process is unbounded. Doubling saturates at round 3-4; the
+exact degree needs 6 to 9. The growth prefix is identical across field size until
+the cap bites. Pinned in `tests/test_mimc_degree_growth.py`, computed twice by
+independent code paths.
+
+That is sub-exponential, approximately linear growth, measured here. It is
+**not** reported as agreement with any published result: the papers are behind
+E-04's egress block and Class 2 forbids substituting a value I derived for a
+published anchor. What it does establish is that the AO side is where this
+instrument's own measurements have something to say, which is the reviewer's
+point arrived at independently.
+
+**Not done:** the brief's text still says "ARX and arithmetisation-oriented".
+Changing a brief is the operator's act, not mine. The README states the narrowed
+scope and the reason; the discrepancy with the brief is recorded here.
