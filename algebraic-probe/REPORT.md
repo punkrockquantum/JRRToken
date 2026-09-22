@@ -30,8 +30,9 @@ with every deviation reported; provenance chain verified.
 | H — landscape | The null **was** incomplete. Degree separates **0 of 5** hierarchical landscapes; a local-minimum count separates 5 of 5. Fourth blindness class added; nothing promoted |
 | J — M2 built | **Module 2**, unblocked by E-03. Union reachability complete at round **16**, per-output-bit at **21**. One registered hypothesis confirmed, one **refuted**. 9/11 gates; calibration-blocked on E-05 |
 | I — SHA-256 | **E-03 authorised.** Primary target implemented, FIPS-validated, **GO**. Naive ARX bound vacuous (512 from round 1); support-capping gives **32r−1**. Proven lower bound 16; one round saturates any exhaustible window |
+| K — M3 built | **Module 3**, the first with a declared Tier S path. x³ over GF(2ⁿ) measured APN with **exactly 50%** of its table impossible. Sampled SHA-256 differential propagation starts at round **16** — the same round M2 reached structurally, by a path sharing no code. Tier S discipline found **untested** and now pinned. 10/11 gates; blocked on an unreachable named anchor |
 
-Per-stage detail in `checkpoints/` (A–J). Operator items in `ESCALATIONS.md` (11, one resolved).
+Per-stage detail in `checkpoints/` (A–K). Operator items in `ESCALATIONS.md` (11, six closed).
 
 ### Stage A — the divergence was a loose bound, not a defect
 
@@ -64,17 +65,96 @@ not, at every round.
 
 ### Stage E — combined blindness
 
-**Five** implemented, run and passing blindness classes. Their union is the
+**Six** implemented, run and passing blindness classes. Their union is the
 honest description of what remains unexamined: anything expressible as a small
 implicit relation system over the extension field; anything over multiplicative
 or non-affine subsets (a distinguisher on **7** inputs where the degree measure
 demands **2^9**); **any hierarchical organisation of the search landscape, which
-the degree measure fails to see in 5 of 5 cluster counts tested**; all of
-SHA-256; differential, MITM and rotational structure; and degree over prime
-fields, where the metric is undefined.
+the degree measure fails to see in 5 of 5 cluster counts tested**; anything a
+dependency analysis reports as fully diffused while its output bits are provably
+constant; **anything on the low side of a one-sided differential threshold — half
+of an APN table is exactly impossible and a search looking upward reports
+nothing**; MITM and rotational structure; and degree over prime fields, where the
+metric is undefined.
 
-The fourth was added after the run, in response to an outside challenge that the
-null might be incomplete. It was — see Stage H.
+Two were added after the run. The landscape class came from an outside challenge
+that the null might be incomplete — it was, see Stage H. The impossible-
+differential class came with M3, see Stage K.
+
+### Stage K — the first Tier S module, and what it cost
+
+M3 was built before M5 and M6 because it is the only remaining module whose
+declared tiers include **S**. Until it existed the statistical layer had been
+exercised only by the witness probe, where the load-bearing cells are the
+deductive ones — so the apparatus was built, tested and never actually relied on.
+
+**x³ over GF(2ⁿ), n odd, computed rather than cited:**
+
+| n | max differential count | probability | random level | table exactly impossible |
+|---|---:|---|---|---:|
+| 7 | 2 | 2^-6 | 2^-7 | **50.0%** |
+| 9 | 2 | 2^-8 | 2^-9 | **50.0%** |
+| 11 | 2 | 2^-10 | 2^-11 | **50.0%** |
+
+Uniformity exactly 2 *is* the definition of almost perfect nonlinear. The
+elevation above random is one bit — the smallest an even-counted table can show —
+and half of every row is unreachable, because the derivative of a quadratic power
+map is affine and its image is a coset of an index-two subspace.
+
+**The cross-check.** Sampling forward on SHA-256, a flipped W[15] bit stops being
+invisible at round **16**. M2 reached 16 structurally, by closing the schedule
+recurrence over word indices without evaluating SHA-256 at all. No shared code,
+different means, same number. It is a cross-check on both modules' reading of the
+message schedule and nothing more: neither computation examines the round
+function.
+
+**What Tier S cost.** `interval_excludes_random_level` returns
+`ci_low > random_level`. Replacing it with the *point estimate* survived every
+test the module had, because every sampled cell in the repository sat at 0 or 50
+hits, where point and bound fall on the same side. The missing cell was measured
+rather than the mutant weakened:
+
+```
+RandomFunction.create(12, 6, 1), din=1, dout=10
+hits 1/50   rate 0.02   random level 2^-6 = 0.015625   ci_low 0.000506
+point estimate clears the random level = True
+interval clears it = False
+```
+
+Fifty draws cannot separate one hit from chance at that output width. This
+answers an outside criticism that Tier S is the weakest evidence class the
+instrument emits — narrowly. The discipline is now load-bearing in one place and
+tested there, which is a smaller claim than "validated".
+
+**A guard bounded one exponent while the cost had two.** The M3 suite took 184
+seconds and the readiness report over a minute and a half. Both traced to the
+same defect. `MAX_EXACT_DIFFERENTIAL_VARS` and `MAX_DDT_VARS` bound a *variable
+count*, but three sweeps here cost 2^(n+m) or 2^(2n) — one full pass per output
+or input difference. At n = m = 18, which both guards **permit**, that is 2^36
+Python-level evaluations: not a slow computation but one that does not finish,
+let through by a guard whose stated job is to refuse rather than estimate.
+
+| n | exponent | uniformity | impossible_fraction | module max-over-row |
+|---:|---:|---:|---:|---:|
+| 7 | 14 | 0.11s | 0.12s | 0.28s |
+| 9 | 18 | 2.20s | 2.28s | 5.53s |
+| 11 | 22 | 44.51s | 43.41s | ~88s |
+
+`MAX_ROW_SWEEP_BITS = 18` now budgets the **exponent sum** in both files, and
+raising it is visible at the call site via `budget_bits`. The obvious speed fix —
+having the module tally a row in one pass — was **rejected**: that is
+`verify/differential.py`'s algorithm, and two paths sharing an algorithm are one
+path with a copy. The quadratic cost is what the independence costs, so it is
+bounded rather than erased (D-052). Result: 184s → 76s, readiness report 3.5s.
+
+**One control expectation was a guess.** `CAL-M3-INT-POWER` first asserted 4 for
+the max differential count of x³¹ over GF(2¹¹) at din=1. The measured row holds
+793 counts of 2 and 77 of 6, so the maximum is **6**. The control failed, which
+is the only reason it was caught; the case note records that the first draft
+guessed (D-048). The failure mode worth naming is not the disagreement but the
+alternative: had the guess been right, a model prior would now sit in a
+calibration suite's expected-value column with nothing distinguishing it from a
+verified one.
 
 ---
 
@@ -94,7 +174,7 @@ targets differ.
 |---|---|---:|---:|---|
 | **M1** | Algebraic degree growth vs round count | **11/11** | **5/7** | **PARTIAL** |
 | **M2** | Dependency-graph reachability, free-round budget | **10/11** | — | NO-GO (E-05) |
-| M3 | Differential characteristic search | 2/11 | — | NO-GO |
+| **M3** | Differential characteristic search | **10/11** | 0/1 | NO-GO (E-04 class: anchor named, unreachable) |
 | M4 | Higher-order differentials, integral distinguishers | **9/11** | — | NO-GO (E-05 + depends on M1) |
 | M5 | Meet-in-the-middle and biclique structure | 2/11 | — | NO-GO |
 | M6 | Rotational-XOR propagation | 1/11 | — | NO-GO |
@@ -334,18 +414,18 @@ open question is E-09.
 
 | Package | Lines | Role |
 |---|---:|---|
+| `tests/` | 7340 | the suite |
+| `modules/` | 4395 | M1 degree, M2 reach, M3 differential, M4 higher-order — each with `prereg/`, `calibration/`, `blindness/`, `measure.py` |
+| `scripts/` | 4091 | CI checks, mutation harness, readiness, execution, renderers, exhaustion, witness calibration, landscape |
+| `core/` | 1539 | control targets, Keccak-f, MiMC, hierarchical energy landscapes, **SHA-256** |
+| `harness/` | 1460 | registry, regime router, calibration and promotion gates, sweeps, runner, readiness |
 | `tiers/` | 1028 | tier labels, provenance, spaces, distributions, findings — enforced |
-| `harness/` | 1419 | registry, regime router, calibration and promotion gates, sweeps, runner, readiness |
+| `verify/` | 868 | independent paths: Möbius ANF, bit-packed ANF, Keccak columns, landscape, dependence, DDT |
+| `stats/` | 783 | BH, power analysis, exact Clopper–Pearson, Tobit censored regression |
 | `provenance/` | 771 | commit embedding, prereg hashing, hash chain, append-only store, audit |
-| `modules/` | 1213 | Module 1: pre-registration, calibration, blindness, **measurement** |
-| `core/` | 795 | control targets, Keccak-f, MiMC; SHA-256 absent by design |
-| `stats/` | 716 | BH, power analysis, Tobit censored regression, p-value formatting |
-| `verify/` | 160 | exhaustive Möbius ANF, independent path |
 | `reports/` | 151 | prose lint |
-| `scripts/` | 1683 | CI checks, mutation harness, readiness, execution, renderers, benchmark |
-| `tests/` | 3703 | 425 tests |
 
-101 files, ~11.6k lines of Python, **no third-party dependencies**.
+152 files, ~22.4k lines of Python, **no third-party dependencies**.
 
 ### Verification at this commit
 
@@ -355,8 +435,9 @@ checks=5 failed=0          scripts/ci_checks.py
 mutants=67 survivors=0     scripts/mutation_test.py  (9 layers, ≥5 each)
 ```
 
-Mutants per layer: core 8, harness 11, measure 6, modules 7, provenance 9,
-reports 6, stats 6, tiers 9, verify 5.
+Mutants per layer, ≥5 each by the declared minimum: arx 8, core 10,
+differential 12, exhaustive 5, harness 11, landscape 8, measure 12, modules 7,
+provenance 9, reach 8, reports 7, stats 6, tiers 9, verify 12, witness 8.
 
 Structural checks: `verify/` does not import `modules/`; `modules/` does not
 import `verify/` (so a module cannot verify itself); `reports/out/` holds no
@@ -520,7 +601,7 @@ git clone -b algo-games https://github.com/punkrockquantum/JRRToken.git
 cd JRRToken
 pytest -q                                    # 768 passed (whole suite)
 python scripts/ci_checks.py                  # checks=5 failed=0
-python scripts/mutation_test.py              # mutants=120 survivors=0
+python scripts/mutation_test.py              # mutants=132 survivors=0
 python scripts/readiness_report.py           # per-target go/no-go
 python scripts/execute.py                    # run what the gates authorise
 python scripts/exhaust.py                    # exhaustive exact degree, ~25s

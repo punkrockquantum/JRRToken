@@ -28,9 +28,12 @@ about whether the apparatus is pointed at anything.
 | **E** | exhausted — the whole input space consumed | **38** |
 | **S** | sampled — ≥30 seeds, distribution reported | **0** |
 
-Every number this instrument has emitted is deductive or exhaustive.
+Every number this instrument has emitted **into a run log** is deductive or
+exhaustive. Module 3 declares a Tier S path and exercises it in the suite, but no
+Tier S result has been through the provenance runner, so the third row is still
+zero and is not rounded up.
 
-### The statistical layer is built, tested, and unexercised
+### The statistical layer is built, tested, and load-bearing in exactly one place
 
 `stats/` implements Benjamini–Hochberg with an asserted family size, exact
 binomial (Clopper–Pearson) intervals, power analysis, and a Tobit censored
@@ -62,6 +65,28 @@ worst-case model by 2× to 2540×. That does **not** reopen D-010 — those rate
 from targets whose degree was already known, and promotion concerns a target
 whose degree is not — but it does mean the seed counts above are probably enormous
 overestimates. See D-037.
+
+**What changed with Module 3.** M3 is the first module whose declared tiers
+include S, and building it turned up the one thing the criticism above could not:
+the Tier S rule was *untested*. A sampled cell claims elevation above the random
+level via `ci_low > random_level`. Substituting the **point estimate** survived
+every test in the repository, because every sampled cell here sat at 0 hits or at
+50, where point and interval bound fall on the same side of the random level.
+
+Rather than weaken the mutant, the missing cell was measured:
+
+```
+RandomFunction.create(12, 6, 1), din=1, dout=10
+hits 1/50   rate 0.02   random level 2^-6 = 0.015625   ci_low 0.000506228
+point estimate clears the random level = True
+interval clears it                    = False
+```
+
+Fifty draws cannot separate one hit from chance at a 6-bit output width. The
+straddling cell is now a test and `DIFF-04` enforces it (D-051). This is the
+narrowest possible answer to the criticism and is stated as such: the interval
+discipline is load-bearing in one place and checked there. Nothing here validates
+BH, the power analysis or the censored regression, which remain unexercised.
 
 ### What the enforcement guarantees, and what it does not
 
@@ -263,17 +288,61 @@ refutation rather than being deleted.
 `CancellingXor` — `f(x) = (A x) XOR (B x)` with A and B sharing rows — is fully
 reachable with output bits that are *identically zero*, verified exhaustively.
 
-### 8. Five blindness classes, each naming what the measure cannot see
+### 8. x³ over GF(2ⁿ) is APN with exactly half its table impossible — Tier E
 
-| class | structure the degree measure misses |
+Computed, not cited. `differential_uniformity` returning exactly 2 *is* the
+definition of almost perfect nonlinear.
+
+| n | max differential count | probability | random level | table exactly impossible |
+|---|---:|---|---|---:|
+| 7 | 2 | 2^-6 | 2^-7 | **50.0%** |
+| 9 | 2 | 2^-8 | 2^-9 | **50.0%** |
+| 11 | 2 | 2^-10 | 2^-11 | **50.0%** |
+
+The best differential clears the random level by **one bit** — the smallest
+elevation an even-counted table can show — while half of every row is
+unreachable. The derivative of a quadratic power map is affine, so its image is a
+coset of an index-two subspace: two-to-one onto half the space, zero on the rest.
+Uniformity and impossibility are the same fact from opposite sides, and a search
+thresholded on "above random" sees only one of them. This is M3's blindness
+class, and it is the sharpest one in the repository because the numbers are exact
+rather than approximate.
+
+### 9. Two modules reach round 16 by paths that share no code — Tier P and Tier S
+
+Sampling differentials forward on SHA-256, a flipped W[15] bit stops being
+invisible at round **16**. Module 2 reaches 16 structurally, by closing the
+schedule recurrence over word indices without evaluating SHA-256 at all.
+
+Scope, stated rather than left to be inferred: this is a cross-check on both
+modules' reading of the message schedule, and a disagreement would have meant one
+of them was wrong about it. Neither computation examines the round function, so
+it is not evidence about that, and it says nothing about any differential above
+round 16.
+
+The result arrived through a failing test whose expectation was wrong — the first
+draft flipped block bit 0, which lies in W[15] and which a 4-round compression
+never reads, so the zero output difference held 50/50 (D-050).
+
+### 10. Six blindness classes, each naming what the measure cannot see
+
+| class | structure the measure misses |
 |---|---|
 | `inverse_map` | one quadratic relation *xy* = 1 — degree *n*−1, one inversion to solve |
 | `saturated_power` | univariate tractability under Boolean saturation |
 | `multiplicative_coset` | non-affine structure: a distinguisher on **7** inputs where the degree measure demands **2⁹** |
 | `landscape_geometry` | hierarchical organisation of the search landscape |
 | `cancellation` (M2) | terms that cancel: full reachability with constant outputs |
+| `impossible` (M3) | the low side of a one-sided threshold: **50%** of an APN table is exactly impossible |
 
 Their union is the honest description of what remains unexamined.
+
+Two candidate classes for M3 were tried and **abandoned because they were not
+true**, and are recorded as dead ends rather than near misses: modular addition
+is not XOR-differentially flat (measured median maximum ≈ 2^-3.4 against a random
+level of 2^-10), and a product-rule/composition deviation search found the
+deviation to be **exactly 0**. A blindness class has to *have* the structure
+being searched for, and `structure_predicate` enforces that in code.
 
 ---
 
@@ -319,23 +388,24 @@ to the bypass documented above.
 | Piece | State |
 | --- | --- |
 | `tiers/` — labels and integrity enforcement | implemented, tested, bypass documented |
-| `stats/` — BH, power, Clopper–Pearson, censored regression | implemented, tested, **unexercised on real data** |
+| `stats/` — BH, power, Clopper–Pearson, censored regression | implemented, tested; Clopper–Pearson **load-bearing for M3's Tier S path**, the rest unexercised |
 | `provenance/` — commit embedding, prereg hashing, hash chain, audit | implemented, tested |
 | `harness/` — registry, regime router, calibration gate, promotion gate, sweeps | implemented, tested |
 | `core/` — control targets, Keccak-f, MiMC, energy landscapes | implemented, validated |
 | `core/sha256.py` — the ARX target | **implemented, validated, measuring**; bit-identical to `hashlib` at 64 rounds |
-| `verify/` — independent exhaustive paths: ANF, packed ANF, landscape, dependence | implemented, tested |
+| `verify/` — independent exhaustive paths: ANF, packed ANF, landscape, dependence, DDT | implemented, tested |
 | `modules/degree/` — Module 1 | built, measuring; **PARTIAL** (11/11 module gates, **5/7** targets GO) |
 | `modules/reach/` — Module 2 | **built**, 10/11 gates, calibration-blocked (E-05) |
+| `modules/differential/` — Module 3 | **built**, 10/11 gates, **first Tier S path**; blocked on a named but unreachable anchor (E-04 class) |
 | `modules/hod/` — Module 4 | built, **9/11** gates, calibration-blocked (E-05) |
-| Modules 3, 5, 6 | not started; no longer blocked on a missing target, only unwritten |
+| Modules 5, 6 | not started; no longer blocked on a missing target, only unwritten |
 
 ### Verification at this commit
 
 ```
 768 tests, 0 failed (whole suite, slow lane included)
 5 structural CI checks, 0 failed
-120 mutants across 14 layers, 0 survivors
+132 mutants across 15 layers, 0 survivors
 compliance audit: chains unbroken, deviations reported
 ```
 
@@ -347,7 +417,7 @@ compliance audit: chains unbroken, deviations reported
 cd algebraic-probe
 pytest -q                                # 768 passed (whole suite)
 python scripts/ci_checks.py              # checks=5 failed=0
-python scripts/mutation_test.py          # mutants=120 survivors=0
+python scripts/mutation_test.py          # mutants=132 survivors=0
 python scripts/readiness_report.py       # per-target go/no-go
 python scripts/execute.py                # run what the gates authorise
 python scripts/exhaust.py                # exact degree over whole spaces, ~25s
@@ -371,15 +441,16 @@ reach any of them. What is left:
 
 | # | Blocker | What it holds up |
 |---|---|---|
-| **E-04** | two ground-truth citations unreachable (egress) | M1 on `keccak-f[25]` and `mimc-gf2n` |
+| **E-04** | two ground-truth citations unreachable (egress) | M1 on `keccak-f[25]` and `mimc-gf2n`; **M3 on SHA-256** (`CITE-SHA256-DIFF`, same class) |
 | **E-05** | no published anchor exists for M2/M4/M6 | those modules ship calibration-blocked |
 | **E-01** | the Tier S closure is unconfirmed | whether the statistical layer has any purpose |
 | **E-09** | may exhaustive in-repo truth substitute for a published anchor? | recommendation: no, in the general form |
 | **E-11** | the enlarged blindness statement | accept it, or commission a landscape module |
 
 Eleven items, with the arithmetic for each, are in `ESCALATIONS.md`. Every
-judgement call is in `DECISIONS.md` (40 entries), including the ones where a
-measurement refuted something I had written.
+judgement call is in `DECISIONS.md` (51 entries), including the ones where a
+measurement refuted something I had written, and the ones where a control
+expectation turned out to be a number I had guessed rather than computed.
 
 ---
 
@@ -396,7 +467,7 @@ stats/        BH, Clopper-Pearson, censored regression, power analysis
 provenance/   commit embedding, hash chaining, audit
 reports/      lint plus generated output in reports/out/ (no prose, enforced)
 runs/         committed run logs, append-only and hash-chained
-checkpoints/  per-stage findings, A through H
+checkpoints/  per-stage findings, A through K
 REPORT.md     the single operator-facing report; contains judgement
 DECISIONS.md  every judgement call, with reasoning
 ESCALATIONS.md  what waits on the operator, and what each item blocks

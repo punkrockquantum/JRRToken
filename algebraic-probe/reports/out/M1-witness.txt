@@ -1,4 +1,4 @@
-commit=48071faf8e11c662f92c86daa43908dd0ccb50d3
+commit=2df6785a06862b18263da73d2d34f14e652dd379
 computation_id=M1-WITNESS-CAL-001 seeds_per_cell=50 seed_base=20260920 confidence=0.95
 tier_P_cells=15 draws=750 witnesses=0 soundness_violations=0
 tier_S_cells=37 cells_whose_interval_excludes_the_worst_case_from_below=37

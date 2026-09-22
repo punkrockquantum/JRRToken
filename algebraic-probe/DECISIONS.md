@@ -1457,3 +1457,199 @@ routing and calibration. Nothing to decide; it is unwritten.
 Five escalations closed, one confirmed undecidable here, one left as build work.
 No gate was relaxed and no threshold moved to reach any of it. The one item that
 would have unblocked two targets is the one I cannot take.
+
+## D-048 — a control expectation was guessed before it was computed, and the guess is recorded
+
+`CAL-M3-INT-POWER` asks for the maximum differential count of `x -> x^31` over
+GF(2^11) at `din=1`. The first draft of the case wrote **4**. Nothing computed
+that number; it was a plausible value for a high-degree power map, written from a
+model of how such maps behave.
+
+The control failed against the measurement, which is the only reason it was
+caught. The exhaustive path reports the row as 793 output differences with count
+2 and 77 with count 6, so the maximum is **6**.
+
+**Decision: the observed value stands, and the case note records that the first
+draft guessed.** Two things follow from it.
+
+The first is that the correction is not the interesting part. A control whose
+expectation is a guess is not a control — it tests the measurement against a
+model prior, and the failure mode is not that it disagrees but that it *agrees*.
+Had I guessed 6, the case would have passed, nothing would have been computed,
+and a model prior would now sit in the expected-value column of a calibration
+suite with no way to tell it from a verified one.
+
+The second is where the rule actually bites. The completion brief's Class 2
+forbids substituting a derived value for a *published* anchor, and this is not
+that: `CAL-M3-INT-POWER` is an internally-computed case and its provenance says
+so. But the prohibition on unattributed claims is not limited to published
+anchors. Every number this tool emits must trace to a computation or a citation,
+and a number I wrote from a prior traces to neither. The value was replaced by
+one from `verify/differential.py`, whose count is the computation.
+
+No threshold moved and no case was relaxed. The recorded note is deliberate: the
+suite manifest now carries the fact that this cell was once a guess, because a
+reader checking whether the expectations were computed has no other way to know
+which ones were.
+
+## D-049 — the third readiness gate hard-coded to Module 1, and the last one of its kind
+
+D-044 found two gates written against Module 1's quantity and fixed them by
+having the module declare and the gate dispatch. A third had the same defect and
+survived both earlier passes: `T01`/`T03`, the target-ground-truth gates, probed
+the target by calling `compress()` with no arguments and expecting `NotAuthorised`
+— a check that was meaningful only while SHA-256 was a stub, and that quietly
+passed for the wrong reason once E-03 made it real.
+
+`T01` now evaluates the target and checks bit-identity against `hashlib`, which
+is the check that was intended. `T03` is generalised the same way `G08` and `G09`
+were: the module declares a `support_probe` (`degree-paths` for M1,
+`differential-paths` for M3) and the gate dispatches on it.
+
+**Decision: generalise rather than special-case, and record that three of eleven
+gates were shaped by the first module built.** The pattern is worth naming
+because it is a property of building the instrument in module order, not a run of
+bad luck: the first module's shape is indistinguishable from the general shape
+until a second module exists to disagree with it, and each new module is the only
+instrument that can find the next one. M3 found this one. If a fourth kind of
+quantity finds a fourth, that is the same mechanism and not a new defect class.
+
+What this does not license is presenting the generalisation as validation. The
+gates are now shaped by three quantities rather than one, which is a weaker claim
+than "shaped by the general case" and is the claim that is made.
+
+## D-050 — an unread message bit gives probability 1, and the test asserts it
+
+The first draft of `test_the_sampled_path_works_where_the_exact_path_refuses`
+used `din=1` on a 4-round SHA-256 compression and expected no hits for
+`dout=0`. It hit 50 out of 50.
+
+The measurement is correct. With the whole block free at `free_offset=0`, block
+bit 0 lies in W[15], and a 4-round compression never reads that word: flipping
+the bit cannot change the output, so the zero output difference holds on every
+draw. This is the same trap `ARX-08` pins for the degree arm, where the identical
+default put every free variable in an unread word and returned eighteen cells of
+degree 0 — true, and useless.
+
+**Decision: fix the test's placement, and assert the observed behaviour instead
+of discarding it.** The test now places the difference at `WORD0_OFFSET`, which
+round 0 consumes. A second test asserts the 50/50 result at rounds 4 and 15, and
+a third records what came out of measuring where it flips.
+
+That third one is the result worth having. Sampling forward, the round at which a
+flipped W[15] bit stops being invisible is **16**. Module 2 computes 16 as the
+first round at which the union of reachable block bits is complete, by closing
+the schedule recurrence over word indices without ever evaluating SHA-256. The
+two paths share no code and answer by different means — one structural over the
+recurrence, one by evaluating the compression function on sampled pairs — and
+they agree.
+
+The scope of that agreement is stated rather than left to be inferred. It is a
+cross-check on both modules' reading of the message schedule, and a disagreement
+would have meant one of them was wrong about it. It is not evidence about the
+round function, which neither computation examines, and it is not a statement
+about any differential at a round count above 16.
+
+## D-051 — the Tier S claim is made by the interval, and a mutant now proves it
+
+`SampledDifferential.interval_excludes_random_level` returns
+`ci_low > random_level`. Substituting `rate > random_level` — the point estimate
+— survived every test the module had. Each existing sampled cell sat at 0 hits or
+at 50, where the point estimate and the interval bound fall on the same side of
+the random level, so nothing distinguished them.
+
+Rather than accept a weaker mutant, the missing cell was measured:
+`RandomFunction.create(12, 6, 1)` at `din=1, dout=10` gives exactly 1 hit in 50.
+On a 6-bit output the random level is 2^-6 = 0.015625; the rate is 0.02 and the
+exact Clopper-Pearson lower bound is 0.000506. The point estimate clears the
+random level and the interval does not.
+
+**Decision: the interval decides, the test pins the straddling cell, and
+`DIFF-04` enforces it.** This is the one place in the repository where Tier S's
+discipline is load-bearing rather than declared, and until this cell existed the
+discipline was untested — a mutant that replaced it with a point estimate would
+have shipped. Fifty draws cannot separate one hit from chance at this output
+width, and that is what the cell reports.
+
+
+## D-052 — a guard that bounded one exponent while the cost had two
+
+The M3 test suite took 184 seconds and `scripts/readiness_report.py` took over a
+minute and a half. Both traced to the same defect, and it is a defect in a guard
+rather than in a measurement.
+
+`MAX_EXACT_DIFFERENTIAL_VARS = 18` and `MAX_DDT_VARS = 18` bound a **variable
+count**. Three computations here do not cost 2^n:
+
+```
+modules: max_differential_hits      2^(n+m)   one full pass per output difference
+verify:  differential_uniformity    2^(2n)    one full pass per input difference
+verify:  impossible_fraction        2^(2n)    same
+```
+
+Measured, on x^3 and x^31 over GF(2^n):
+
+| n | exponent | uniformity | impossible_fraction | module max-over-row |
+|---:|---:|---:|---:|---:|
+| 7 | 14 | 0.11s | 0.12s | 0.28s |
+| 9 | 18 | 2.20s | 2.28s | 5.53s |
+| 11 | 22 | 44.51s | 43.41s | ~88s |
+
+At n = m = 18 — which both existing guards *permit* — a sweep is 2^36 Python-level
+evaluations. That is not a slow computation, it is one that does not finish, and
+a guard whose stated job is to refuse rather than estimate was letting it
+through.
+
+**Decision: guard the quantity that governs the cost.** `MAX_ROW_SWEEP_BITS = 18`
+is a budget on the **exponent sum**, in both files, and every sweep checks its
+own exponent against it. 18 is not chosen to permit what already ran: it is the
+same 2^18-Python-evaluation budget `MAX_DEPENDENCE_VARS`, `MAX_DDT_VARS` and
+`MAX_EXACT_DIFFERENTIAL_VARS` already carry, applied to the right quantity.
+
+Raising it is possible and is made **visible at the call site**: the sweeps take
+`budget_bits`, and the module's dispatch reads `budget_bits` from the case
+parameters. A caller who wants 2^22 says so where the call is written, rather
+than a module-level constant being edited to let it through.
+
+### What was deliberately not done
+
+The obvious speed fix is to make the module tally a whole row in one pass, which
+would make `max_differential_hits` linear. **Rejected.** The module's declared
+method is per-pair counting and `verify/differential.py`'s is a single-pass
+tally; that difference is the whole reason two paths are worth having. Two paths
+that share an algorithm are one path with a copy. The quadratic cost is what that
+independence costs, and the honest response is to bound it, not to erase it.
+
+### The control moved, and the value was recomputed
+
+`CAL-M3-INT-POWER` ran at n=11, which the new guard refuses, and which cost ~88
+seconds on every invocation of the readiness report — a tool the operator runs.
+It moves to n=7.
+
+This needs stating carefully, because "a control was made smaller and the suite
+went green faster" is the shape of exactly the thing the brief forbids. Three
+things are true here:
+
+1. **The control passed at both widths.** Nothing was failing; the change is
+   about cost, and the guard is what forced it.
+2. **The value was recomputed at 7, not carried across from 11.** Measured:
+   n=7 gives 43 output differences with count 2 and 7 with count 6; n=11 gives
+   793 and 77. The maximum is 6 at both, and the row has the same two-valued
+   shape, so the control tests the same property — a middle answer, neither 2^n
+   nor the random floor.
+3. **It is a weaker control in one respect**, and that is recorded rather than
+   glossed: 2^7 is a smaller space than 2^11. The suite's other cases cover
+   larger widths (a random function at n=12, a linear map at n=10), and the n=11
+   row is still measured in the test suite.
+
+### The evidence at n=11 was kept
+
+`EXPECTED_IMPOSSIBLE_FRACTION = 0.5` is documented as measured at n = 7, 9 **and
+11**, and the README and the blindness statement both rest on it. Dropping n=11
+because a guard now refuses it would have quietly narrowed the evidence behind a
+claim left standing at full strength. Instead the n=11 case keeps its
+confirmation in a test that raises the budget explicitly and is marked slow.
+
+Cost after: the three M3 test files went 184s → 76s, and the readiness report
+runs in 3.5s.
+

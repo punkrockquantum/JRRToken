@@ -14,7 +14,7 @@ to reach any of them.**
 | E-01 | **CLOSED** | Tier S closure confirmed; it stays shut despite evidence that it is conservative |
 | E-02 | **CLOSED** | the feasibility ceiling is this project's declared compute budget, not a sourced number |
 | E-03 | **CLOSED** | SHA-256 authorised, implemented, FIPS-validated, GO |
-| **E-04** | **OPEN** | two numbers must be read out of two papers. Not decidable here, and not optimisable into a decision |
+| **E-04** | **OPEN** | **three** numbers must be read out of published sources, one of whose source must also be chosen. Not decidable here, and not optimisable into a decision |
 | E-05 | **CLOSED** | M2, M4 and M6 ship calibration-blocked — the intended terminal state, not a defect |
 | E-06 | open, build | a `d_Fp` metric is unwritten; nothing to decide |
 | E-07 | superseded | the ordering it described was resolved when E-03 closed |
@@ -24,16 +24,23 @@ to reach any of them.**
 | E-11 | **CLOSED** | the enlarged blindness statement is accepted; no landscape module |
 
 **The one that matters is the one still open.** E-04 is what holds
-`keccak-f[25]` and `mimc-gf2n` at NO-GO, and it is the only item I could not
-take: substituting a value I computed for a value attributed to a paper is the
-specific act the brief forbids. Two numbers, with the width and theorem they
-apply to, closes it.
+`keccak-f[25]` and `mimc-gf2n` at NO-GO, and — since Module 3 was built — M3 on
+`sha256-compression-parametrised` as well. It is the only item I could not take:
+substituting a value I computed for a value attributed to a paper is the specific
+act the brief forbids. Three numbers, each with the parameterisation it applies
+to, closes it.
+
+That it now blocks three module-target pairs rather than two is not a widening of
+the problem. It is the same single act — transcribing a published value — and
+building more modules will keep landing on it, because every module the brief
+gave an anchor for is blocked on reaching that anchor from an environment with no
+egress to it.
 
 One further item is recorded but deliberately not acted on: gate `G13` holds M4
 at 9/11 because M1 is PARTIAL rather than GO. Loosening it would take M4 to
 10/11. See D-046 for why it stays.
 
-Status at commit `dd3bbc8`, Stage A complete.
+Status: Stage K complete (Module 3 built). Six of eleven closed.
 
 ---
 
@@ -183,8 +190,22 @@ Needed, from the papers rather than secondary sources:
   Keccak-f, with table number and the width they apply to.
 - `CITE-EGLORSW20` (ePrint 2020/182) — the MiMC-family degree-growth statement,
   with theorem number and the field it applies to.
+- `CITE-SHA256-DIFF` — a reduced-round SHA-256 differential result, with the
+  round count, the differential and the claimed probability. **Added 2026-09-22
+  when Module 3 was built.** Section 5 of the brief names published reduced-round
+  SHA-256 results as M3's anchor without naming a paper, so the reference itself
+  has to be chosen as well as transcribed; `authors`, `venue` and `year` in
+  `modules/differential/citations.py` are placeholders and the entry is marked
+  UNVERIFIED.
 
-**What is blocked:** M1 on `keccak-f[25]` and `mimc-gf2n[9]` (gate T02).
+**What is blocked:** M1 on `keccak-f[25]` and `mimc-gf2n[9]`, and M3 on
+`sha256-compression-parametrised` (gate T02 in every case).
+
+**Why M3 is here and not in E-05.** The distinction is whether the brief named an
+anchor. It named one for M1, M3 and M5; it named none for M2, M4 and M6. M3 is
+therefore blocked by a *named, unreachable* anchor rather than by the absence of
+one, and `allow_missing_ground_truth` is **False** for M3 where it is True for M2
+and M4. A test asserts that difference so it cannot drift into prose only.
 
 **Explicitly not done:** Stage A derived a sound, tighter MiMC bound in-repo.
 That value has **not** been substituted for the published anchor. Class 2 forbids

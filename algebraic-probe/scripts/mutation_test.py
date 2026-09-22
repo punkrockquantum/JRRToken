@@ -895,6 +895,133 @@ CATALOGUE: tuple[Mutant, ...] = (
         "f(x) ^ f(x) = 0 -- the accumulation is what carries the behaviour, so "
         "the accumulation is what is mutated",
     ),
+    # -- differential (module 3) ---------------------------------------------
+    Mutant(
+        "DIFF-01",
+        "differential",
+        "modules/differential/measure.py",
+        "    hits = sum(1 for x in range(1 << n) if target(x) ^ target(x ^ din) == dout)",
+        "    hits = sum(1 for x in range(1 << n) if target(x) ^ target(din) == dout)",
+        ("tests/test_module_differential.py",),
+        "the second evaluation is at the difference rather than at the shifted "
+        "input, so the quantity counted is not a differential at all",
+    ),
+    Mutant(
+        "DIFF-02",
+        "differential",
+        "modules/differential/measure.py",
+        "        if probability <= floor:",
+        "        if probability < floor:",
+        ("tests/test_module_differential.py",),
+        "a characteristic sitting exactly at the random level is counted as a "
+        "step, so the step count claims an advantage the probability does not "
+        "carry -- wrong in the direction that flatters an attack",
+    ),
+    Mutant(
+        "DIFF-03",
+        "differential",
+        "modules/differential/measure.py",
+        "            break\n        steps += 1",
+        "            continue\n        steps += 1",
+        ("tests/test_module_differential.py",),
+        "step counting skips a decayed round and resumes, so rounds beyond the "
+        "point where the characteristic died are counted as covered",
+    ),
+    Mutant(
+        "DIFF-04",
+        "differential",
+        "modules/differential/measure.py",
+        "        return self.ci_low > self.random_level",
+        "        return self.rate > self.random_level",
+        ("tests/test_module_differential.py",),
+        "the Tier S claim is made by the point estimate instead of the interval, "
+        "so a cell with one hit in fifty on a 6-bit output reports an elevated "
+        "differential that fifty draws cannot distinguish from chance",
+    ),
+    Mutant(
+        "DIFF-05",
+        "differential",
+        "modules/differential/measure.py",
+        "    if len(seeds) < SEEDS_PER_CELL:",
+        "    if False:",
+        ("tests/test_module_differential.py",),
+        "a Tier S cell accepts fewer draws than the pre-registered count, so its "
+        "interval is computed over a sample size nothing declared",
+    ),
+    Mutant(
+        "DIFF-06",
+        "differential",
+        "modules/differential/measure.py",
+        "    if len(set(seeds)) != len(seeds):",
+        "    if False:",
+        ("tests/test_module_differential.py",),
+        "repeated seeds pass as independent draws, so the interval is narrower "
+        "than the evidence supports",
+    ),
+    Mutant(
+        "DIFF-07",
+        "differential",
+        "verify/differential.py",
+        "        row[dout] = row.get(dout, 0) + 1",
+        "        row[dout] = 1",
+        ("tests/test_module_differential.py", "tests/test_blindness_impossible.py"),
+        "the independent table records presence rather than counts, so every "
+        "differential looks like probability 2^-n and the cross-check against "
+        "the module's per-pair count is no longer a check on counts",
+    ),
+    Mutant(
+        "DIFF-08",
+        "differential",
+        "verify/differential.py",
+        "    return (1 << m) - len(ddt_row(f, n, din))",
+        "    return (1 << m) - sum(ddt_row(f, n, din).values())",
+        ("tests/test_module_differential.py", "tests/test_blindness_impossible.py"),
+        "impossible differences are counted by total weight rather than by how "
+        "many distinct output differences occur, so the impossible half of an "
+        "APN table is reported as empty",
+    ),
+    Mutant(
+        "DIFF-09",
+        "differential",
+        "modules/differential/blindness/impossible.py",
+        "    return max_count <= 2",
+        "    return True",
+        ("tests/test_blindness_impossible.py",),
+        "the blindness class stops checking that the search actually returns its "
+        "null on the counterexample, becoming a tautology",
+    ),
+    Mutant(
+        "DIFF-10",
+        "differential",
+        "modules/differential/blindness/impossible.py",
+        "    return abs(impossible_fraction - EXPECTED_IMPOSSIBLE_FRACTION) <= tolerance",
+        "    return True",
+        ("tests/test_blindness_impossible.py",),
+        "the blindness class stops checking that the impossible structure is "
+        "present, so it would pass against a target with nothing to be blind to",
+    ),
+    Mutant(
+        "DIFF-11",
+        "differential",
+        "verify/differential.py",
+        "    if exponent > budget_bits:",
+        "    if False:",
+        ("tests/test_blindness_impossible.py",),
+        "the sweep budget stops refusing, so a whole-table sweep at 18 variables "
+        "is permitted at 2^36 evaluations -- a computation that does not finish, "
+        "let through by a guard whose job is to refuse rather than estimate",
+    ),
+    Mutant(
+        "DIFF-12",
+        "differential",
+        "verify/differential.py",
+        "    _check_sweep(2 * n, budget_bits, f\"differential uniformity over {n} variables\")",
+        "    _check_sweep(n, budget_bits, f\"differential uniformity over {n} variables\")",
+        ("tests/test_blindness_impossible.py",),
+        "the uniformity sweep is checked against a single exponent rather than "
+        "the doubled one, which is the original defect: the cost has two "
+        "exponents and the guard bounded one",
+    ),
     # -- arx (sha-256) -------------------------------------------------------
     Mutant(
         "ARX-01",

@@ -50,6 +50,10 @@ class SpecSheet:
     #: measures -- this gate hard-coded Module 1's quantity until Module 2 made
     #: that assumption visible.
     control_strategy: str = "exhaustive-anf"
+    #: How "the measurement path supports this target" is established. Declared
+    #: per module for the same reason ``control_strategy`` is: the gate assumed
+    #: Module 1's function names until a third module found it (D-049).
+    support_probe: str = "degree-paths"
     depends_on: tuple[str, ...] = ()
     #: (target_id, factory-or-None, citation the target's ground truth needs).
     #: A target with no citation has its expected values established in-repo.
@@ -92,10 +96,18 @@ INVENTORY: tuple[SpecSheet, ...] = (
         title="Differential characteristic search",
         quantity="characteristic probability and step count",
         declared_tiers="E,S",
-        package=None,
-        prereg_path=None,
-        verify_symbol=None,
+        package="modules.differential",
+        prereg_path="modules/differential/prereg/PREREG-M3.md",
+        verify_symbol="verify.differential:ddt_row",
         calibration_anchor="reduced-round SHA-256 collision and semi-free-start results",
+        control_strategy="differential-count",
+        support_probe="differential-paths",
+        targets=(
+            # The anchor names SHA-256, so the target's ground truth depends on a
+            # citation that E-04 holds unverified. Gate T02 blocks it, which is a
+            # different and repairable state from "no anchor exists".
+            ("sha256-compression-parametrised", "core.sha256", "CITE-SHA256-DIFF"),
+        ),
     ),
     SpecSheet(
         module_id="M4",
@@ -191,19 +203,15 @@ def make_target_gates(
             return False, "no module package exists"
         measure_module = _import(f"{sheet.package}.measure")
         target = SAMPLE_TARGETS[target_id]()
-        paths = []
-        try:
-            measure_module.degree_upper_bound(target)
-            paths.append("upper-bound")
-        except Exception:
-            pass
-        try:
-            measure_module.exact_degree(target)
-            paths.append("exact")
-        except Exception:
-            pass
+        probe = _support_probes().get(sheet.support_probe)
+        if probe is None:
+            return False, f"no support probe registered for {sheet.support_probe!r}"
+        paths = probe(measure_module, target)
         if not paths:
-            return False, "the measurement path supports neither a bound nor an exact value"
+            return False, (
+                f"the {sheet.support_probe} probe found no path in "
+                f"{sheet.package}.measure that supports this target"
+            )
         return True, f"paths={paths}"
 
     return (
@@ -229,6 +237,61 @@ def make_target_gates(
 class _Unrecomputable(Exception):
     """A control whose stated value cannot be recomputed by this strategy."""
 
+
+
+
+def _support_probes():
+    """How each module establishes that its path supports a target.
+
+    A module's measurement path is whatever that module measures, so asking "is
+    this target supported" means calling that module's own functions. The gate
+    checked for ``degree_upper_bound`` and ``exact_degree`` -- Module 1's names --
+    until Module 3 arrived with neither, which is the third place the gate turned
+    out to assume one module's shape (D-049).
+    """
+
+    def degree_paths(measure_module, target):
+        paths = []
+        for name, label in (
+            ("degree_upper_bound", "upper-bound"),
+            ("exact_degree", "exact"),
+        ):
+            function = getattr(measure_module, name, None)
+            if function is None:
+                continue
+            try:
+                function(target)
+                paths.append(label)
+            except Exception:
+                pass
+        return paths
+
+    def differential_paths(measure_module, target):
+        """Either the counted path or the sampled one supports the target.
+
+        The sampled path is what supports the 512-bit primary target: the exact
+        path refuses it, correctly, because 2^512 is not exhaustible. A module
+        declaring Tier S is entitled to be supported by its Tier S path, and
+        saying otherwise would report the module as broken for refusing to
+        estimate.
+        """
+        paths = []
+        din = 1
+        dout = 0
+        try:
+            measure_module.differential_probability(target, din, dout)
+            paths.append("exact-count")
+        except Exception:
+            pass
+        try:
+            seeds = list(range(measure_module.SEEDS_PER_CELL))
+            measure_module.sampled_probability(target, din, dout, seeds)
+            paths.append("sampled")
+        except Exception:
+            pass
+        return paths
+
+    return {"degree-paths": degree_paths, "differential-paths": differential_paths}
 
 
 def _blindness_runners():
@@ -292,7 +355,25 @@ def _blindness_runners():
             computation_id="READINESS-BLIND-M4-001",
         )
 
-    return {"modules.degree": degree, "modules.reach": reach, "modules.hod": hod}
+    def differential():
+        from verify.differential import differential_uniformity, impossible_fraction
+
+        from modules.differential.blindness import impossible
+
+        return impossible.check(
+            lambda target, n: differential_uniformity(target, n),
+            lambda target, n: impossible_fraction(target, n, n),
+            n=7,
+            test_id="scripts/readiness_report.py::check_blindness",
+            computation_id="READINESS-BLIND-M3-001",
+        )
+
+    return {
+        "modules.degree": degree,
+        "modules.reach": reach,
+        "modules.hod": hod,
+        "modules.differential": differential,
+    }
 
 
 def _recomputers():
@@ -348,10 +429,35 @@ def _recomputers():
             )
         return algebraic_degree(target, target.n_in, target.n_out) + 1
 
+    def differential_count(target, case):
+        """Module 3's controls, recomputed by building whole table rows.
+
+        ``verify.differential`` iterates inputs once and tallies; the module
+        iterates pairs and counts per pair. Same question, different route.
+        """
+        from verify.differential import MAX_DDT_VARS, ddt_row
+
+        if target.n_in > MAX_DDT_VARS:
+            raise _Unrecomputable(
+                f"{target.n_in} variables exceeds the table guard of {MAX_DDT_VARS}; "
+                "this strategy does not estimate"
+            )
+        parameters = case.parameters or {}
+        din = parameters.get("din")
+        if din is None:
+            raise _Unrecomputable("the case states no input difference to recompute")
+        row = ddt_row(target, target.n_in, din)
+        if case.quantity == "max_differential_hits":
+            return max(row.values())
+        if case.quantity == "differential_hits":
+            return row.get(parameters["dout"], 0)
+        raise _Unrecomputable(f"no recomputation for quantity {case.quantity!r}")
+
     return {
         "exhaustive-anf": exhaustive_anf,
         "schedule-closure": schedule_closure,
         "implied-order": implied_order,
+        "differential-count": differential_count,
     }
 
 
