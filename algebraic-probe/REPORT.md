@@ -431,7 +431,7 @@ open question is E-09.
 
 ```
 checks=5 failed=0          scripts/ci_checks.py
-812 passed 1 failed in 481.32s   pytest -q  (the failure is D-053, fixed)
+814 passed in 484.03s      pytest -q
 mutants=67 survivors=0     scripts/mutation_test.py  (9 layers, ≥5 each)
 ```
 
@@ -599,7 +599,7 @@ semantics.
 ```bash
 git clone -b algo-games https://github.com/punkrockquantum/JRRToken.git
 cd JRRToken
-pytest -q                                    # 814 collected (whole suite)
+pytest -q                                    # 814 passed (whole suite)
 python scripts/ci_checks.py                  # checks=5 failed=0
 python scripts/mutation_test.py              # mutants=132 survivors=0
 python scripts/readiness_report.py           # per-target go/no-go

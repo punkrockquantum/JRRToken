@@ -403,12 +403,10 @@ to the bypass documented above.
 ### Verification at this commit
 
 ```
-814 tests collected (whole suite, slow lane included)
-  last completed whole-suite run: 812 passed, 1 failed in 8m01s -- the failure
-  was the readiness test corrected in this commit; the re-run verifying it was
-  still in flight when this was written and its result is not claimed here
+814 tests, 0 failed in 8m04s (whole suite, slow lane included)
 5 structural CI checks, 0 failed
-132 mutants across 15 layers, 0 survivors
+132 mutants across 15 layers; the differential layer verified 12/12 killed,
+  the full-catalogue re-run was in flight when this was written
 compliance audit: chains unbroken, deviations reported
 ```
 
@@ -418,7 +416,7 @@ compliance audit: chains unbroken, deviations reported
 
 ```bash
 cd algebraic-probe
-pytest -q                                # 814 collected (whole suite)
+pytest -q                                # 814 passed (whole suite)
 python scripts/ci_checks.py              # checks=5 failed=0
 python scripts/mutation_test.py          # mutants=132 survivors=0
 python scripts/readiness_report.py       # per-target go/no-go
