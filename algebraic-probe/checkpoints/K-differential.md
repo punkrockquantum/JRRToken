@@ -229,8 +229,9 @@ license: three quantities is a weaker basis than "the general case".
 ## Where M3 stands
 
 ```
-gates passed        10/11
-outstanding         G04  pre-registration untracked (resolves on this commit)
+gates passed        11/11  (10/11 before the commit; G04 asks whether the
+                    pre-registration is tracked, so committing it is what
+                    resolves that gate -- it cannot be settled beforehand)
 controls            4/4 pass
 calibration         BLOCKED on CITE-SHA256-DIFF
 target              sha256-compression-parametrised NO-GO on

@@ -396,14 +396,17 @@ to the bypass documented above.
 | `verify/` — independent exhaustive paths: ANF, packed ANF, landscape, dependence, DDT | implemented, tested |
 | `modules/degree/` — Module 1 | built, measuring; **PARTIAL** (11/11 module gates, **5/7** targets GO) |
 | `modules/reach/` — Module 2 | **built**, 10/11 gates, calibration-blocked (E-05) |
-| `modules/differential/` — Module 3 | **built**, 10/11 gates, **first Tier S path**; blocked on a named but unreachable anchor (E-04 class) |
+| `modules/differential/` — Module 3 | **built**, **11/11 module gates**, **first Tier S path**; NO-GO on its one target, blocked on a named but unreachable anchor (E-04 class) |
 | `modules/hod/` — Module 4 | built, **9/11** gates, calibration-blocked (E-05) |
 | Modules 5, 6 | not started; no longer blocked on a missing target, only unwritten |
 
 ### Verification at this commit
 
 ```
-768 tests, 0 failed (whole suite, slow lane included)
+814 tests collected (whole suite, slow lane included)
+  last completed whole-suite run: 812 passed, 1 failed in 8m01s -- the failure
+  was the readiness test corrected in this commit; the re-run verifying it was
+  still in flight when this was written and its result is not claimed here
 5 structural CI checks, 0 failed
 132 mutants across 15 layers, 0 survivors
 compliance audit: chains unbroken, deviations reported
@@ -415,7 +418,7 @@ compliance audit: chains unbroken, deviations reported
 
 ```bash
 cd algebraic-probe
-pytest -q                                # 768 passed (whole suite)
+pytest -q                                # 814 collected (whole suite)
 python scripts/ci_checks.py              # checks=5 failed=0
 python scripts/mutation_test.py          # mutants=132 survivors=0
 python scripts/readiness_report.py       # per-target go/no-go
@@ -448,7 +451,7 @@ reach any of them. What is left:
 | **E-11** | the enlarged blindness statement | accept it, or commission a landscape module |
 
 Eleven items, with the arithmetic for each, are in `ESCALATIONS.md`. Every
-judgement call is in `DECISIONS.md` (51 entries), including the ones where a
+judgement call is in `DECISIONS.md` (53 entries), including the ones where a
 measurement refuted something I had written, and the ones where a control
 expectation turned out to be a number I had guessed rather than computed.
 

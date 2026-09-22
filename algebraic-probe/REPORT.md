@@ -30,7 +30,7 @@ with every deviation reported; provenance chain verified.
 | H — landscape | The null **was** incomplete. Degree separates **0 of 5** hierarchical landscapes; a local-minimum count separates 5 of 5. Fourth blindness class added; nothing promoted |
 | J — M2 built | **Module 2**, unblocked by E-03. Union reachability complete at round **16**, per-output-bit at **21**. One registered hypothesis confirmed, one **refuted**. 9/11 gates; calibration-blocked on E-05 |
 | I — SHA-256 | **E-03 authorised.** Primary target implemented, FIPS-validated, **GO**. Naive ARX bound vacuous (512 from round 1); support-capping gives **32r−1**. Proven lower bound 16; one round saturates any exhaustible window |
-| K — M3 built | **Module 3**, the first with a declared Tier S path. x³ over GF(2ⁿ) measured APN with **exactly 50%** of its table impossible. Sampled SHA-256 differential propagation starts at round **16** — the same round M2 reached structurally, by a path sharing no code. Tier S discipline found **untested** and now pinned. 10/11 gates; blocked on an unreachable named anchor |
+| K — M3 built | **Module 3**, the first with a declared Tier S path. x³ over GF(2ⁿ) measured APN with **exactly 50%** of its table impossible. Sampled SHA-256 differential propagation starts at round **16** — the same round M2 reached structurally, by a path sharing no code. Tier S discipline found **untested** and now pinned. **11/11 module gates**, the first module whose machinery is complete and which is held back only by a target |
 
 Per-stage detail in `checkpoints/` (A–K). Operator items in `ESCALATIONS.md` (11, six closed).
 
@@ -174,7 +174,7 @@ targets differ.
 |---|---|---:|---:|---|
 | **M1** | Algebraic degree growth vs round count | **11/11** | **5/7** | **PARTIAL** |
 | **M2** | Dependency-graph reachability, free-round budget | **10/11** | — | NO-GO (E-05) |
-| **M3** | Differential characteristic search | **10/11** | 0/1 | NO-GO (E-04 class: anchor named, unreachable) |
+| **M3** | Differential characteristic search | **11/11** | 0/1 | NO-GO (E-04 class: anchor named, unreachable) |
 | M4 | Higher-order differentials, integral distinguishers | **9/11** | — | NO-GO (E-05 + depends on M1) |
 | M5 | Meet-in-the-middle and biclique structure | 2/11 | — | NO-GO |
 | M6 | Rotational-XOR propagation | 1/11 | — | NO-GO |
@@ -431,7 +431,7 @@ open question is E-09.
 
 ```
 checks=5 failed=0          scripts/ci_checks.py
-425 passed in 66.55s       pytest -q
+812 passed 1 failed in 481.32s   pytest -q  (the failure is D-053, fixed)
 mutants=67 survivors=0     scripts/mutation_test.py  (9 layers, ≥5 each)
 ```
 
@@ -599,7 +599,7 @@ semantics.
 ```bash
 git clone -b algo-games https://github.com/punkrockquantum/JRRToken.git
 cd JRRToken
-pytest -q                                    # 768 passed (whole suite)
+pytest -q                                    # 814 collected (whole suite)
 python scripts/ci_checks.py                  # checks=5 failed=0
 python scripts/mutation_test.py              # mutants=132 survivors=0
 python scripts/readiness_report.py           # per-target go/no-go

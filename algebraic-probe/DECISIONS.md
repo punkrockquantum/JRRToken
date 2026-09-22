@@ -1653,3 +1653,58 @@ confirmation in a test that raises the budget explicitly and is marked slow.
 Cost after: the three M3 test files went 184s → 76s, and the readiness report
 runs in 3.5s.
 
+
+## D-053 — the fourth test whose assertion encoded the modules that happened to exist
+
+The whole-suite run after M3's commit reported **1 failed, 812 passed**. The
+failure was `test_every_module_short_of_its_gates_remains_no_go`, and it is the
+same pattern as D-044, D-046 and D-049, in a test rather than a gate.
+
+The test asserted, for every module in `no_go`, that the module has a blocking
+**module-gate** failure. That was true of M2, M4, M5 and M6, and it is false of
+M3 once the pre-registration is tracked:
+
+```
+module=M3 decision=NO-GO gates_passed=11/11 blocking_failures=0 targets_go=0/1
+```
+
+M3 is the first module whose own machinery passes every gate and which is NO-GO
+purely because its single target does not clear `T02`. The test's title said
+"short of its gates"; its assertion said "every NO-GO module is short of a
+gate", which is a property of the modules that existed when it was written
+rather than the rule being enforced.
+
+This test had already been renamed once, for the same reason: it originally said
+"without a package", which stopped being why M2 was NO-GO the moment M2 was
+built. Renaming it did not fix the underlying habit of asserting the current
+population instead of the invariant.
+
+**Decision: assert the invariant, and assert M3's new state separately.**
+
+The invariant is that NO-GO is never vacuous — something concrete blocks it,
+either a blocking module gate *or* a target that does not clear. That is what
+`test_every_no_go_module_has_something_blocking_it` now checks, and it holds for
+all five NO-GO modules for the right reason in each case.
+
+A second test, `test_m3_is_no_go_on_its_target_with_every_module_gate_passing`,
+pins the state directly: 11/11 module gates, no blocking module failures, one
+target, and `T02` among its blocking gates. Without it, the weakened invariant
+would pass for a module that had somehow lost its target list entirely.
+
+### Why the gate count could not have been settled before committing
+
+`G04` asks whether the pre-registration is tracked in git. Before the commit it
+was untracked, so the gate failed and M3 stood at 10/11; the commit is what
+resolves it. The figure 10/11 was therefore correct when written and stale the
+moment it was pushed, which is why the commit message reported it as the
+pre-commit state rather than predicting 11/11, and why the documented counts
+were corrected from a re-run afterwards rather than from arithmetic.
+
+### What this does not license
+
+Three gates and now a test have been found shaped by the modules that existed
+when they were written. That is not evidence the remaining ones are general; it
+is evidence that each new module is the only instrument capable of finding the
+next one. M5 and M6 should be expected to find more, and finding one is not a
+defect in this repository's discipline — failing to look would be.
+

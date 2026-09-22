@@ -158,22 +158,49 @@ def test_the_authorised_runs_are_exactly_the_clear_targets() -> None:
 
 
 @pytest.mark.slow
-def test_every_module_short_of_its_gates_remains_no_go() -> None:
-    """Renamed: M2 and M4 now have packages and still do not reach GO.
+def test_every_no_go_module_has_something_blocking_it() -> None:
+    """Renamed twice, each time because a new module broke the assumption the
+    previous name encoded.
 
-    The old name said "without a package", which stopped being the reason M2 was
-    NO-GO the moment it was built -- so the test was passing for a reason its own
-    title got wrong. What it actually checks is that a module reaching GO
-    requires every blocking gate to pass, package or no package.
+    First it said "without a package", which stopped being the reason M2 was
+    NO-GO the moment M2 was built. Then it said "short of its gates" and
+    asserted that every NO-GO module has a failing *module* gate -- true only
+    while no module had passed all eleven and been held back by a target. M3 is
+    the first that has, so the assertion was checking a property of the modules
+    that happened to exist rather than the rule.
+
+    The rule is that NO-GO is never vacuous: something concrete blocks it,
+    either a blocking module gate or a target that does not clear.
     """
     report = build_report()
     assert set(report.no_go) == {"M2", "M3", "M4", "M5", "M6"}
 
     built = {m.module_id for m in report.modules if m.n_passed > 1}
-    assert {"M2", "M4"} <= built, "M2 and M4 are built, not absent"
+    assert {"M2", "M3", "M4"} <= built, "M2, M3 and M4 are built, not absent"
     for module in report.modules:
         if module.module_id in report.no_go:
-            assert module.blocking_failures, module.module_id
+            blocked_targets = [
+                t for t in module.targets if t.decision is not Decision.GO
+            ]
+            assert module.blocking_failures or blocked_targets, module.module_id
+
+
+def test_m3_is_no_go_on_its_target_with_every_module_gate_passing() -> None:
+    """The state the test above was rewritten to admit, asserted directly.
+
+    M3 passes all eleven module gates -- its machinery is complete -- and is
+    NO-GO because its single target's ground truth rests on a citation E-04
+    holds unverified. Collapsing that into "M3 is incomplete" would misreport
+    what is missing: the module is built, and a number has to be read out of a
+    paper this environment cannot reach.
+    """
+    module = next(m for m in build_report().modules if m.module_id == "M3")
+    assert module.blocking_failures == ()
+    assert module.n_passed == len(module.outcomes) == 11
+    assert len(module.targets) == 1
+    target = module.targets[0]
+    assert target.decision is not Decision.GO
+    assert "T02" in " ".join(o.gate_id for o in target.blocking_failures)
 
 
 @pytest.mark.slow
