@@ -405,8 +405,7 @@ to the bypass documented above.
 ```
 814 tests, 0 failed in 8m04s (whole suite, slow lane included)
 5 structural CI checks, 0 failed
-132 mutants across 15 layers; the differential layer verified 12/12 killed,
-  the full-catalogue re-run was in flight when this was written
+132 mutants across 15 layers, 0 survivors (>=5 per layer)
 compliance audit: chains unbroken, deviations reported
 ```
 
