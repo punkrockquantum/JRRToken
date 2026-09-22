@@ -93,9 +93,9 @@ targets differ.
 | Module | Title | Module gates | Targets GO | Decision |
 |---|---|---:|---:|---|
 | **M1** | Algebraic degree growth vs round count | **11/11** | **5/7** | **PARTIAL** |
-| **M2** | Dependency-graph reachability, free-round budget | **9/11** | — | NO-GO (E-05) |
+| **M2** | Dependency-graph reachability, free-round budget | **10/11** | — | NO-GO (E-05) |
 | M3 | Differential characteristic search | 2/11 | — | NO-GO |
-| M4 | Higher-order differentials, integral distinguishers | 0/11 | — | NO-GO (+ depends on M1) |
+| M4 | Higher-order differentials, integral distinguishers | **9/11** | — | NO-GO (E-05 + depends on M1) |
 | M5 | Meet-in-the-middle and biclique structure | 2/11 | — | NO-GO |
 | M6 | Rotational-XOR propagation | 1/11 | — | NO-GO |
 
@@ -518,7 +518,7 @@ semantics.
 ```bash
 git clone -b algo-games https://github.com/punkrockquantum/JRRToken.git
 cd JRRToken
-pytest -q -m "not slow"                      # 754 passed, 14 deselected
+pytest -q                                    # 768 passed (whole suite)
 python scripts/ci_checks.py                  # checks=5 failed=0
 python scripts/mutation_test.py              # mutants=120 survivors=0
 python scripts/readiness_report.py           # per-target go/no-go

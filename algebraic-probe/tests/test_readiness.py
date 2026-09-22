@@ -131,21 +131,25 @@ def test_module_1_is_partial_because_some_targets_are_blocked() -> None:
     assert m1.decision is Decision.PARTIAL
     blocked = {t.target_id: [o.gate_id for o in t.blocking_failures] for t in m1.targets
                if t.decision is Decision.NO_GO}
-    assert set(blocked) == {
-        "sha256-compression-parametrised",
-        "keccak-f[25]",
-        "mimc-gf2n[9]",
-    }
+    # sha256-compression-parametrised was blocked on T01 until E-03 was
+    # authorised (D-041); it is GO now, and the two remaining blocks are both
+    # E-04's untranscribed citations.
+    assert set(blocked) == {"keccak-f[25]", "mimc-gf2n[9]"}
     assert blocked["keccak-f[25]"] == ["T02"]
     assert blocked["mimc-gf2n[9]"] == ["T02"]
-    assert "T01" in blocked["sha256-compression-parametrised"]
-    assert len(m1.targets_go) == 4
+    assert all(
+        t.decision is Decision.GO
+        for t in m1.targets
+        if t.target_id == "sha256-compression-parametrised"
+    ), "the primary target is no longer blocked"
+    assert len(m1.targets_go) == 5
 
 
 @pytest.mark.slow
 def test_the_authorised_runs_are_exactly_the_clear_targets() -> None:
     report = build_report()
     assert set(report.authorised_runs) == {
+        ("M1", "sha256-compression-parametrised"),
         ("M1", "linear-map-gf2"),
         ("M1", "power-map-gf2n"),
         ("M1", "inverse-map-gf2n"),
@@ -154,9 +158,22 @@ def test_the_authorised_runs_are_exactly_the_clear_targets() -> None:
 
 
 @pytest.mark.slow
-def test_modules_without_a_package_remain_no_go() -> None:
+def test_every_module_short_of_its_gates_remains_no_go() -> None:
+    """Renamed: M2 and M4 now have packages and still do not reach GO.
+
+    The old name said "without a package", which stopped being the reason M2 was
+    NO-GO the moment it was built -- so the test was passing for a reason its own
+    title got wrong. What it actually checks is that a module reaching GO
+    requires every blocking gate to pass, package or no package.
+    """
     report = build_report()
     assert set(report.no_go) == {"M2", "M3", "M4", "M5", "M6"}
+
+    built = {m.module_id for m in report.modules if m.n_passed > 1}
+    assert {"M2", "M4"} <= built, "M2 and M4 are built, not absent"
+    for module in report.modules:
+        if module.module_id in report.no_go:
+            assert module.blocking_failures, module.module_id
 
 
 @pytest.mark.slow

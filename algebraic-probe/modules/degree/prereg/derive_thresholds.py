@@ -60,9 +60,21 @@ WORKED_PROBE_DIM = 8
 SEED_REQUIREMENT_DIMS = (4, 8, 16, 32)
 
 #: Data-complexity ceiling, log2, above which an implied distinguisher is not
-#: promoted. Derivation: the largest published practical hash computation.
-#: Carries citation CITE-SHATTERED, whose verification state gates its use.
+#: promoted. **This project's declared compute budget, not a sourced
+#: measurement** (E-02, decided in D-047).
+#:
+#: It previously carried CITE-SHATTERED, which is UNVERIFIED because the source
+#: is unreachable from this environment -- so the threshold was a declared budget
+#: wearing a citation's clothes. The value is unchanged; its provenance is now
+#: what it always actually was. The reason stands on its own: a distinguisher
+#: needing more work than the largest hash computation anyone has published is
+#: not one a cryptanalyst would act on, and this is a defensible place to put
+#: that line. Stated as policy so nobody reads it as a measurement.
 FEASIBILITY_CEILING_LOG2 = 63.1
+
+#: What the number above is, recorded in the derived block so the distinction
+#: survives into the pre-registration and the reports.
+FEASIBILITY_CEILING_PROVENANCE = "declared-project-budget"
 
 #: Smallest representable non-zero gap between a certified upper bound on the
 #: degree and a witnessed lower bound. Degree is integer-valued.
@@ -109,6 +121,7 @@ def derive() -> dict[str, object]:
         "n_out_bits_primary": N_OUT_BITS_PRIMARY,
         "effect_floor_degree_bits": EFFECT_FLOOR_DEGREE_BITS,
         "feasibility_ceiling_log2": FEASIBILITY_CEILING_LOG2,
+        "feasibility_ceiling_provenance": FEASIBILITY_CEILING_PROVENANCE,
         # derived
         "bh_smallest_critical_value": bh_smallest_critical,
         "min_detectable_p_at_power80": min_detectable,
@@ -148,6 +161,7 @@ def render_block() -> str:
         "n_out_bits_primary",
         "effect_floor_degree_bits",
         "feasibility_ceiling_log2",
+        "feasibility_ceiling_provenance",
         "bh_smallest_critical_value",
         "min_detectable_p_at_power80",
         "zero_witness_p_upper_bound_95",

@@ -113,6 +113,18 @@ def test_the_registry_report_lists_every_registered_module(tmp_path) -> None:
     result = run("scripts/render_reports.py", "--out-dir", str(tmp_path))
     assert result.returncode == 0, result.stderr
     registry = (tmp_path / "module-registry.txt").read_text()
-    assert "modules=2" in registry
-    assert "module=modules.degree" in registry
-    assert "module=modules.hod" in registry
+
+    # Derived from the registry rather than frozen as a literal. The count was
+    # pinned at 2 and went stale the moment Module 2 was registered, which is
+    # the same class of defect this test was written to catch.
+    from harness.registry import REGISTRY
+
+    import modules.degree.spec  # noqa: F401  (registers)
+    import modules.hod.spec  # noqa: F401  (registers)
+    import modules.reach.spec  # noqa: F401  (registers)
+
+    registered = REGISTRY.ids()
+    assert registered, "a registry with nothing in it would pass vacuously"
+    assert f"modules={len(registered)}" in registry
+    for module_id in registered:
+        assert f"module={module_id}" in registry, module_id

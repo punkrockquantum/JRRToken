@@ -3,11 +3,41 @@
 Items that wait for the operator. Work continues around each; what is blocked by
 each is stated so the cost of leaving it open is visible.
 
+## Status, 2026-09-22
+
+The operator delegated these decisions. Six are closed, recorded in DECISIONS.md
+D-047 with the reasoning for each. **No gate was relaxed and no threshold moved
+to reach any of them.**
+
+| item | state | outcome |
+|---|---|---|
+| E-01 | **CLOSED** | Tier S closure confirmed; it stays shut despite evidence that it is conservative |
+| E-02 | **CLOSED** | the feasibility ceiling is this project's declared compute budget, not a sourced number |
+| E-03 | **CLOSED** | SHA-256 authorised, implemented, FIPS-validated, GO |
+| **E-04** | **OPEN** | two numbers must be read out of two papers. Not decidable here, and not optimisable into a decision |
+| E-05 | **CLOSED** | M2, M4 and M6 ship calibration-blocked — the intended terminal state, not a defect |
+| E-06 | open, build | a `d_Fp` metric is unwritten; nothing to decide |
+| E-07 | superseded | the ordering it described was resolved when E-03 closed |
+| E-08 | **CLOSED** | the subtree-split deviation is accepted; the `claude/…` branch is provenance-bearing |
+| E-09 | **CLOSED** | no — an exhaustive in-repo truth is not a published anchor |
+| E-10 | informational | the per-item arithmetic for the brute-force arm |
+| E-11 | **CLOSED** | the enlarged blindness statement is accepted; no landscape module |
+
+**The one that matters is the one still open.** E-04 is what holds
+`keccak-f[25]` and `mimc-gf2n` at NO-GO, and it is the only item I could not
+take: substituting a value I computed for a value attributed to a paper is the
+specific act the brief forbids. Two numbers, with the width and theorem they
+apply to, closes it.
+
+One further item is recorded but deliberately not acted on: gate `G13` holds M4
+at 9/11 because M1 is PARTIAL rather than GO. Loosening it would take M4 to
+10/11. See D-046 for why it stays.
+
 Status at commit `dd3bbc8`, Stage A complete.
 
 ---
 
-## E-01 — D-010, the Tier S closure (unconfirmed)
+## E-01 — CLOSED 2026-09-22: the Tier S closure is confirmed
 
 **Decision.** PREREG-M1 §9.1 closes the Tier S promotion path above probe
 dimension 2, before any data existed.
@@ -72,7 +102,7 @@ examined.
 
 ---
 
-## E-02 — D-013, the promotion threshold's citation dependency (unconfirmed)
+## E-02 — CLOSED 2026-09-22: the ceiling is a declared project budget
 
 **Decision.** `T2_feasibility` sets the data-complexity ceiling at 2^63.1, the
 largest published practical hash computation, citing `CITE-SHATTERED`.
@@ -142,7 +172,7 @@ rewrite it; that instruction stands until you change it.
 
 ---
 
-## E-04 — C2, published ground truth cannot be transcribed
+## E-04 — OPEN, and the only item that cannot be decided here
 
 **Blocked.** `eprint.iacr.org` and `inria.hal.science` return `EGRESS_BLOCKED`
 from this environment. Attempts logged in DECISIONS.md D-003.
@@ -167,7 +197,7 @@ Keccak-f[25]. If the published bound does not apply at width 25, that is
 
 ---
 
-## E-05 — C3, no published anchor exists in the brief for M2, M4, M6
+## E-05 — CLOSED 2026-09-22: M2, M4 and M6 ship calibration-blocked
 
 The original brief §5 makes a published anchor a blanket precondition and names
 one for M1, M3 and M5 only. M2, M4 and M6 have none.
@@ -213,7 +243,7 @@ instruction that conflicts go to DECISIONS.md.
 
 ---
 
-## E-08 — the publication route invalidates recorded commit ids (recorded, not fixable here)
+## E-08 — CLOSED 2026-09-22: the deviation is accepted and recorded
 
 Found by re-running the documented reproduction against a fresh clone of the
 published `algo-games` branch on 2026-09-17.
@@ -256,7 +286,7 @@ subtree route.
 
 ---
 
-## E-09 — may an exhaustive in-repo ground truth substitute for a published anchor?
+## E-09 — CLOSED 2026-09-22: no, an exhaustive truth is not an anchor
 
 New, 2026-09-17. Raised by the exhaustive arm (D-034, D-035), which was built in
 response to the instruction to convert escalations into results by brute-force
@@ -340,7 +370,7 @@ whichever way E-09 is decided.
 
 ---
 
-## E-11 — the recorded null was incomplete, and the fix enlarges it rather than closing it
+## E-11 — CLOSED 2026-09-22: the enlarged blindness statement is accepted; no M7
 
 New, 2026-09-20. Raised by an objection from outside this repository and acted on
 rather than deflected (D-038).

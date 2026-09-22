@@ -1,4 +1,4 @@
-commit=9da7bc09b06580bc608db1b7abbe4d30ade463b4
+commit=48071faf8e11c662f92c86daa43908dd0ccb50d3
 tier=E method=full-domain-moebius sampled=none
 computation_id=M1-EXH-KECCAK-001 target=keccak-f[25] space=2^25
   rounds=1 exact_degree=2 profile_min=2 profile_max=2 module_bound=2 trivial_bound=2 gap=0 sound=True

@@ -69,11 +69,17 @@ CITE_SHATTERED = Citation(
     locator="proceedings of CRYPTO 2017; project site shattered.io",
     claim=(
         "the computation producing the collision cost approximately 2^63.1 SHA-1 "
-        "compression function calls, used here as the data-complexity ceiling below "
-        "which an implied distinguisher is treated as practically reachable"
+        "compression function calls"
     ),
     verification=Verification.UNVERIFIED,
-    verification_note=_EGRESS_NOTE,
+    verification_note=(
+        _EGRESS_NOTE
+        + "; no threshold depends on this citation any more. E-02 was decided in "
+        "D-047: the feasibility ceiling is this project's declared compute budget, "
+        "not a sourced measurement, so the number no longer claims a provenance "
+        "the egress block prevents it from having. The citation is kept as the "
+        "origin of the value's *reasoning* and nothing gates on it"
+    ),
 )
 
 CITE_CARLET21 = Citation(
