@@ -1272,3 +1272,188 @@ input too. Fixed by adding `f(x) = x0 AND NOT x1`, whose dependence on bit 0 is
 invisible at the final comparison. Fourth equivalent mutant identified in this
 repository; the pattern each time is a guard or a step whose removal is masked by
 a later one.
+
+---
+
+## D-045 — three tests were stale, and they were stale in the lane I was not running
+
+Found because the operator ran the full suite. I had been verifying with
+`pytest -q -m "not slow"` throughout and reporting those counts as green; three
+tests in the slow lane had gone stale against my own changes and I did not see
+them. That is a process failure, not a code one, and the lesson is the smaller
+half of it: **a suite verified by a filter is verified only in that filter.**
+
+The three, all made false by work I did:
+
+- `test_the_registry_report_lists_every_registered_module` asserted `modules=2`
+  while three are registered. Now derived from `REGISTRY.ids()` rather than
+  frozen as a literal, so registering a fourth cannot break it — which is the
+  same class of defect the test was originally written to catch, so pinning a
+  count in it was the wrong shape from the start.
+- `test_module_1_is_partial_because_some_targets_are_blocked` still expected
+  `sha256-compression-parametrised` to be blocked on T01. It is GO since D-041.
+- `test_the_authorised_runs_are_exactly_the_clear_targets` listed four targets;
+  there are five.
+
+A fourth was passing for a reason its own name got wrong:
+`test_modules_without_a_package_remain_no_go` said "without a package" while M2
+had just acquired one. Renamed to
+`test_every_module_short_of_its_gates_remains_no_go` and given an assertion that
+matches the title — that a module reaching GO needs every blocking gate to pass,
+package or not.
+
+## D-046 — Module 4 was described as built while the readiness gate reported it absent
+
+Surfaced by the rename above, which asserted M4 is built and found it registering
+one passing gate out of eleven.
+
+**Cause.** M4 was built in Stage D, but its entry in `readiness_report.py`'s spec
+sheet still carried `package=None`, `prereg_path=None`, `verify_symbol=None`. So
+every gate answered "no module package exists". REPORT.md called M4 "built,
+calibration-blocked" and the readiness report called it absent, and both were
+generated from this repository. Two of my own outputs disagreed for four stages.
+
+**Fixed** by wiring the sheet — package `modules.hod`, prereg
+`modules/hod/prereg/PREREG-M4.md`, verify symbol
+`verify.anf:derivative_vanishes` — and by adding a `implied-order` control
+strategy, because M4's controls state an *order* (degree + 1) and the
+`exhaustive-anf` recomputation returns a degree. M4 went from 1/11 to 8/11 on
+wiring alone.
+
+**Then a real incompleteness appeared.** Gate G12 reported PREREG-M4 missing
+`gate_threshold`, `gate_verification`, `gate_cost` and `gate_falsification`. It
+was: the document had sections 1–7 and no promotion gate. The module had been
+described as built while one of its stated preconditions did not exist. Section 8
+now instantiates all four arms, and M4 stands at 9/11.
+
+**What remains, and why neither is build work.** G06 is the absent published
+anchor (E-05, operator). G13 is `dependencies-are-go`: M4 depends on M1, and M1
+is PARTIAL rather than GO.
+
+**G13 is not relaxed, and the temptation to relax it is worth recording.** M4
+uses M1's degree measure, which works, so requiring M1 to be *fully* GO looks
+over-strict — and loosening the rule would take M4 to 10/11. It stays. Two
+reasons: M4's declared targets include `mimc-gf2n`, which is one of the two M1
+targets still blocked on E-04, so the dependency is real and not bureaucratic;
+and changing a gate's semantics in order to make a module pass it is the exact
+move the brief prohibits, whatever the argument. If the rule should distinguish
+"depends on a module" from "depends on a target of a module", that is a
+pre-registration change to be made before it is evaluated, not after seeing which
+way it falls.
+
+---
+
+## D-047 — the operator's open escalations, decided
+
+Instruction: take the decisions for optimal results. Five of the eight open items
+are decidable from what this repository has measured, and are decided below. Two
+are build work rather than decisions. **One is not mine to take and stays open** —
+that distinction is the substance of this entry, not a caveat on it.
+
+### E-01 — the Tier S closure stands. CONFIRMED.
+
+PREREG-M1 §9.1 closes the sampled promotion path above probe dimension 2. The
+witness calibration (D-037) found the real rate exceeds the Schwartz-Zippel worst
+case by 2× to 2540×, which makes the closure look conservative and the seed
+requirements look like enormous overestimates.
+
+**It stays closed.** Those rates were measured on targets whose degree was
+already known; promotion concerns a target whose degree is not, which is the
+entire reason a probe exists. The targets were also far from saturation, while
+the closure was drawn for the sparse top-form regime where the probe is weakest.
+Confirming a threshold on evidence that argues for loosening it is the correct
+direction of caution, and a tighter model would need its own derivation holding
+for the sparse case — which is unbuilt and named as such.
+
+Consequence: this instrument has essentially no sampled promotion path, has used
+none, and the statistical layer remains unexercised. That is now a settled
+property rather than an open question.
+
+### E-02 — the feasibility ceiling becomes a declared project budget. DECIDED.
+
+`T2_feasibility` set the data-complexity ceiling at 2^63.1 citing
+`CITE-SHATTERED`, which is `UNVERIFIED` because the source is unreachable — so
+the threshold was a declared budget wearing a citation's clothes.
+
+**Chosen: declare it as this project's compute budget, in the same units, and
+drop the citation dependency.** The number does not change; its provenance does,
+from "unverified citation" to "declared policy with a stated reason". That is
+strictly more honest and it removes a dependency on something E-04 cannot
+deliver. The reason for the value stands on its own: a distinguisher needing more
+work than the largest hash computation anyone has published is not one a
+cryptanalyst would act on, and 2^63.1 is a defensible place to put that line.
+Recorded as policy, so nobody later reads it as a sourced measurement.
+
+### E-05 — M2, M4 and M6 ship calibration-blocked. CONFIRMED.
+
+The escalation offered two routes: supply an anchor per module, or confirm they
+ship calibration-blocked. No published anchor exists in either brief for these
+three, and the literature is behind E-04's egress block, so the first route is
+not available to me.
+
+**Confirmed: they ship calibration-blocked**, which is what `gate()` already
+reports and what `allow_missing_ground_truth` was built to express. Their controls
+run and pass; the gate is not lifted by that. This is the intended terminal state
+for a module with no anchor, not a defect awaiting repair.
+
+### E-09 — an exhaustive in-repo truth does not substitute for a published anchor. CONFIRMED.
+
+Three options were offered and I recommended against the general form.
+**Confirmed: no.** An instrument and a target written by the same author can share
+a misreading of a specification, and agreeing with yourself is the one thing
+calibration exists to rule out. The narrower option — accepting the substitution
+where the target implementation is externally anchored, as Keccak is by `hashlib`
+— is coherent, but it would open a route that only ever gets used when the
+published route is blocked, which is precisely when the check matters most. The
+exhaustive cases keep running and keep reporting; they open no gate.
+
+### E-11 — the enlarged blindness statement is accepted; no landscape module. CONFIRMED.
+
+**Chosen: option 1.** The fourth blindness class is built, run and passing, and
+the map of what is unexamined is one entry more honest for it. No Module 7.
+
+The reason is the sweep's own result: every statistic measured there has a regime
+in which it reports "no structure" about a landscape that has structure by
+construction — the degree measure in all five cells, each proposed replacement in
+some. A landscape module would not remove blindness, it would move it, and it
+would ship calibration-blocked under E-05 like the others. Building it would add
+a module and no evidence.
+
+### E-08 — the publication route: the deviation is accepted and recorded. DECIDED.
+
+`git subtree split` rewrites every commit hash, so the ids recorded in run logs
+do not resolve in the published `algo-games` history. Option 1 — publishing the
+branch itself — would make the published branch self-verifying, but it requires
+the project to live at the repository root on its own branch, and the subtree
+route is what the original repo-access block forced.
+
+**Chosen: option 2.** The deviation is accepted as a known property of the
+publication route. The `claude/…` branch is the provenance-bearing one; the
+ordering relation it asserts still holds in both histories (`runner_precedes=True`
+either way), and it is the *ids* that do not match rather than the claim they
+support. The auditor keeps flagging it, which is correct behaviour and is left
+alone.
+
+### E-04 — NOT DECIDED, and not decidable here.
+
+Two numbers must be read out of ePrint 2010/589 and 2020/182 with their
+parameterisation. `eprint.iacr.org` returns `EGRESS_BLOCKED` from this
+environment, and Class 2 of the completion brief forbids substituting a value I
+derived for a published anchor.
+
+**This one cannot be optimised into a decision.** I could compute both values
+exhaustively — I have, for MiMC over GF(2^9) and Keccak-f[25] — and writing either
+into a case whose provenance names a paper would be the specific act the brief
+prohibits. It stays open, and `keccak-f[25]` and `mimc-gf2n` stay NO-GO on T02.
+Two numbers, transcribed with the width and theorem they apply to, closes it.
+
+### E-06 — build work, not a decision.
+
+A `d_Fp` metric for the prime-field targets needs its own pre-registration, tier
+routing and calibration. Nothing to decide; it is unwritten.
+
+### Net effect
+
+Five escalations closed, one confirmed undecidable here, one left as build work.
+No gate was relaxed and no threshold moved to reach any of it. The one item that
+would have unblocked two targets is the one I cannot take.

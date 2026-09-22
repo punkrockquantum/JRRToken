@@ -326,14 +326,14 @@ to the bypass documented above.
 | `core/sha256.py` — the ARX target | **implemented, validated, measuring**; bit-identical to `hashlib` at 64 rounds |
 | `verify/` — independent exhaustive paths: ANF, packed ANF, landscape, dependence | implemented, tested |
 | `modules/degree/` — Module 1 | built, measuring; **PARTIAL** (11/11 module gates, **5/7** targets GO) |
-| `modules/reach/` — Module 2 | **built**, 9/11 gates, calibration-blocked (E-05) |
-| `modules/hod/` — Module 4 | built, calibration-blocked (E-05) |
+| `modules/reach/` — Module 2 | **built**, 10/11 gates, calibration-blocked (E-05) |
+| `modules/hod/` — Module 4 | built, **9/11** gates, calibration-blocked (E-05) |
 | Modules 3, 5, 6 | not started; no longer blocked on a missing target, only unwritten |
 
 ### Verification at this commit
 
 ```
-754 tests (fast lane), 0 failed
+768 tests, 0 failed (whole suite, slow lane included)
 5 structural CI checks, 0 failed
 120 mutants across 14 layers, 0 survivors
 compliance audit: chains unbroken, deviations reported
@@ -345,7 +345,7 @@ compliance audit: chains unbroken, deviations reported
 
 ```bash
 cd algebraic-probe
-pytest -q -m "not slow"                  # 754 passed
+pytest -q                                # 768 passed (whole suite)
 python scripts/ci_checks.py              # checks=5 failed=0
 python scripts/mutation_test.py          # mutants=120 survivors=0
 python scripts/readiness_report.py       # per-target go/no-go
@@ -365,9 +365,12 @@ git ancestry, so `fetch-depth: 0` is load-bearing in CI.
 
 ## What blocks progress
 
+**Six of the eleven escalations were closed on 2026-09-22** when the operator
+delegated the decisions (D-047). No gate was relaxed and no threshold moved to
+reach any of them. What is left:
+
 | # | Blocker | What it holds up |
 |---|---|---|
-| ~~E-03~~ | ~~the ARX target is not vendored~~ | **RESOLVED 2026-09-22** — authorised, implemented, validated, GO |
 | **E-04** | two ground-truth citations unreachable (egress) | M1 on `keccak-f[25]` and `mimc-gf2n` |
 | **E-05** | no published anchor exists for M2/M4/M6 | those modules ship calibration-blocked |
 | **E-01** | the Tier S closure is unconfirmed | whether the statistical layer has any purpose |

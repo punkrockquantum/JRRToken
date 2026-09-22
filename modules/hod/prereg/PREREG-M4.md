@@ -68,3 +68,36 @@ Every `order(r)` claim is checked empirically by summing the target over a
 random affine subspace of that dimension, using this module's own subspace
 summation rather than `verify/`, so agreement between them is evidence and not a
 restatement.
+
+## 8. Promotion gate
+
+Instantiated with the concrete rule each arm is evaluated against, fixed before
+any measurement. This section was missing when the module was built in Stage D,
+which the readiness gate reported as `G12` once the module's spec sheet was wired
+(D-045) — the module had been described as built while one of its preconditions
+was absent.
+
+1. `gate_threshold`: metric `order`, direction less-is-better. A candidate is a
+   round count `r` whose implied vanishing order satisfies `order(r) <= n`, so
+   the distinguisher fits inside the input space at all; `effect_floor` = 1,
+   and since the order is integer-valued that is the smallest representable
+   difference. An order exceeding `n` is not a weak result, it is no result.
+
+2. `gate_verification`: the vanishing must be re-derived by a path under
+   `verify/` that shares no code with this module —
+   `verify.anf.derivative_vanishes`. This module sums over subspaces with its own
+   implementation precisely so that agreement is evidence rather than a
+   restatement.
+
+3. `gate_cost`: the distinguisher needs `2^order` chosen inputs, and that figure
+   must be below `feasibility_ceiling_log2` = 63.1 *and* below the generic cost
+   it would displace. `useful_until` reports the last round where this holds.
+
+4. `gate_falsification`: two artefact hypotheses with the test that settles each.
+   **A1** — the vanishing is an artefact of a loose degree bound rather than of
+   the target; tested by re-deriving the order from the *exact* degree where the
+   input space is small enough to exhaust, and reporting the two separately.
+   **A2** — the order is correct but the subspace family is the wrong one; tested
+   by the multiplicative-coset blindness class, which shows an integral can exist
+   over a non-affine subset while every affine bound stays saturated, so an
+   affine null is never reported as a general one.

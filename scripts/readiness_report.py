@@ -102,10 +102,11 @@ INVENTORY: tuple[SpecSheet, ...] = (
         title="Higher-order differentials and integral distinguishers",
         quantity="order of a vanishing higher-order differential",
         declared_tiers="P,E",
-        package=None,
-        prereg_path=None,
-        verify_symbol=None,
+        package="modules.hod",
+        prereg_path="modules/hod/prereg/PREREG-M4.md",
+        verify_symbol="verify.anf:derivative_vanishes",
         calibration_anchor=None,
+        control_strategy="implied-order",
         depends_on=("M1",),
     ),
     SpecSheet(
@@ -278,7 +279,20 @@ def _blindness_runners():
             computation_id="READINESS-BLIND-M2-001",
         )
 
-    return {"modules.degree": degree, "modules.reach": reach}
+    def hod():
+        from verify.anf import algebraic_degree
+
+        from modules.hod.blindness import multiplicative_coset
+
+        return multiplicative_coset.check(
+            lambda target, n: algebraic_degree(target, n, n),
+            9,
+            7,
+            test_id="scripts/readiness_report.py::check_blindness",
+            computation_id="READINESS-BLIND-M4-001",
+        )
+
+    return {"modules.degree": degree, "modules.reach": reach, "modules.hod": hod}
 
 
 def _recomputers():
@@ -318,7 +332,27 @@ def _recomputers():
             return freedom_budget(target.n_rounds).free_bits
         raise _Unrecomputable(f"no independent recomputation for quantity {quantity!r}")
 
-    return {"exhaustive-anf": exhaustive_anf, "schedule-closure": schedule_closure}
+    def implied_order(target, case):
+        """Module 4's controls: the order of a vanishing higher-order
+        differential, which is the exact degree plus one.
+
+        Recomputed through ``verify.anf`` rather than through Module 4's own
+        ``exact_degree`` import, so the check does not run the same code twice.
+        """
+        from verify.anf import MAX_EXHAUSTIVE_VARS, algebraic_degree
+
+        if target.n_in > MAX_EXHAUSTIVE_VARS:
+            raise _Unrecomputable(
+                f"{target.n_in} variables exceeds the exhaustive guard of "
+                f"{MAX_EXHAUSTIVE_VARS}; this strategy does not sample"
+            )
+        return algebraic_degree(target, target.n_in, target.n_out) + 1
+
+    return {
+        "exhaustive-anf": exhaustive_anf,
+        "schedule-closure": schedule_closure,
+        "implied-order": implied_order,
+    }
 
 
 def check_primary_target() -> tuple[bool, str]:

@@ -140,6 +140,7 @@ homogeneous part. Under `H1_gap` it is exactly 0.
 - `n_out_bits_primary`: 256
 - `effect_floor_degree_bits`: 1
 - `feasibility_ceiling_log2`: 63.1
+- `feasibility_ceiling_provenance`: declared-project-budget
 - `bh_smallest_critical_value`: 0.00078125
 - `min_detectable_p_at_power80`: 0.03167621427
 - `zero_witness_p_upper_bound_95`: 0.05815507912

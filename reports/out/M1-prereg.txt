@@ -1,7 +1,7 @@
-commit=9da7bc09b06580bc608db1b7abbe4d30ade463b4
+commit=48071faf8e11c662f92c86daa43908dd0ccb50d3
 prereg_id=PREREG-M1
 prereg_path=modules/degree/prereg/PREREG-M1.md
-prereg_sha256=33f742cbdeae86fdb3a4f784059f312fb0a1e91ba190d799bf533e8a56b8e49c
+prereg_sha256=196274c26b7b018996bfb816ad1ef4df8bee09192ee1a050a46bf1bda7a2afb3
 prereg_introducing_commit=d84c0968324d0151c0a8cdba74cd291fd2252579
 runner_introducing_commit=84ca87e77da68df6d725a6baed9df6bfd9c95df4
 H1_gap=there exists r with `d_ub(r) - d_lb(r) >= effect_floor`, i.e. the
@@ -23,6 +23,7 @@ effect_floor_units=bits of algebraic degree
 existence_ceiling_k=512
 family_size=64
 feasibility_ceiling_log2=63.1
+feasibility_ceiling_provenance=declared-project-budget
 generic_zero_sum_advantage_log2=256
 holdout_rounds=53,54,55,56,57,58,59,60,61,62,63,64
 max_probe_dim_reaching_bh_significance=2
@@ -71,6 +72,7 @@ zero_witness_p_upper_bound_95=0.05815507912
 - `n_out_bits_primary`: 256
 - `effect_floor_degree_bits`: 1
 - `feasibility_ceiling_log2`: 63.1
+- `feasibility_ceiling_provenance`: declared-project-budget
 - `bh_smallest_critical_value`: 0.00078125
 - `min_detectable_p_at_power80`: 0.03167621427
 - `zero_witness_p_upper_bound_95`: 0.05815507912
