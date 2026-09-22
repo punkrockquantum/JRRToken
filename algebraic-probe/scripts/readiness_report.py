@@ -45,6 +45,11 @@ class SpecSheet:
     verify_symbol: str | None
     #: The published result section 5 names for this module, if it names one.
     calibration_anchor: str | None
+    #: How a control's stated value is recomputed independently of the module's
+    #: own measure. Declared per module because it depends on what the module
+    #: measures -- this gate hard-coded Module 1's quantity until Module 2 made
+    #: that assumption visible.
+    control_strategy: str = "exhaustive-anf"
     depends_on: tuple[str, ...] = ()
     #: (target_id, factory-or-None, citation the target's ground truth needs).
     #: A target with no citation has its expected values established in-repo.
@@ -76,10 +81,11 @@ INVENTORY: tuple[SpecSheet, ...] = (
         title="Dependency-graph reachability and free-round budget",
         quantity="input bits reachable to each output bit at round r; degrees of freedom",
         declared_tiers="P",
-        package=None,
-        prereg_path=None,
-        verify_symbol=None,
+        package="modules.reach",
+        prereg_path="modules/reach/prereg/PREREG-M2.md",
+        verify_symbol="verify.dependence:dependence_matrix",
         calibration_anchor=None,
+        control_strategy="schedule-closure",
     ),
     SpecSheet(
         module_id="M3",
@@ -218,6 +224,103 @@ def make_target_gates(
     )
 
 
+
+class _Unrecomputable(Exception):
+    """A control whose stated value cannot be recomputed by this strategy."""
+
+
+
+def _blindness_runners():
+    """How to run each module's blindness class, keyed by package.
+
+    The wiring lives here rather than in the modules because a blindness class
+    needs measures from ``verify/`` and ``modules/`` must not import ``verify/``
+    (D-006). The classes also do not share a signature -- Module 1's takes one
+    measure, Module 2's takes two -- so there is no uniform contract to call
+    instead. Adding a module means adding one visible entry here, which is the
+    honest cost of keeping the two halves independent.
+    """
+
+    def degree():
+        from verify.anf import algebraic_degree
+
+        from modules.degree.blindness import inverse_map
+
+        return inverse_map.check(
+            lambda target, n: algebraic_degree(target, n, n),
+            9,
+            test_id="scripts/readiness_report.py::check_blindness",
+            computation_id="READINESS-BLIND-M1-001",
+        )
+
+    def reach():
+        from verify.dependence import constant_output_bits
+
+        from modules.reach.blindness import cancellation
+
+        def reachable(target) -> int:
+            # Reachability of a GF(2) matrix row is the union of the input bits
+            # it selects; create() guarantees every row is non-zero, so the union
+            # over both applications is the whole input.
+            union = 0
+            for rows in (target.rows_a, target.rows_b):
+                for row in rows:
+                    union |= row
+            return (union & ((1 << target.n_in) - 1)).bit_count()
+
+        return cancellation.check(
+            reachable,
+            lambda target: constant_output_bits(target, target.n_in, target.n_out),
+            n=10,
+            seed=7,
+            shared_rows=(2, 5),
+            test_id="scripts/readiness_report.py::check_blindness",
+            computation_id="READINESS-BLIND-M2-001",
+        )
+
+    return {"modules.degree": degree, "modules.reach": reach}
+
+
+def _recomputers():
+    """Independent recomputations of a control's expected value, by strategy.
+
+    "Independent" is claimed narrowly and means: not the code path the module's
+    own ``measure`` uses for that case.
+    """
+
+    def exhaustive_anf(target, case):
+        from verify.anf import MAX_EXHAUSTIVE_VARS, algebraic_degree
+
+        if target.n_in > MAX_EXHAUSTIVE_VARS:
+            raise _Unrecomputable(
+                f"{target.n_in} variables exceeds the exhaustive guard of "
+                f"{MAX_EXHAUSTIVE_VARS}; this strategy does not sample"
+            )
+        return algebraic_degree(target, target.n_in, target.n_out)
+
+    def schedule_closure(target, case):
+        """Module 2's controls, recomputed from the schedule's word-level closure
+        instead of the bit-set propagation ``measure`` uses.
+
+        Two genuinely different computations -- a transitive closure over word
+        indices, versus reachable sets pushed through ``core.sha256.compress`` --
+        so one is a check on the other. It is not an *external* anchor, which is
+        what G06 is for and why this module is still calibration-blocked.
+        """
+        from modules.reach.measure import WORD_BITS, freedom_budget, reachable_words
+
+        quantity = case.quantity
+        if quantity == "reachable_input_bits":
+            return len(reachable_words(target.n_rounds)) * WORD_BITS
+        if quantity == "reachable_block_words":
+            return len(reachable_words(target.n_rounds))
+        if quantity == "free_message_bits":
+            return freedom_budget(target.n_rounds).free_bits
+        raise _Unrecomputable(f"no independent recomputation for quantity {quantity!r}")
+
+    return {"exhaustive-anf": exhaustive_anf, "schedule-closure": schedule_closure}
+
+
 def check_primary_target() -> tuple[bool, str]:
     """Section 9: SHA-256 with round count a runtime parameter is the primary
     target of every module.
@@ -325,32 +428,41 @@ def make_checks(sheet: SpecSheet, decided: dict[str, Decision]):
             CaseKind.INTERMEDIATE_CONTROL,
             CaseKind.BLINDNESS,
         }
+        # How a control is *recomputed* depends on what the module measures, so
+        # the module declares the strategy rather than the gate assuming one.
+        # Before Module 2 existed this gate hard-coded exhaustive ANF, which is
+        # Module 1's quantity and no other module's.
+        recompute = _recomputers()[sheet.control_strategy]
         checked = 0
         for case in suite.cases:
             if case.kind not in control_kinds:
                 continue
             target = case.target_factory()
-            observed = algebraic_degree(target, target.n_in, target.n_out)
+            try:
+                observed = recompute(target, case)
+            except _Unrecomputable as exc:
+                return False, f"{case.case_id}: {exc}"
             if not case.comparator.holds(observed, case.expected):
                 return False, (
                     f"{case.case_id}: observed {observed} "
                     f"{case.comparator.value} {case.expected} does not hold"
                 )
             checked += 1
-        return True, f"{checked} controls recompute to their stated values by exhaustive ANF"
+        return True, (
+            f"{checked} controls recompute to their stated values via "
+            f"{sheet.control_strategy}"
+        )
 
     def check_blindness() -> tuple[bool, str]:
         if package is None:
             return no_package("a blindness class")
-        from verify.anf import algebraic_degree
-
-        blindness = _import(f"{package}.blindness.inverse_map")
-        outcome = blindness.check(
-            lambda target, n: algebraic_degree(target, n, n),
-            9,
-            test_id="scripts/readiness_report.py::check_blindness",
-            computation_id="READINESS-BLIND-001",
-        )
+        runner = _blindness_runners().get(package)
+        if runner is None:
+            return False, (
+                f"no blindness wiring is registered for {package}; section 6(c) "
+                "requires the class to be run, not merely present"
+            )
+        outcome = runner()
         return outcome.passed, f"{outcome.function_class} -> {outcome.observed}"
 
     def check_verify_path() -> tuple[bool, str]:

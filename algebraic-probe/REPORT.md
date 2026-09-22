@@ -28,9 +28,10 @@ with every deviation reported; provenance chain verified.
 | F — exhaustion | Keccak-f[25] and MiMC/GF(2^9) exhausted; bound **sound at every round**, tight at 1–4, gap 2 at round 5. No gate changed, nothing promoted |
 | G — witness | Probe calibrated against known truth: **0 witnesses in 750 draws** above the exact degree; measured rate exceeds the worst-case model by 2×–2540×. D-010 not reopened |
 | H — landscape | The null **was** incomplete. Degree separates **0 of 5** hierarchical landscapes; a local-minimum count separates 5 of 5. Fourth blindness class added; nothing promoted |
+| J — M2 built | **Module 2**, unblocked by E-03. Union reachability complete at round **16**, per-output-bit at **21**. One registered hypothesis confirmed, one **refuted**. 9/11 gates; calibration-blocked on E-05 |
 | I — SHA-256 | **E-03 authorised.** Primary target implemented, FIPS-validated, **GO**. Naive ARX bound vacuous (512 from round 1); support-capping gives **32r−1**. Proven lower bound 16; one round saturates any exhaustible window |
 
-Per-stage detail in `checkpoints/` (A–I). Operator items in `ESCALATIONS.md` (11, one resolved).
+Per-stage detail in `checkpoints/` (A–J). Operator items in `ESCALATIONS.md` (11, one resolved).
 
 ### Stage A — the divergence was a loose bound, not a defect
 
@@ -63,7 +64,7 @@ not, at every round.
 
 ### Stage E — combined blindness
 
-**Four** implemented, run and passing blindness classes. Their union is the
+**Five** implemented, run and passing blindness classes. Their union is the
 honest description of what remains unexamined: anything expressible as a small
 implicit relation system over the extension field; anything over multiplicative
 or non-affine subsets (a distinguisher on **7** inputs where the degree measure
@@ -92,7 +93,7 @@ targets differ.
 | Module | Title | Module gates | Targets GO | Decision |
 |---|---|---:|---:|---|
 | **M1** | Algebraic degree growth vs round count | **11/11** | **5/7** | **PARTIAL** |
-| M2 | Dependency-graph reachability, free-round budget | 1/11 | — | NO-GO |
+| **M2** | Dependency-graph reachability, free-round budget | **9/11** | — | NO-GO (E-05) |
 | M3 | Differential characteristic search | 2/11 | — | NO-GO |
 | M4 | Higher-order differentials, integral distinguishers | 0/11 | — | NO-GO (+ depends on M1) |
 | M5 | Meet-in-the-middle and biclique structure | 2/11 | — | NO-GO |
@@ -517,9 +518,9 @@ semantics.
 ```bash
 git clone -b algo-games https://github.com/punkrockquantum/JRRToken.git
 cd JRRToken
-pytest -q -m "not slow"                      # 701 passed, 14 deselected
+pytest -q -m "not slow"                      # 754 passed, 14 deselected
 python scripts/ci_checks.py                  # checks=5 failed=0
-python scripts/mutation_test.py              # mutants=112 survivors=0
+python scripts/mutation_test.py              # mutants=120 survivors=0
 python scripts/readiness_report.py           # per-target go/no-go
 python scripts/execute.py                    # run what the gates authorise
 python scripts/exhaust.py                    # exhaustive exact degree, ~25s

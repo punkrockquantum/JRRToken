@@ -419,3 +419,77 @@ class BlockRestrictedMap:
             f"no output bit depends on more than {self.active} input bits, so the "
             f"degree cannot exceed {self.active - 1} at any round count"
         )
+
+
+@dataclass(frozen=True, slots=True)
+class CancellingXor:
+    """``f(x) = (A x) XOR (B x)`` over GF(2), with A and B sharing rows.
+
+    Present as a blindness class for Module 2. Reachability asks which input bits
+    *can* influence an output bit and answers by unioning the operands of every
+    operation, so it sees both ``A x`` and ``B x`` reaching every output. But the
+    function is ``(A XOR B) x``, and wherever A and B agree on a row that row of
+    the sum is zero -- the output bit is constant and depends on nothing.
+
+    ``shared_rows`` names the output bits where A and B are made identical, so
+    those bits are provably constant while remaining fully reachable. The gap is
+    the over-approximation, exhibited rather than asserted.
+    """
+
+    n: int
+    seed: int
+    shared_rows: tuple[int, ...]
+    rows_a: tuple[int, ...]
+    rows_b: tuple[int, ...]
+
+    target_id: str = "cancelling-xor-gf2"
+
+    @property
+    def n_in(self) -> int:
+        return self.n
+
+    @property
+    def n_out(self) -> int:
+        return self.n
+
+    @staticmethod
+    def create(n: int, seed: int, shared_rows: tuple[int, ...]) -> "CancellingXor":
+        if n < 1:
+            raise ValueError("n must be positive")
+        for row in shared_rows:
+            if not 0 <= row < n:
+                raise ValueError(f"shared row {row} out of range for n={n}")
+        rng = random.Random(seed)
+        rows_a = [rng.randrange(1, 1 << n) for _ in range(n)]
+        rows_b = [rng.randrange(1, 1 << n) for _ in range(n)]
+        for row in shared_rows:
+            rows_b[row] = rows_a[row]
+        return CancellingXor(
+            n=n,
+            seed=seed,
+            shared_rows=tuple(sorted(set(shared_rows))),
+            rows_a=tuple(rows_a),
+            rows_b=tuple(rows_b),
+        )
+
+    def _apply(self, rows: tuple[int, ...], x: int) -> int:
+        out = 0
+        for index, row in enumerate(rows):
+            if (row & x).bit_count() & 1:
+                out |= 1 << index
+        return out
+
+    def __call__(self, x: int) -> int:
+        _check_input(x, self.n, self.target_id)
+        # Written as two applications and an XOR, which is what makes the
+        # cancellation invisible to an operation-by-operation analysis.
+        return self._apply(self.rows_a, x) ^ self._apply(self.rows_b, x)
+
+    @property
+    def constant_output_bits(self) -> tuple[int, ...]:
+        """Output bits that are identically zero, by construction."""
+        return tuple(
+            index
+            for index in range(self.n)
+            if (self.rows_a[index] ^ self.rows_b[index]) == 0
+        )
