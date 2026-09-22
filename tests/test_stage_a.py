@@ -117,14 +117,22 @@ def test_the_derived_bound_carries_its_derivation() -> None:
     assert "exponent support" in mimc_derived_bound(_mimc(9, 4)).derivation
 
 
-def test_the_derived_quantity_is_refused_for_non_mimc_targets() -> None:
+def test_the_derived_quantity_is_refused_for_families_with_no_derivation() -> None:
+    """The derived-bound dispatch grew a second family when SHA-256 arrived
+    (D-042), so the refusal is no longer MiMC-specific. It must still refuse a
+    family that has no second argument to offer."""
+    from core.sha256 import SHA256Compression
     from core.targets import PowerMap
 
     class Case:
         quantity = "algebraic_degree_upper_bound_derived"
 
-    with pytest.raises(MeasurementRefused, match="specific to the MiMC"):
+    with pytest.raises(MeasurementRefused, match="no derived bound exists"):
         measure(PowerMap.create(9, 3), Case())
+
+    # MiMC and SHA-256 both have one, and it is not the propagated bound.
+    assert measure(MiMC.create(n=9, n_rounds=2), Case()) == 3
+    assert measure(SHA256Compression.create(n_rounds=4), Case()) == 127
 
 
 # -- A4: the mechanism is not an artefact of one field size -----------------

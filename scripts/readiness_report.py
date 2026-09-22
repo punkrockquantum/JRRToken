@@ -142,6 +142,9 @@ SAMPLE_TARGETS = {
     "power-map-gf2n": lambda: _import("core.targets").PowerMap.create(9, 31),
     "inverse-map-gf2n": lambda: _import("core.targets").InverseMap.create(9),
     "random-function-sha256-prf": lambda: _import("core.targets").RandomFunction.create(9, 9, 1),
+    "sha256-compression-parametrised": lambda: _import(
+        "core.sha256"
+    ).SHA256Compression.create(n_rounds=2),
 }
 
 
@@ -179,8 +182,6 @@ def make_target_gates(
     def check_measure_supports_target() -> tuple[bool, str]:
         if sheet.package is None:
             return False, "no module package exists"
-        if target_id.startswith("sha256"):
-            return False, "the target is absent, so no path can be exercised"
         measure_module = _import(f"{sheet.package}.measure")
         target = SAMPLE_TARGETS[target_id]()
         paths = []
@@ -219,12 +220,35 @@ def make_target_gates(
 
 def check_primary_target() -> tuple[bool, str]:
     """Section 9: SHA-256 with round count a runtime parameter is the primary
-    target of every module."""
-    from core import sha256 as target
+    target of every module.
+
+    The probe evaluates the target and checks bit-identity with ``hashlib`` on a
+    single padded block, because "importable" is not the property the gate is
+    about. A hand-rolled substitute would import fine and be wrong.
+    """
+    import hashlib
 
     try:
-        target.compress()
-        return True, "core.sha256.compress is callable"
+        from core.sha256 import FULL_ROUNDS, SHA256Compression, sha256
+
+        message = b"\x61" * 55
+        if sha256(message) != hashlib.sha256(message).digest():
+            return False, "core.sha256 is not bit-identical to hashlib.sha256"
+
+        padded = bytearray(message)
+        padded.append(0x80)
+        while len(padded) % 64 != 56:
+            padded.append(0x00)
+        padded += (len(message) * 8).to_bytes(8, "big")
+        block = int.from_bytes(padded, "big")
+
+        target = SHA256Compression.create(n_rounds=FULL_ROUNDS)
+        if target(block).to_bytes(32, "big") != hashlib.sha256(message).digest():
+            return False, "the target disagrees with hashlib on a full block"
+        return True, (
+            f"round-parametrised, bit-identical to hashlib at {FULL_ROUNDS} rounds, "
+            f"n_in={target.n_in} n_out={target.n_out}"
+        )
     except Exception as exc:
         return False, f"core/sha256.py raises {type(exc).__name__}: {str(exc)[:120]}"
 

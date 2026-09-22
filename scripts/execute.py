@@ -22,6 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from core.sha256 import SHA256Compression  # noqa: E402
 from core.targets import InverseMap, LinearMapGF2, PowerMap, RandomFunction  # noqa: E402
 from harness.readiness import Decision  # noqa: E402
 from harness.runner import ProvenanceRunner  # noqa: E402
@@ -44,9 +45,42 @@ INSTANCES: dict[str, list[tuple[str, object]]] = {
     "random-function-sha256-prf": [
         ("n=12 m=12 seed=20260825", RandomFunction.create(12, 12, 20260825))
     ],
+    # The primary target, authorised in D-041. Three parameterisations, because
+    # no one of them answers the question: the full 512-bit input carries the
+    # Tier P bound and refuses an exact value, while the restricted windows are
+    # exhaustible and give a Tier P lower bound on the full target (a
+    # restriction's degree never exceeds the function's). The window sits in
+    # W[0], the first message word any round consumes.
+    "sha256-compression-parametrised": [
+        (
+            "rounds=4 free=512",
+            SHA256Compression.create(n_rounds=4),
+        ),
+        (
+            "rounds=64 free=512",
+            SHA256Compression.create(n_rounds=64),
+        ),
+        (
+            "rounds=4 free=12 window=W0",
+            SHA256Compression.create(
+                n_rounds=4, free_bits=12, free_offset=SHA256Compression.WORD0_OFFSET
+            ),
+        ),
+        (
+            "rounds=64 free=12 window=W0",
+            SHA256Compression.create(
+                n_rounds=64, free_bits=12, free_offset=SHA256Compression.WORD0_OFFSET
+            ),
+        ),
+    ],
 }
 
 WITNESS_SEEDS = list(range(20260901, 20260901 + 50))
+
+#: Probe dimension used where no exact degree is available to aim at. 16 costs
+#: 2^16 target evaluations per seed, which is affordable on SHA-256; the proven
+#: lower bound is whatever dimension actually witnesses.
+WITNESS_FALLBACK_DIM = 16
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,42 +154,108 @@ def execute(write: bool) -> tuple[str, int]:
                     )
                 )
 
-            exact = m1.exact_degree(target)
-            space = EnumeratedSpace(
-                description=f"every input of the {n}-bit domain",
-                cardinality=1 << n,
-                full_cardinality=1 << n,
-                universe_description=f"the {n}-bit input space",
-            )
-            runner.record_result(
-                enumerated(
-                    metric="d_exact",
-                    value=exact,
-                    target=f"{target_id} {label}",
-                    provenance=runner.provenance(f"DEX-{target_id}-{label}"),
-                    space=space,
-                    payload={"output_bits": out_bits},
-                )
-            )
-
-            witness = m1.witness_lower_bound(target, exact, WITNESS_SEEDS)
-            if witness.witnessed:
+            # A second, tighter bound where the family admits one. Recording
+            # both is the point: the difference is what the extra argument
+            # bought, and for SHA-256 it is the difference between a vacuous
+            # bound and a usable one.
+            derived = None
+            try:
+                derived = m1.derived_upper_bound(target)
+            except m1.MeasurementRefused:
+                pass
+            if derived is not None:
                 runner.record_result(
                     prove(
-                        metric="d_lb",
-                        value=exact,
+                        metric="d_ub_derived",
+                        value=derived.value,
                         target=f"{target_id} {label}",
-                        provenance=runner.provenance(f"DLB-{target_id}-{label}"),
-                        derivation=witness.derivation,
-                        payload={"witness_seed": witness.witness_seed},
+                        provenance=runner.provenance(f"DUD-{target_id}-{label}"),
+                        derivation=derived.derivation,
+                        payload={
+                            "improvement_over_propagated": (
+                                bound.value - derived.value if bound is not None else None
+                            )
+                        },
                     )
                 )
+
+            # Nor does every target have an exact path. The 512-bit SHA-256
+            # target is over the exact guard by 499 bits, and the measure refuses
+            # rather than approximating. That refusal is recorded too: a target
+            # measured by bound alone must say so in the log, not simply omit a
+            # field.
+            exact = None
+            try:
+                exact = m1.exact_degree(target)
+            except m1.MeasurementRefused as exc:
+                runner.record_event(
+                    "no_exact_path",
+                    {"target": target_id, "instance": label, "reason": str(exc)},
+                )
+
+            if exact is not None:
+                full_space = getattr(target, "full_space_bits", n)
+                space = EnumeratedSpace(
+                    description=f"every input of the {n}-bit domain",
+                    cardinality=1 << n,
+                    full_cardinality=1 << full_space,
+                    universe_description=f"the {full_space}-bit input space",
+                )
+                runner.record_result(
+                    enumerated(
+                        metric="d_exact",
+                        value=exact,
+                        target=f"{target_id} {label}",
+                        provenance=runner.provenance(f"DEX-{target_id}-{label}"),
+                        space=space,
+                        payload={"output_bits": out_bits},
+                    )
+                )
+
+                witness = m1.witness_lower_bound(target, exact, WITNESS_SEEDS)
+                if witness.witnessed:
+                    runner.record_result(
+                        prove(
+                            metric="d_lb",
+                            value=exact,
+                            target=f"{target_id} {label}",
+                            provenance=runner.provenance(f"DLB-{target_id}-{label}"),
+                            derivation=witness.derivation,
+                            payload={"witness_seed": witness.witness_seed},
+                        )
+                    )
+            else:
+                # No exact value to aim the probe at, so the witness is run at the
+                # largest dimension the guard allows and reported as the proven
+                # lower bound it is.
+                witness = m1.witness_lower_bound(target, WITNESS_FALLBACK_DIM, WITNESS_SEEDS, n=n)
+                if witness.witnessed:
+                    runner.record_result(
+                        prove(
+                            metric="d_lb",
+                            value=WITNESS_FALLBACK_DIM,
+                            target=f"{target_id} {label}",
+                            provenance=runner.provenance(f"DLB-{target_id}-{label}"),
+                            derivation=witness.derivation,
+                            payload={"witness_seed": witness.witness_seed},
+                        )
+                    )
 
             lines.append(
                 f"module=M1 target={target_id} instance={label} "
                 + (
-                    f"d_ub={bound.value} gap={bound.value - exact} "
-                    f"bound_capped={bound.capped_by_permutation} "
+                    f"d_ub={bound.value} "
+                    + (
+                        f"gap={bound.value - exact} "
+                        if exact is not None
+                        else "gap=no-exact-path "
+                    )
+                    + (
+                        f"d_ub_derived={derived.value} "
+                        if derived is not None
+                        else ""
+                    )
+                    + f"bound_capped={bound.capped_by_permutation} "
                     if bound is not None
                     else "d_ub=no-bound-path gap=n/a "
                 )

@@ -28,8 +28,9 @@ with every deviation reported; provenance chain verified.
 | F — exhaustion | Keccak-f[25] and MiMC/GF(2^9) exhausted; bound **sound at every round**, tight at 1–4, gap 2 at round 5. No gate changed, nothing promoted |
 | G — witness | Probe calibrated against known truth: **0 witnesses in 750 draws** above the exact degree; measured rate exceeds the worst-case model by 2×–2540×. D-010 not reopened |
 | H — landscape | The null **was** incomplete. Degree separates **0 of 5** hierarchical landscapes; a local-minimum count separates 5 of 5. Fourth blindness class added; nothing promoted |
+| I — SHA-256 | **E-03 authorised.** Primary target implemented, FIPS-validated, **GO**. Naive ARX bound vacuous (512 from round 1); support-capping gives **32r−1**. Proven lower bound 16; one round saturates any exhaustible window |
 
-Per-stage detail in `checkpoints/`. Operator items in `ESCALATIONS.md` (10).
+Per-stage detail in `checkpoints/` (A–I). Operator items in `ESCALATIONS.md` (11, one resolved).
 
 ### Stage A — the divergence was a loose bound, not a defect
 
@@ -90,7 +91,7 @@ targets differ.
 
 | Module | Title | Module gates | Targets GO | Decision |
 |---|---|---:|---:|---|
-| **M1** | Algebraic degree growth vs round count | **11/11** | **4/7** | **PARTIAL** |
+| **M1** | Algebraic degree growth vs round count | **11/11** | **5/7** | **PARTIAL** |
 | M2 | Dependency-graph reachability, free-round budget | 1/11 | — | NO-GO |
 | M3 | Differential characteristic search | 2/11 | — | NO-GO |
 | M4 | Higher-order differentials, integral distinguishers | 0/11 | — | NO-GO (+ depends on M1) |
@@ -107,7 +108,7 @@ targets differ.
 | random-function-sha256-prf | **GO** | — |
 | keccak-f[25] | NO-GO | T02 ground truth rests on unverified `CITE-BCD11` |
 | mimc-gf2n[9] | NO-GO | T02 ground truth rests on unverified `CITE-EGLORSW20` |
-| sha256-compression-parametrised | NO-GO | T01 target absent |
+| sha256-compression-parametrised | **GO** | — (E-03 authorised 2026-09-22) |
 
 Every M1 module-level gate now passes: pre-registration committed and matching
 its derivation, runner-precedes-prereg ancestry intact, calibration suite
@@ -126,25 +127,30 @@ provenance runner, and records refusals in the same append-only hash-chained log
 as the results — so the log says what was withheld as well as what was measured.
 
 ```
-authorised_runs=4
-refused  sha256-compression-parametrised   T01:target-available
+authorised_runs=5
 refused  keccak-f[25]                      T02:target-ground-truth-verified
 refused  mimc-gf2n[9]                      T02:target-ground-truth-verified
 ```
 
-| Target | Instance | `d_ub` (P) | `d_exact` (E) | gap | `d_lb` witnessed | space |
+| Target | Instance | `d_ub` (P) | `d_ub_derived` (P) | `d_exact` (E) | `d_lb` witnessed | space |
 |---|---|---:|---:|---:|---|---|
-| linear-map-gf2 | n=12 | 1 | 1 | 0 | yes | 2^12 |
-| power-map-gf2n | n=11, d=3 | 2 | 2 | 0 | yes | 2^11 |
-| power-map-gf2n | n=11, d=31 | 5 | 5 | 0 | yes | 2^11 |
-| inverse-map-gf2n | n=11 | 10 | 10 | 0 | yes | 2^11 |
-| random-function | n=12 | no bound path | 12 | — | yes | 2^12 |
+| **sha256-compression** | rounds=4, free=512 | 512 | **127** | refused | yes | 2^512 |
+| **sha256-compression** | rounds=64, free=512 | 512 | 512 | refused | yes | 2^512 |
+| **sha256-compression** | rounds=4, free=12, W[0] | 12 | 12 | **12** | yes | 2^12 of 2^512 |
+| **sha256-compression** | rounds=64, free=12, W[0] | 12 | 12 | **12** | yes | 2^12 of 2^512 |
+| linear-map-gf2 | n=12 | 1 | — | 1 | yes | 2^12 |
+| power-map-gf2n | n=11, d=3 | 2 | — | 2 | yes | 2^11 |
+| power-map-gf2n | n=11, d=31 | 5 | — | 5 | yes | 2^11 |
+| inverse-map-gf2n | n=11 | 10 | — | 10 | yes | 2^11 |
+| random-function | n=12 | no bound path | — | 12 | yes | 2^12 |
 
-The bound is exact on every control. The random-oracle stand-in has no round
-structure to propagate through and the measure refuses rather than inventing
-one; that refusal is recorded, not skipped.
+The bound is exact on every control. Two refusals are recorded rather than
+skipped: the random-oracle stand-in has no round structure to propagate a bound
+through, and the 512-bit SHA-256 target is over the exact-degree guard by 499
+bits — so it is measured by bound and witness alone, and the log says so instead
+of omitting a field.
 
-Run log: `runs/PREREG-M1/…jsonl`, 20 records, content-addressed, carrying the
+Run log: `runs/PREREG-M1/…jsonl`, 35 records, content-addressed, carrying the
 commit and the pre-registration digest.
 
 ---
@@ -460,8 +466,9 @@ cache, so the harness now purges `__pycache__` on both sides of each mutation.
 
 **Operator**
 
-1. **Vendor the parametrised SHA-256 target.** Unblocks T01 on every module — the
-   highest-leverage single action. `core/sha256.py` lists its four preconditions.
+1. ~~**Vendor the parametrised SHA-256 target.**~~ **DONE 2026-09-22** — authorised,
+   implemented here, FIPS-validated against `hashlib`, GO. See D-041, D-042 and
+   `checkpoints/I-sha256.md`.
 2. **Transcribe two ground-truth values** — per-round Keccak-f degree bounds
    (ePrint 2010/589) and MiMC degree growth (ePrint 2020/182), with table or
    theorem numbers. Both hosts are blocked by this environment's egress proxy;
@@ -510,12 +517,13 @@ semantics.
 ```bash
 git clone -b algo-games https://github.com/punkrockquantum/JRRToken.git
 cd JRRToken
-pytest -q -m "not slow"                      # 638 passed, 13 deselected
+pytest -q -m "not slow"                      # 701 passed, 14 deselected
 python scripts/ci_checks.py                  # checks=5 failed=0
-python scripts/mutation_test.py              # mutants=104 survivors=0
+python scripts/mutation_test.py              # mutants=112 survivors=0
 python scripts/readiness_report.py           # per-target go/no-go
 python scripts/execute.py                    # run what the gates authorise
 python scripts/exhaust.py                    # exhaustive exact degree, ~25s
+python scripts/sha256_degree.py              # the primary target, all three arms, ~2m
 python scripts/witness_calibration.py        # probe vs known truth, ~28s
 python scripts/landscape.py                  # what the degree measure cannot see, ~1s
 python -m modules.degree.calibration         # what Module 1 asserts
@@ -545,7 +553,9 @@ M1 is PARTIAL: sound machinery, four of seven targets clear. The three that are
 not are blocked on inputs only you can supply — one absent target and two
 untranscribed literature values. M2–M6 have no package and remain NO-GO.
 
-Nothing has been run against SHA-256. The ten defects — nine of them found after
+SHA-256 has now been measured: a Tier P bound of 32r−1 through round 16, a proven
+lower bound of 16 from two independent routes, and the finding that one round
+saturates the degree in any window small enough to exhaust. The ten defects — nine of them found after
 the suite was green and every mutant had died — are the strongest evidence
 available that the enforcement here is real rather than documentary.
 

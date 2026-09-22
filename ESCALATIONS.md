@@ -92,7 +92,7 @@ which is why it is here.
 
 ---
 
-## E-03 — C1, the parametrised SHA-256 target cannot be vendored
+## E-03 — RESOLVED 2026-09-22: the SHA-256 target is implemented and measuring
 
 **Blocked.** `sha256-testbed` is not reachable from this session: GitHub access is
 scoped to `punkrockquantum/jrrtoken`, and `add_repo` for anything else returns
@@ -107,6 +107,23 @@ SHA-256's message schedule); M3, M5, M6 calibration; the SHA-256 arm of M4.
 **Resolution:** attach the repository, or authorise a fresh implementation here
 with its FIPS 180-4 validation committed — a different instruction from the one
 given, so I have not taken it.
+
+**RESOLVED.** The operator authorised a fresh implementation on 2026-09-22.
+`core/sha256.py` is now a round-parametrised SHA-256 compression function,
+bit-identical to `hashlib.sha256` at 64 rounds over every length from 0 to 200
+bytes, the padding boundaries, a 300-case fixed pseudo-random set and a 1 MB
+input. Its constants are *derived* from the FIPS 180-4 definitions in exact
+integer arithmetic, not transcribed. 37 validation tests, 8 mutants, all killed.
+Gate T01 passes; `sha256-compression-parametrised` is **GO** and appears in the
+run log for the first time. Detail in D-041 and D-042; results in
+`checkpoints/I-sha256.md`.
+
+What remains blocked and what does not: T02 still blocks `keccak-f[25]` and
+`mimc-gf2n` on E-04, and M2/M3/M5/M6 remain unbuilt — but they are no longer
+blocked on a *missing target*, only on being written. The historical record of
+the block is kept below.
+
+---
 
 **Checked and ruled out, 2026-09-19.** This repository carries a branch named
 `claude/sha256-cryptanalysis-testbed-zda2ab`, which the name suggests is the

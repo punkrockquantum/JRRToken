@@ -1083,3 +1083,98 @@ point arrived at independently.
 **Not done:** the brief's text still says "ARX and arithmetisation-oriented".
 Changing a brief is the operator's act, not mine. The README states the narrowed
 scope and the reason; the discrepancy with the brief is recorded here.
+
+---
+
+## D-041 — the SHA-256 target, authorised and implemented here
+
+The operator authorised a fresh implementation on 2026-09-22, the target having
+been blocked since Stage C (E-03). The brief's instruction was to vendor
+`sha256-testbed` and not rewrite it; that repository is unreachable from this
+session, and the authorisation supersedes the instruction for this one target.
+
+**Three of the four preconditions `core/sha256.py` declared apply unchanged and
+are met. The fourth does not apply and is recorded as superseded:**
+
+| precondition | state |
+|---|---|
+| FIPS 180-4 validation runs here, outcome committed | met — `tests/test_core_sha256.py`, 37 tests |
+| bit-identity with `hashlib.sha256` at 64 rounds over a committed vector set | met — every length 0–200 bytes, the padding boundaries either side of 56 and 120, a 300-case fixed pseudo-random set, and a 1 MB input |
+| no constant transcribed | met — see below |
+| upstream commit id of vendored code | n/a; superseded by this entry |
+
+**Constants are derived, not copied.** FIPS 180-4 defines K[i] as the first 32
+bits of the fractional part of the cube root of the i-th prime, and H[i] the same
+for the square root. Both are computed in exact integer arithmetic — an integer
+cube root and `math.isqrt`, no floating point — so there is no rounding to argue
+about, exactly as `core/keccak.py` derives its rho offsets and iota LFSR rather
+than tabling them. `hashlib` then validates the derivation: a wrong constant
+cannot survive a digest comparison, and a mutant (`ARX-05`) that takes the wrong
+32 bits of the scaled root is killed.
+
+**Parametrisation.** The round count is a runtime parameter in [0, 64], and the
+message schedule is computed for as many words as that count needs and no more,
+so a reduced-round target cannot silently depend on schedule words it never
+consumes. A `free_bits`/`free_offset` window restricts the input for the
+exhaustive arm, and the target reports `space_fraction` so a Tier E result over a
+window prints what fraction of the 2^512 universe it covers.
+
+**One parametrisation detail that changed a result.** The free window initially
+defaulted to block offset 0, which lands in W[15] — a word no round below 15
+consumes. Every reduced-round measurement therefore read a constant and returned
+degree 0: true, sound, and useless. The window now sits at offset 480, in W[0],
+which round 0 consumes. This is recorded because the first run of the exhaustive
+arm produced eighteen cells of zeros and they were correct.
+
+## D-042 — the naive ARX degree bound is vacuous, and support tracking fixes it
+
+`SymbolicWord` carries one number per bit. Adding modular addition to it is
+straightforward — `z_i = x_i ^ y_i ^ c_{i-1}`, `c_i = maj(x_i, y_i, c_{i-1})`,
+both sound — and the result is worthless. Traced through
+`core.sha256.compress`, the propagated value is
+
+```
+1 round    4,526
+2 rounds   253,776,261
+3 rounds   15,901,022,549,468
+```
+
+Only the free-variable ceiling keeps it finite, so the reported bound is 512 at
+every round count from 1 to 64. Sound, and it says nothing.
+
+**Chosen: track each bit's variable support alongside its degree, and cap at
+`popcount(support)` after every operation.** The missing fact is elementary — a
+Boolean function of a variable set S has degree at most |S| — and applying it at
+each step rather than once at the end is what stops the product terms
+compounding. `SupportWord` implements it and the bound becomes
+
+```
+rounds    1    2    3    4    8   12   16   17+
+naive   512  512  512  512  512  512  512  512
+capped   31   63   95  127  255  383  511  512
+```
+
+which is exactly 32r − 1 through round 16: each round consumes one 32-bit message
+word, and the top bit's degree comes from a carry spanning all but one of the
+variables below it.
+
+**Both bounds are recorded, not just the better one.** This follows MiMC's
+precedent (`mimc_bound` beside `mimc_derived_bound`): the run log carries `d_ub`
+and `d_ub_derived`, and their difference — up to 481 bits — is the measurement of
+what the extra argument bought. A log showing only the tighter number would hide
+that.
+
+**Rejected: replacing `SymbolicWord` with `SupportWord` everywhere.** The
+Keccak and MiMC paths are validated and their bounds are already tight (gap 0 at
+rounds 1–4 on Keccak-f[25]). Rewriting them for a benefit they do not need would
+put the validated reference and the thing under test in the same new code. The
+ARX path uses the new type; the others are untouched.
+
+**What the arms cannot establish, stated rather than left implied.** The
+round-dependence of 32r − 1 is not exhaustively checkable here. A restricted
+target saturates at its own free-variable count — the exhaustive arm found exact
+degree equal to the window width in 18 of 18 cells, at every round count from 1
+to 64 — so the restriction ceiling bites before the round count does. Seeing
+round-dependence would need a window wider than 32 bits, at least 4.3×10^9
+evaluations. The round-dependence is Tier P only, and the exhaustive arm
+establishes soundness and a lower bound rather than tightness.
