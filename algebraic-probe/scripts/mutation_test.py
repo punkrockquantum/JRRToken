@@ -810,6 +810,86 @@ CATALOGUE: tuple[Mutant, ...] = (
         ("tests/test_stats_clopper_pearson.py",),
         "the binomial tail omits its last term, so it is no longer a CDF",
     ),
+    # -- arx (sha-256) -------------------------------------------------------
+    Mutant(
+        "ARX-01",
+        "arx",
+        "modules/degree/measure.py",
+        "        return min(degree, support.bit_count()), support",
+        "        return degree, support",
+        ("tests/test_sha256_degree.py",),
+        "the support cap is removed, so modular addition's carry rule multiplies "
+        "the bound again and the SHA-256 bound goes back to being vacuous",
+    ),
+    Mutant(
+        "ARX-02",
+        "arx",
+        "modules/degree/measure.py",
+        "        return cls._cap(a[0] + b[0], a[1] | b[1])",
+        "        return cls._cap(max(a[0], b[0]), a[1] | b[1])",
+        ("tests/test_sha256_degree.py",),
+        "AND takes a maximum instead of a sum, which makes the bound unsound "
+        "because a product of two degree-1 bits has degree 2",
+    ),
+    Mutant(
+        "ARX-03",
+        "arx",
+        "modules/degree/measure.py",
+        "        return cls._cap(max(d for d, _ in live), _union(live))",
+        "        return cls._cap(max(d for d, _ in live), live[0][1])",
+        ("tests/test_sha256_degree.py",),
+        "XOR keeps only the first operand's support, so the cap is computed "
+        "against too few variables and the bound is unsound",
+    ),
+    Mutant(
+        "ARX-04",
+        "arx",
+        "modules/degree/measure.py",
+        "            carry = self._xor(\n                self._and(x, y), self._and(x, carry), self._and(y, carry)\n            )",
+        "            carry = self._and(x, y)",
+        ("tests/test_sha256_degree.py",),
+        "the carry drops its two propagate terms, so the chain no longer "
+        "accumulates and the addition bound is unsound",
+    ),
+    Mutant(
+        "ARX-05",
+        "arx",
+        "core/sha256.py",
+        "    return scaled & MASK32",
+        "    return scaled >> WORD_BITS & MASK32",
+        ("tests/test_core_sha256.py",),
+        "the constants take the wrong 32 bits of the scaled root, so every "
+        "digest is wrong",
+    ),
+    Mutant(
+        "ARX-06",
+        "arx",
+        "core/sha256.py",
+        "    return (x & y) ^ ((~x & MASK32) & z)",
+        "    return (x & y) ^ (x & z)",
+        ("tests/test_core_sha256.py",),
+        "Ch loses its complement, so the compression function is not SHA-256",
+    ),
+    Mutant(
+        "ARX-07",
+        "arx",
+        "core/sha256.py",
+        "        h, g, f, e = g, f, e, (d + t1) & MASK32",
+        "        h, g, f, e = g, f, e, (d ^ t1) & MASK32",
+        ("tests/test_core_sha256.py",),
+        "a modular addition in the round function becomes an XOR, removing the "
+        "carry chain that makes the target ARX at all",
+    ),
+    Mutant(
+        "ARX-08",
+        "arx",
+        "core/sha256.py",
+        "        return (self.fixed_block & keep) | (x << self.free_offset)",
+        "        return (self.fixed_block & keep) | x",
+        ("tests/test_core_sha256.py", "tests/test_sha256_degree.py"),
+        "the free window ignores its offset, so every restricted target varies "
+        "W[15] and a reduced-round measurement reads a constant",
+    ),
     # -- landscape -----------------------------------------------------------
     Mutant(
         "LAND-01",

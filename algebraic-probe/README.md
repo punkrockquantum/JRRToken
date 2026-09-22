@@ -1,7 +1,8 @@
 # algebraic-probe
 
-An instrument for bounding the algebraic attack surface of **arithmetisation-oriented**
-hash functions and permutations, with a secondary bit-oriented arm.
+An instrument for bounding the algebraic attack surface of hash functions and
+permutations: **SHA-256** (ARX), **Keccak-f** (bit-oriented) and
+**arithmetisation-oriented** designs.
 
 Its output is bounds, distributions and scope statements. It does not claim a
 break and it does not claim impossibility. For a given technique applied to a
@@ -23,8 +24,8 @@ about whether the apparatus is pointed at anything.
 
 | Tier | Meaning | Results in the committed run logs |
 |---|---|---:|
-| **P** | deductive — a certified bound or a witnessed lower bound | **35** |
-| **E** | exhausted — the whole input space consumed | **19** |
+| **P** | deductive — a certified bound or a witnessed lower bound | **82** |
+| **E** | exhausted — the whole input space consumed | **38** |
 | **S** | sampled — ≥30 seeds, distribution reported | **0** |
 
 Every number this instrument has emitted is deductive or exhaustive.
@@ -100,7 +101,55 @@ enforcement in Python is bounded by what `object.__setattr__` can undo.
 
 ## Findings
 
-### 1. MiMC's degree growth is far slower than doubling — Tier E, in-repo
+### 1. SHA-256: the naive ARX bound is vacuous; support-capping fixes it
+
+The primary target, measured for the first time (E-03 authorised 2026-09-22).
+SHA-256's non-linearity is modular addition, and a degree bound that tracks only
+a number per bit lets the carry rule *multiply* it: traced through
+`core.sha256.compress` the propagated value is **4,526** after one round,
+**2.5×10⁸** after two, **1.6×10¹³** after three. Only the free-variable ceiling
+keeps it finite, so the bound is 512 at every round count — sound, and useless.
+
+Tracking each bit's variable *support* alongside its degree and capping at
+`popcount(support)` after every operation restores the elementary fact that a
+function of *k* variables has degree at most *k*:
+
+| rounds | 1 | 2 | 3 | 4 | 8 | 12 | 16 | 17+ |
+|---|---|---|---|---|---|---|---|---|
+| naive | 512 | 512 | 512 | 512 | 512 | 512 | 512 | 512 |
+| **support-capped** | **31** | **63** | **95** | **127** | **255** | **383** | **511** | 512 |
+
+Exactly **32r − 1** through round 16 — one message word per round, with the top
+bit's degree coming from a carry spanning all but one of the variables below it.
+Improvement up to **481 bits**. Both bounds are recorded in the run log, as
+`d_ub` and `d_ub_derived`.
+
+**Lower bounds, two independent ways.** A restriction's degree never exceeds the
+function's, so exhausting a *k*-bit window of W[0] proves a lower bound on the
+unrestricted target. In 18 of 18 cells — three window widths × six round counts
+from 1 to 64 — the exact degree **saturates at the window width**, and soundness
+holds in every cell. Independently, a witnessed derivative on the full 512-bit
+input fires on the first seed at *k* = 8, 12 and 16 at every round count. Proven
+lower bound: **16**.
+
+```
+rounds=1     16 <= deg <= 31
+rounds=4     16 <= deg <= 127
+rounds=64    16 <= deg <= 512
+```
+
+**One round is enough to saturate.** The reading — a statement about the
+technique, not a claim about SHA-256 — is that degree-based higher-order
+differentials need a derivative order this bound puts out of reach, and the
+degree is already full in any feasibly-exhaustible subspace after a single round.
+This instrument's degree arm has no purchase on SHA-256 beyond round 1.
+
+**Not established:** the round-dependence of 32r − 1 is Tier P only. A restricted
+target saturates at its own free-variable count, so the restriction ceiling bites
+before the round count does; checking it exhaustively needs a window wider than
+32 bits, ≥ 4.3×10⁹ evaluations. See `checkpoints/I-sha256.md`.
+
+### 2. MiMC's degree growth is far slower than doubling — Tier E, in-repo
 
 Exact algebraic degree of *r*-round MiMC over GF(2^*n*), exhaustive ANF over the
 whole input space, *r* = 1…10:
@@ -128,7 +177,7 @@ forbidden by the brief.
 `mimc_derived_bound` implements a sound, tighter bound from the exponent support
 — mean gap against exact truth **0.44** versus **1.33** for doubling.
 
-### 2. The Keccak-f[25] bound is exactly tight for four rounds, then loose by 2
+### 3. The Keccak-f[25] bound is exactly tight for four rounds, then loose by 2
 
 Exhaustive exact degree over all 2²⁵ inputs, via a bit-packed Möbius transform
 (`verify/packed.py`, `verify/keccak_columns.py`), ~25 s:
@@ -143,13 +192,13 @@ All 25 output lanes carry the same degree at every round. The certified bound is
 **sound at every round measured** — falsifiable, and untestable before this
 arm existed, since the reference path guards at 24 variables.
 
-### 3. The witness probe never fires above the exact degree
+### 4. The witness probe never fires above the exact degree
 
 750 draws across 15 cells where a theorem says every derivative must vanish:
 **0 witnesses.** First check of the Tier S machinery against ground truth
 (`scripts/witness_calibration.py`).
 
-### 4. The recorded null was incomplete — degree is blind to landscape geometry
+### 5. The recorded null was incomplete — degree is blind to landscape geometry
 
 Put to me from outside: a landscape can be locally indistinguishable from random
 while globally organised, so "no local signal" may have been recorded as "no
@@ -175,7 +224,7 @@ The general finding is the stronger one: **every statistic measured here has a
 regime where it reports "no structure" about a landscape that has structure by
 construction.** A landscape module would not remove blindness; it would move it.
 
-### 5. Composition defeats a monotone bound
+### 6. Composition defeats a monotone bound
 
 The iterated cube map over GF(2⁹) has an exact degree that *decreases* at rounds
 4 and 6. A doubling bound is monotone and cannot reproduce a decrease. A
@@ -185,7 +234,7 @@ target, reaching 11 against a true degree of 1.
 The earlier gap = 0 controls were validating the *implementation*, not the
 instrument.
 
-### 6. Four blindness classes, each naming what the measure cannot see
+### 7. Four blindness classes, each naming what the measure cannot see
 
 | class | structure the degree measure misses |
 |---|---|
@@ -198,28 +247,24 @@ Their union is the honest description of what remains unexamined.
 
 ---
 
-## Scope: AO primary, bit-oriented secondary, ARX demoted
-
-The original brief named "ARX and arithmetisation-oriented". That has been
-narrowed, and the reason is visible in the target list:
+## Scope
 
 | target | family | state |
 |---|---|---|
-| `mimc-gf2n` | arithmetisation-oriented | **measured**, gate-blocked on E-04 |
-| `keccak-f[25]` | bit-oriented (AND/XOR/rotate) — *not* ARX | **measured**, gate-blocked on E-04 |
-| `sha256-compression-parametrised` | ARX | **absent** (E-03) |
+| `sha256-compression-parametrised` | ARX | **measured, GO** — E-03 authorised 2026-09-22 |
+| `mimc-gf2n` | arithmetisation-oriented | measured, gate-blocked on E-04 |
+| `keccak-f[25]` | bit-oriented (AND/XOR/rotate) — *not* ARX | measured, gate-blocked on E-04 |
 | linear / power / inverse / random | synthetic controls | measured, GO |
 
-**Every ARX target in this repository is SHA-256, and it was never available.**
-100% of what has been measured is AO, bit-oriented, or synthetic. The stated
-scope and the delivered scope did not match; the README no longer claims ARX as
-primary.
+**5 of 7 targets are GO, including the primary one.** Until E-03 was authorised,
+every ARX target in this repository was SHA-256 and it had never been available,
+so the README had demoted ARX. It is back, and it is now the only target with all
+three arms — Tier P bound, Tier E lower bound, Tier P witness — reported.
 
-The positive reason, from review and consistent with finding 1: degree analysis
-for ARX is mature and well-tooled — division property, monomial prediction. The
-live, contested, repeatedly-revised degree claims are in AO land, which is where
-graded evidence has purchase. Finding 1 is this instrument's own Tier E
-measurement of exactly that phenomenon.
+A note kept from review, because it still holds: degree analysis for ARX is
+mature and well-tooled (division property, monomial prediction), while the live,
+repeatedly-revised degree claims are in AO land. Findings 1 and 7 below are this
+instrument's own measurements of both sides.
 
 ---
 
@@ -248,18 +293,18 @@ to the bypass documented above.
 | `provenance/` — commit embedding, prereg hashing, hash chain, audit | implemented, tested |
 | `harness/` — registry, regime router, calibration gate, promotion gate, sweeps | implemented, tested |
 | `core/` — control targets, Keccak-f, MiMC, energy landscapes | implemented, validated |
-| `core/sha256.py` — the ARX target | absent; raises `NotAuthorised` (E-03) |
+| `core/sha256.py` — the ARX target | **implemented, validated, measuring**; bit-identical to `hashlib` at 64 rounds |
 | `verify/` — independent exhaustive paths: ANF, packed ANF, landscape | implemented, tested |
-| `modules/degree/` — Module 1 | built, measuring; **PARTIAL** (11/11 module gates, 4/7 targets GO) |
+| `modules/degree/` — Module 1 | built, measuring; **PARTIAL** (11/11 module gates, **5/7** targets GO) |
 | `modules/hod/` — Module 4 | built, calibration-blocked (E-05) |
-| Modules 2, 3, 5, 6 | not started; blocked on E-03/E-05 |
+| Modules 2, 3, 5, 6 | not started; no longer blocked on a missing target, only unwritten |
 
 ### Verification at this commit
 
 ```
-638 tests (fast lane), 0 failed
+701 tests (fast lane), 0 failed
 5 structural CI checks, 0 failed
-104 mutants across 12 layers, 0 survivors
+112 mutants across 13 layers, 0 survivors
 compliance audit: chains unbroken, deviations reported
 ```
 
@@ -269,9 +314,9 @@ compliance audit: chains unbroken, deviations reported
 
 ```bash
 cd algebraic-probe
-pytest -q -m "not slow"                  # 638 passed
+pytest -q -m "not slow"                  # 701 passed
 python scripts/ci_checks.py              # checks=5 failed=0
-python scripts/mutation_test.py          # mutants=104 survivors=0
+python scripts/mutation_test.py          # mutants=112 survivors=0
 python scripts/readiness_report.py       # per-target go/no-go
 python scripts/execute.py                # run what the gates authorise
 python scripts/exhaust.py                # exact degree over whole spaces, ~25s
@@ -291,7 +336,7 @@ git ancestry, so `fetch-depth: 0` is load-bearing in CI.
 
 | # | Blocker | What it holds up |
 |---|---|---|
-| **E-03** | the ARX target is not vendored | gate T01 everywhere; M2 entirely; M3/M5/M6 calibration. An *authorisation*, not a missing input — FIPS 180-4 specifies SHA-256 and `hashlib` validates it bit-exactly |
+| ~~E-03~~ | ~~the ARX target is not vendored~~ | **RESOLVED 2026-09-22** — authorised, implemented, validated, GO |
 | **E-04** | two ground-truth citations unreachable (egress) | M1 on `keccak-f[25]` and `mimc-gf2n` |
 | **E-05** | no published anchor exists for M2/M4/M6 | those modules ship calibration-blocked |
 | **E-01** | the Tier S closure is unconfirmed | whether the statistical layer has any purpose |

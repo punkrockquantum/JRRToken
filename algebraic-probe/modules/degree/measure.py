@@ -33,6 +33,10 @@ from typing import Any, Sequence
 
 from core.keccak import KeccakF, permute
 from core.mimc import MiMC
+from core.sha256 import WORD_BITS
+from core.sha256 import IV as SHA256_IV
+from core.sha256 import SHA256Compression
+from core.sha256 import compress as sha256_compress
 from core.targets import (
     BlockRestrictedMap,
     InverseMap,
@@ -85,6 +89,15 @@ class SymbolicWord:
     @staticmethod
     def zero(width: int) -> "SymbolicWord":
         return SymbolicWord([None] * width, width)
+
+    @staticmethod
+    def constant(value: int, width: int) -> "SymbolicWord":
+        """A known word. A set bit is the constant 1, of degree 0; a clear bit is
+        structurally zero, which is what keeps a constant from being charged as
+        an input."""
+        return SymbolicWord(
+            [0 if (value >> i) & 1 else None for i in range(width)], width
+        )
 
     # -- helpers -----------------------------------------------------------
 
@@ -160,6 +173,48 @@ class SymbolicWord:
 
     __ror__ = __or__
 
+    # -- modular addition, the non-linear step of an ARX design --------------
+    #
+    # This is the only operator here whose bound is position-dependent, and it is
+    # the reason an ARX degree bound behaves differently from a bit-oriented one.
+    # For z = x + y mod 2^w, with c the carry chain:
+    #
+    #   z_i = x_i XOR y_i XOR c_{i-1}          deg <= max of the three
+    #   c_i = maj(x_i, y_i, c_{i-1})           deg <= max of the pairwise sums
+    #       = (x_i & y_i) XOR (x_i & c_{i-1}) XOR (y_i & c_{i-1})
+    #
+    # c_{-1} is structurally zero, so c_0 = x_0 & y_0. Each carry can add the
+    # degree of an operand bit to the running carry degree, so the bound grows
+    # along the word rather than staying flat. Sound by construction: every rule
+    # is the degree of an XOR (a maximum) or of an AND (a sum).
+
+    @staticmethod
+    def _xor_degree(*degrees: int | None) -> int | None:
+        live = [d for d in degrees if d is not None]
+        return max(live) if live else None
+
+    @staticmethod
+    def _and_degree(a: int | None, b: int | None) -> int | None:
+        return None if (a is None or b is None) else a + b
+
+    def __add__(self, other: object) -> "SymbolicWord":
+        other = self._coerce(other)
+        if isinstance(other, int):
+            other = SymbolicWord.constant(other, self.width)
+        bits: list[int | None] = []
+        carry: int | None = None  # no carry in
+        for x, y in zip(self.bits, other.bits):
+            bits.append(self._xor_degree(x, y, carry))
+            carry = self._xor_degree(
+                self._and_degree(x, y),
+                self._and_degree(x, carry),
+                self._and_degree(y, carry),
+            )
+        # The carry out of the top bit is discarded: the sum is modulo 2^width.
+        return SymbolicWord(bits, self.width)
+
+    __radd__ = __add__
+
     def __invert__(self) -> "SymbolicWord":
         # Complement is affine: a structurally-zero bit becomes the constant 1.
         return SymbolicWord([0 if b is None else b for b in self.bits], self.width)
@@ -218,6 +273,289 @@ def keccak_bound(target: KeccakF) -> BoundResult:
                "coordinates are balanced" if capped else "")
         ),
         capped_by_permutation=capped,
+    )
+
+
+class SupportWord:
+    """A symbolic word that tracks *which* variables each bit depends on.
+
+    Why this exists, measured rather than asserted. ``SymbolicWord`` carries one
+    number per bit, and modular addition's carry rule
+    ``deg(c_i) <= max(dx+dy, dx+dc, dy+dc)`` makes that number *multiply* along a
+    word: traced through ``core.sha256.compress``, the propagated value is 4526
+    after one round, 2.5e8 after two and 1.6e13 after three. Only the
+    free-variable ceiling keeps it finite, so the bound is sound and says nothing.
+
+    The missing fact is elementary: a Boolean function of a variable set S has
+    degree at most |S|. Tracking the support alongside the degree and capping at
+    ``popcount(support)`` after every operation restores it. The cap is applied at
+    each step rather than once at the end, which is what stops the product terms
+    compounding.
+
+    A bit is ``None`` when structurally zero, else a pair
+    ``(degree_bound, support_mask)`` with the mask a bitmask over input variable
+    indices. Every rule below is the degree of an XOR (a maximum) or of an AND (a
+    sum), then capped -- so the result is still an upper bound.
+    """
+
+    __slots__ = ("bits", "width")
+
+    Bit = "tuple[int, int] | None"
+
+    def __init__(self, bits: Sequence[Any], width: int) -> None:
+        if len(bits) != width:
+            raise ValueError(f"expected {width} bits, got {len(bits)}")
+        self.bits = tuple(bits)
+        self.width = width
+
+    # -- constructors ------------------------------------------------------
+
+    @staticmethod
+    def variables(width: int, first_index: int = 0) -> "SupportWord":
+        """Each bit is a distinct input variable of degree 1."""
+        return SupportWord(
+            [(1, 1 << (first_index + i)) for i in range(width)], width
+        )
+
+    @staticmethod
+    def constant(value: int, width: int) -> "SupportWord":
+        return SupportWord(
+            [(0, 0) if (value >> i) & 1 else None for i in range(width)], width
+        )
+
+    # -- the cap that makes this worth having ------------------------------
+
+    @staticmethod
+    def _cap(degree: int, support: int) -> tuple[int, int]:
+        """A function of |support| variables has degree at most |support|."""
+        return min(degree, support.bit_count()), support
+
+    @classmethod
+    def _xor(cls, *bits: Any) -> Any:
+        live = [b for b in bits if b is not None]
+        if not live:
+            return None
+        return cls._cap(max(d for d, _ in live), _union(live))
+
+    @classmethod
+    def _and(cls, a: Any, b: Any) -> Any:
+        if a is None or b is None:
+            return None
+        return cls._cap(a[0] + b[0], a[1] | b[1])
+
+    # -- helpers -----------------------------------------------------------
+
+    def _coerce(self, other: object) -> "SupportWord | int":
+        if isinstance(other, SupportWord):
+            if other.width != self.width:
+                raise ValueError(f"width mismatch: {self.width} vs {other.width}")
+            return other
+        if isinstance(other, int):
+            return other
+        raise TypeError(f"cannot combine SupportWord with {type(other).__name__}")
+
+    @property
+    def degree(self) -> int:
+        live = [d for d, _ in (b for b in self.bits if b is not None)]
+        return max(live) if live else 0
+
+    @property
+    def support_size(self) -> int:
+        """Distinct input variables any bit of this word depends on."""
+        return _union([b for b in self.bits if b is not None]).bit_count()
+
+    # -- operators ---------------------------------------------------------
+
+    def __xor__(self, other: object) -> "SupportWord":
+        other = self._coerce(other)
+        if isinstance(other, int):
+            other = SupportWord.constant(other, self.width)
+        return SupportWord(
+            [self._xor(a, b) for a, b in zip(self.bits, other.bits)], self.width
+        )
+
+    __rxor__ = __xor__
+
+    def __and__(self, other: object) -> "SupportWord":
+        other = self._coerce(other)
+        if isinstance(other, int):
+            # Masking selects bits; it cannot raise a degree or a support.
+            return SupportWord(
+                [b if (other >> i) & 1 else None for i, b in enumerate(self.bits)],
+                self.width,
+            )
+        return SupportWord(
+            [self._and(a, b) for a, b in zip(self.bits, other.bits)], self.width
+        )
+
+    __rand__ = __and__
+
+    def __or__(self, other: object) -> "SupportWord":
+        other = self._coerce(other)
+        if isinstance(other, int):
+            return SupportWord(
+                [(0, 0) if (other >> i) & 1 else b for i, b in enumerate(self.bits)],
+                self.width,
+            )
+        # a | b = a ^ b ^ (a & b): the product term dominates unless one side is
+        # structurally zero, which is the rotation case and stays tight.
+        bits = []
+        for a, b in zip(self.bits, other.bits):
+            if a is None:
+                bits.append(b)
+            elif b is None:
+                bits.append(a)
+            else:
+                bits.append(self._cap(a[0] + b[0], a[1] | b[1]))
+        return SupportWord(bits, self.width)
+
+    __ror__ = __or__
+
+    def __invert__(self) -> "SupportWord":
+        return SupportWord(
+            [(0, 0) if b is None else b for b in self.bits], self.width
+        )
+
+    def __lshift__(self, amount: int) -> "SupportWord":
+        return SupportWord(
+            [self.bits[i - amount] if i >= amount else None for i in range(self.width)],
+            self.width,
+        )
+
+    def __rshift__(self, amount: int) -> "SupportWord":
+        return SupportWord(
+            [
+                self.bits[i + amount] if i + amount < self.width else None
+                for i in range(self.width)
+            ],
+            self.width,
+        )
+
+    def __add__(self, other: object) -> "SupportWord":
+        """Modular addition, with the carry chain capped at each position."""
+        other = self._coerce(other)
+        if isinstance(other, int):
+            other = SupportWord.constant(other, self.width)
+        bits = []
+        carry: Any = None
+        for x, y in zip(self.bits, other.bits):
+            bits.append(self._xor(x, y, carry))
+            carry = self._xor(
+                self._and(x, y), self._and(x, carry), self._and(y, carry)
+            )
+        return SupportWord(bits, self.width)
+
+    __radd__ = __add__
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"SupportWord(width={self.width}, degree={self.degree})"
+
+
+def _union(bits: Sequence[Any]) -> int:
+    total = 0
+    for _, support in bits:
+        total |= support
+    return total
+
+
+def sha256_support_bound(target: SHA256Compression) -> BoundResult:
+    """The refined ARX bound: degree propagation with variable-support capping.
+
+    Same trace of ``core.sha256.compress``, same operators, one extra fact --
+    that a bit depending on ``k`` variables has degree at most ``k``. Strictly
+    tighter than ``sha256_bound`` wherever the carry chain would otherwise
+    compound, and sound for the same reason: every rule is a maximum or a sum,
+    then a cap that can only lower the value.
+    """
+    words: list[SupportWord] = []
+    free = target.free_bits
+    free_mask = target.free_mask
+    for index in range(16):
+        low = WORD_BITS * (15 - index)
+        bits: list[Any] = []
+        for offset in range(WORD_BITS):
+            position = low + offset
+            if (free_mask >> position) & 1:
+                bits.append((1, 1 << position))
+            else:
+                bits.append((0, 0) if (target.fixed_block >> position) & 1 else None)
+        words.append(SupportWord(bits, WORD_BITS))
+
+    state = [SupportWord.constant(word, WORD_BITS) for word in SHA256_IV]
+    out = sha256_compress(words, state, target.n_rounds)
+
+    raw = max(word.degree for word in out)
+    support = max(word.support_size for word in out)
+    return BoundResult(
+        value=min(raw, free),
+        derivation=(
+            "per-bit degree propagated through core.sha256.compress with variable "
+            "support tracked alongside it: every rule is the degree of an XOR (a "
+            "maximum) or of an AND (a sum), capped after each operation at the "
+            "number of input variables in the bit's support, because a function of "
+            f"k variables has degree at most k. Over {target.n_rounds} rounds the "
+            f"bound is {raw} and the widest output support is {support} of {free} "
+            "free variables"
+        ),
+        capped_by_permutation=False,
+    )
+
+
+def sha256_bound(target: SHA256Compression) -> BoundResult:
+    """Trace the production compress() with symbolic words.
+
+    The same discipline as ``keccak_bound``: the target's own code is run, not
+    re-implemented, so the bound cannot drift from the function it describes.
+    ``core.sha256.compress`` uses XOR, AND, NOT, shifts, rotations and modular
+    addition, and every one of those is an operator on ``SymbolicWord``.
+
+    The free input is the message block; the chaining value is a constant, so the
+    initial state words carry degree 0 on their set bits and are structurally
+    zero elsewhere. A restricted target (``free_bits < 512``) fixes the rest of
+    the block, and those fixed bits enter as constants too -- which is why a
+    restricted bound is not simply the unrestricted one.
+    """
+    words: list[SymbolicWord] = []
+    free = target.free_bits
+    free_mask = target.free_mask
+    for index in range(16):
+        # Word i occupies block bits [32*(15-i), 32*(15-i)+32). A block bit is a
+        # free variable when it falls inside the low ``free`` bits.
+        low = WORD_BITS * (15 - index)
+        bits: list[int | None] = []
+        for offset in range(WORD_BITS):
+            position = low + offset
+            if (free_mask >> position) & 1:
+                bits.append(1)
+            else:
+                bits.append(0 if (target.fixed_block >> position) & 1 else None)
+        words.append(SymbolicWord(bits, WORD_BITS))
+
+    state = [SymbolicWord.constant(word, WORD_BITS) for word in SHA256_IV]
+    out = sha256_compress(words, state, target.n_rounds)
+
+    raw = max(word.degree for word in out)
+    # The compression function is not a permutation of its input, so the
+    # permutation cap does not apply. The only ceiling is the number of free
+    # variables.
+    bound = min(raw, free)
+    return BoundResult(
+        value=bound,
+        derivation=(
+            "per-bit degree propagated through core.sha256.compress itself: the "
+            "sigma functions and the feed-forward XORs are GF(2)-affine and carry "
+            "the bound unchanged, Ch and Maj are single ANDs per bit and add their "
+            "operands' bounds, and each modular addition propagates a carry chain "
+            "whose degree accumulates along the word (z_i = x_i ^ y_i ^ c_{i-1}, "
+            "c_i = maj(x_i, y_i, c_{i-1})). The propagated bound over "
+            f"{target.n_rounds} rounds is {raw}"
+            + (
+                f", capped at the {free} free input variables"
+                if bound < raw
+                else ""
+            )
+        ),
+        capped_by_permutation=False,
     )
 
 
@@ -398,8 +736,28 @@ def block_restricted_bound(target: BlockRestrictedMap) -> BoundResult:
     )
 
 
+def derived_upper_bound(target: Any) -> BoundResult:
+    """Tier P. A second, tighter bound where the target family admits one.
+
+    Kept separate from ``degree_upper_bound`` for the reason MiMC's derived bound
+    is: the naive propagation is the one whose looseness is worth reporting, and
+    a run log that showed only the tighter number would hide how much the extra
+    argument bought. Both are recorded, and their difference is the measurement.
+    """
+    if isinstance(target, SHA256Compression):
+        return sha256_support_bound(target)
+    if isinstance(target, MiMC):
+        return mimc_derived_bound(target)
+    raise MeasurementRefused(
+        f"no derived bound exists for {type(target).__name__}; the propagated "
+        "bound is the only one this module has for it"
+    )
+
+
 def degree_upper_bound(target: Any) -> BoundResult:
     """Tier P. Dispatch to the propagation path for this target family."""
+    if isinstance(target, SHA256Compression):
+        return sha256_bound(target)
     if isinstance(target, IteratedPowerMap):
         return iterated_power_bound(target)
     if isinstance(target, BlockRestrictedMap):
@@ -569,10 +927,5 @@ def measure(target: Any, case: Any) -> int:
     if quantity == "algebraic_degree_upper_bound":
         return degree_upper_bound(target).value
     if quantity == "algebraic_degree_upper_bound_derived":
-        if not isinstance(target, MiMC):
-            raise MeasurementRefused(
-                "the derived exponent-support bound is specific to the MiMC "
-                f"construction; {type(target).__name__} has no such derivation"
-            )
-        return mimc_derived_bound(target).value
+        return derived_upper_bound(target).value
     raise MeasurementRefused(f"no measurement path for quantity {quantity!r}")
