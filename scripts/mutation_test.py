@@ -810,6 +810,91 @@ CATALOGUE: tuple[Mutant, ...] = (
         ("tests/test_stats_clopper_pearson.py",),
         "the binomial tail omits its last term, so it is no longer a CDF",
     ),
+    # -- reach (module 2) ----------------------------------------------------
+    Mutant(
+        "RCH-01",
+        "reach",
+        "modules/reach/measure.py",
+        "SCHEDULE_OFFSETS = (16, 15, 7, 2)",
+        "SCHEDULE_OFFSETS = (16, 15, 7, 3)",
+        ("tests/test_module_reach.py", "tests/test_prereg_m2.py"),
+        "the schedule recurrence's back-references are wrong, so the transitive "
+        "closure describes a different message schedule",
+    ),
+    Mutant(
+        "RCH-02",
+        "reach",
+        "modules/reach/measure.py",
+        "            running = self._join(self._join(running, x), y)",
+        "            running = self._join(x, y)",
+        ("tests/test_module_reach.py",),
+        "addition stops accumulating the carry, so reachability no longer grows "
+        "upward along the word and the bound is unsound",
+    ),
+    Mutant(
+        "RCH-03",
+        "reach",
+        "modules/reach/measure.py",
+        "    free = min(n_rounds, BLOCK_WORDS)",
+        "    free = n_rounds",
+        ("tests/test_module_reach.py",),
+        "the freedom budget keeps accumulating past round 16, overstating what an "
+        "attacker controls -- wrong in the direction that flatters an attack",
+    ),
+    Mutant(
+        "RCH-04",
+        "reach",
+        "modules/reach/measure.py",
+        "            return ReachWord(\n                [b if (coerced >> i) & 1 else None for i, b in enumerate(self.bits)],\n                self.width,\n            )",
+        "            return self",
+        ("tests/test_module_reach.py",),
+        "masking with a literal stops clearing bits, so bits that are provably "
+        "constant are reported as reachable",
+    ),
+    Mutant(
+        "RCH-05",
+        "reach",
+        "modules/reach/measure.py",
+        "    state = [ReachWord.constant(WORD_BITS) for _ in SHA256_IV]",
+        "    state = [ReachWord.inputs(WORD_BITS) for _ in SHA256_IV]",
+        ("tests/test_module_reach.py",),
+        "the chaining value is treated as free input, so the reachable set counts "
+        "bits the attacker does not control",
+    ),
+    Mutant(
+        "RCH-06",
+        "reach",
+        "modules/reach/blindness/cancellation.py",
+        "    return reachable_bits == n",
+        "    return True",
+        ("tests/test_blindness_cancellation.py",),
+        "the blindness class stops checking that reachability actually reports its "
+        "null, becoming a tautology",
+    ),
+    Mutant(
+        "RCH-07",
+        "reach",
+        "modules/reach/blindness/cancellation.py",
+        "    return len(constant_bits) > 0",
+        "    return True",
+        ("tests/test_blindness_cancellation.py",),
+        "the blindness class stops checking that the counterexample has constant "
+        "output bits, so it would pass against a function with none",
+    ),
+    Mutant(
+        "RCH-08",
+        "reach",
+        "verify/dependence.py",
+        "            differing |= f(x) ^ f(x | direction)",
+        "            differing = f(x) ^ f(x | direction)",
+        ("tests/test_verify_dependence.py",),
+        "the difference is assigned rather than accumulated, so only the last "
+        "input decides and dependence visible at any earlier input is lost. "
+        "Note: skipping the unordered-pair guard is an *equivalent* mutant, "
+        "because the accumulator is |= and the second visit contributes "
+        "f(x) ^ f(x) = 0 -- the accumulation is what carries the behaviour, so "
+        "the accumulation is what is mutated",
+    ),
     # -- arx (sha-256) -------------------------------------------------------
     Mutant(
         "ARX-01",

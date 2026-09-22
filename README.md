@@ -234,7 +234,36 @@ target, reaching 11 against a true degree of 1.
 The earlier gap = 0 controls were validating the *implementation*, not the
 instrument.
 
-### 7. Four blindness classes, each naming what the measure cannot see
+### 7. SHA-256's dependency graph: two completeness rounds, five apart — Tier P
+
+Module 2, buildable only once E-03 resolved. Reachability and degrees of freedom,
+both deductive.
+
+| quantity | value |
+|---|---|
+| union of reachable bits complete at round | **16** |
+| every output bit reaches every input bit at round | **21** |
+| free message bits | 512, saturating at round 16 |
+| last directly settable round | 15 |
+
+Round 16 consumes the last block word, so the union going complete there is
+expected. That *every output bit individually* takes five more rounds is the
+finding: rounds 16–20 are the only regime where a dependency-based distinguisher
+could live.
+
+**A pre-registered prediction of mine was refuted.** PREREG-M2 H2 predicted that
+bit-level propagation would be strictly tighter than the word-level closure
+somewhere. It never is — `word_level_overstatement` is 0 at every round count.
+Modular addition's carry chain unions every operand bit at or below each
+position, so every bit of a consumed word becomes reachable anyway. That is a
+fact about ARX mixing, not about the implementation. The test asserts the
+refutation rather than being deleted.
+
+**Reachability is not dependence, and the module never says it is.**
+`CancellingXor` — `f(x) = (A x) XOR (B x)` with A and B sharing rows — is fully
+reachable with output bits that are *identically zero*, verified exhaustively.
+
+### 8. Five blindness classes, each naming what the measure cannot see
 
 | class | structure the degree measure misses |
 |---|---|
@@ -242,6 +271,7 @@ instrument.
 | `saturated_power` | univariate tractability under Boolean saturation |
 | `multiplicative_coset` | non-affine structure: a distinguisher on **7** inputs where the degree measure demands **2⁹** |
 | `landscape_geometry` | hierarchical organisation of the search landscape |
+| `cancellation` (M2) | terms that cancel: full reachability with constant outputs |
 
 Their union is the honest description of what remains unexamined.
 
@@ -294,17 +324,18 @@ to the bypass documented above.
 | `harness/` — registry, regime router, calibration gate, promotion gate, sweeps | implemented, tested |
 | `core/` — control targets, Keccak-f, MiMC, energy landscapes | implemented, validated |
 | `core/sha256.py` — the ARX target | **implemented, validated, measuring**; bit-identical to `hashlib` at 64 rounds |
-| `verify/` — independent exhaustive paths: ANF, packed ANF, landscape | implemented, tested |
+| `verify/` — independent exhaustive paths: ANF, packed ANF, landscape, dependence | implemented, tested |
 | `modules/degree/` — Module 1 | built, measuring; **PARTIAL** (11/11 module gates, **5/7** targets GO) |
+| `modules/reach/` — Module 2 | **built**, 9/11 gates, calibration-blocked (E-05) |
 | `modules/hod/` — Module 4 | built, calibration-blocked (E-05) |
-| Modules 2, 3, 5, 6 | not started; no longer blocked on a missing target, only unwritten |
+| Modules 3, 5, 6 | not started; no longer blocked on a missing target, only unwritten |
 
 ### Verification at this commit
 
 ```
-701 tests (fast lane), 0 failed
+754 tests (fast lane), 0 failed
 5 structural CI checks, 0 failed
-112 mutants across 13 layers, 0 survivors
+120 mutants across 14 layers, 0 survivors
 compliance audit: chains unbroken, deviations reported
 ```
 
@@ -314,9 +345,9 @@ compliance audit: chains unbroken, deviations reported
 
 ```bash
 cd algebraic-probe
-pytest -q -m "not slow"                  # 701 passed
+pytest -q -m "not slow"                  # 754 passed
 python scripts/ci_checks.py              # checks=5 failed=0
-python scripts/mutation_test.py          # mutants=112 survivors=0
+python scripts/mutation_test.py          # mutants=120 survivors=0
 python scripts/readiness_report.py       # per-target go/no-go
 python scripts/execute.py                # run what the gates authorise
 python scripts/exhaust.py                # exact degree over whole spaces, ~25s

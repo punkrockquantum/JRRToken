@@ -1178,3 +1178,97 @@ to 64 — so the restriction ceiling bites before the round count does. Seeing
 round-dependence would need a window wider than 32 bits, at least 4.3×10^9
 evaluations. The round-dependence is Tier P only, and the exhaustive arm
 establishes soundness and a lower bound rather than tightness.
+
+---
+
+## D-043 — Module 2 built; one registered hypothesis confirmed, one refuted
+
+E-03's resolution unblocked M2, whose subject is SHA-256's message schedule and
+which the completion brief ordered first. Section 9 declares its quantity as
+"input bits reachable to each output bit at round r; degrees of freedom" and its
+tier as **P only** — both parts are properties of the wiring, so nothing in the
+module enumerates or samples.
+
+**Two granularities, and its own propagation.** A transitive closure over the
+schedule recurrence at word level, and a reachable-set propagation through
+`core.sha256.compress` itself at bit level. `ReachWord` is written fresh rather
+than reusing `modules.degree.measure.SupportWord`: the two answer different
+questions — that one carries degree bounds and caps them, this one carries only
+sets — so a mistake in either is not shared.
+
+**PREREG-M2 registered two predictions before the measurement path existed.**
+
+**H3 confirmed.** The *union* of reachable bits is complete at round **16**, the
+round that consumes the last block word. But *every output bit individually*
+reaches every input bit only at round **21**. The five-round gap is where some
+output bits still cannot see some input bits, which is the regime a
+dependency-based distinguisher would have to live in.
+
+**H2 refuted.** The prediction was that bit-level propagation would be strictly
+tighter than the word-level closure somewhere, since rotations and shifts move
+bits rather than merging them. It never is: `word_level_overstatement` is **0 at
+every round count**. Modular addition's carry chain unions every operand bit at
+or below each position, and there are enough additions per round that every bit
+of a consumed word becomes reachable anyway. This is a fact about ARX mixing, not
+about the implementation — a design whose mixing were rotation-only would
+separate the two. The test asserts the refutation rather than being deleted, and
+the module docstring's original claim was corrected to match.
+
+**Freedom budget.** 512 bits, saturating at round 16 and never growing again:
+from round 16 the schedule determines each word from words already committed, so
+a later round spends what the first sixteen committed rather than adding freedom.
+The last directly settable round is 15. Mutant `RCH-03` makes the budget keep
+accumulating, which is wrong in the direction that flatters an attack.
+
+**Reachability is not dependence, and the module never says it is.** Section 6
+needs the blindness class, and `core.targets.CancellingXor` is it:
+`f(x) = (A x) XOR (B x)` presents every input bit as reaching every output, while
+on rows where A and B agree the sum is the zero row and the output bit is
+identically zero. Verified exhaustively by `verify/dependence.py`, which is also
+gate G10's independent path.
+
+**Calibration.** Section 5 requires a published anchor; neither brief names one
+for M2, so the suite is built with `allow_missing_ground_truth` and the module
+ships calibration-blocked (E-05), exactly as M4 does. Its five controls pass and
+the gate is not lifted by their passing. M2 stands at **9 of 11 gates**, the two
+outstanding being the untracked pre-registration (resolves on commit) and the
+absent anchor.
+
+## D-044 — two readiness gates were hard-coded to Module 1's quantity
+
+Adding a second module with a measurement path exposed this, which is the useful
+kind of discovery: G08 (controls-recompute) called `verify.anf.algebraic_degree`
+on every control, and G09 (blindness-test-passes) imported
+`blindness.inverse_map` by name. Both are Module 1 facts and neither is a
+property of "a module".
+
+**Chosen: the module declares, the gate dispatches.**
+
+`SpecSheet` gains `control_strategy`, naming how a control's stated value is
+recomputed independently of the module's own measure — `exhaustive-anf` for M1,
+`schedule-closure` for M2, which re-derives the reachability controls from the
+word-level closure rather than from the bit-set propagation `measure` uses. Two
+genuinely different computations, so one checks the other; it is *not* an external
+anchor, which is what G06 is for and why M2 remains calibration-blocked
+regardless.
+
+For G09, each module's blindness package now exposes a zero-argument
+`readiness_check()`. The classes take whatever measures their own demonstration
+needs and do not share a signature — M1's takes one measure, M2's takes two — so
+a uniform contract is the only thing the gate can call. The gate now knows no
+class name.
+
+Also fixed while here: `verify_symbol` is parsed as `module:symbol` and M2's was
+written with a dot, and `SpecSheet`'s new field was inserted before an
+undefaulted one.
+
+**One equivalent mutant identified rather than treated as a gap.** `RCH-08` was
+first written to remove the unordered-pair guard in `dependence_matrix`. It
+survived because the accumulator is `|=`, so the second visit to a pair
+contributes `f(x) ^ f(x) = 0` — the mutant is slower and identical. Replaced with
+one that assigns instead of accumulating, which *did* survive against the
+existing tests because every function they used happens to differ at its last
+input too. Fixed by adding `f(x) = x0 AND NOT x1`, whose dependence on bit 0 is
+invisible at the final comparison. Fourth equivalent mutant identified in this
+repository; the pattern each time is a guard or a step whose removal is masked by
+a later one.
