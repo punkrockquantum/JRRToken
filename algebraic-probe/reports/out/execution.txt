@@ -1,14 +1,18 @@
-commit=744715cdc8c1a760a40894447e1142017f23f5f2
-authorised_runs=4
-run_id=d978251dd021453da8b5746124349121 prereg_sha256=33f742cbdeae86fd
-refused module=M1 target=sha256-compression-parametrised blocking=['T01:target-available', 'T03:measurement-path-supports-target']
+commit=fd3ee9c3f0ac0a50e252dfd255d401ead1b36f74
+authorised_runs=5
+run_id=17cfa18bfe5147119a405d9ec6cf40fc prereg_sha256=196274c26b7b0189
 refused module=M1 target=keccak-f[25] blocking=['T02:target-ground-truth-verified']
 refused module=M1 target=mimc-gf2n[9] blocking=['T02:target-ground-truth-verified']
+refused module=M3 target=sha256-compression-parametrised blocking=['T02:target-ground-truth-verified']
+module=M1 target=sha256-compression-parametrised instance=rounds=4 free=512 d_ub=512 gap=no-exact-path d_ub_derived=127 bound_capped=False d_exact=None d_lb_witnessed=True witness_seed=20260901 space=2^512
+module=M1 target=sha256-compression-parametrised instance=rounds=64 free=512 d_ub=512 gap=no-exact-path d_ub_derived=512 bound_capped=False d_exact=None d_lb_witnessed=True witness_seed=20260901 space=2^512
+module=M1 target=sha256-compression-parametrised instance=rounds=4 free=12 window=W0 d_ub=12 gap=0 d_ub_derived=12 bound_capped=False d_exact=12 d_lb_witnessed=True witness_seed=20260904 space=2^12
+module=M1 target=sha256-compression-parametrised instance=rounds=64 free=12 window=W0 d_ub=12 gap=0 d_ub_derived=12 bound_capped=False d_exact=12 d_lb_witnessed=True witness_seed=20260904 space=2^12
 module=M1 target=linear-map-gf2 instance=n=12 seed=20260824 d_ub=1 gap=0 bound_capped=False d_exact=1 d_lb_witnessed=True witness_seed=20260901 space=2^12
 module=M1 target=power-map-gf2n instance=n=11 d=3 d_ub=2 gap=0 bound_capped=False d_exact=2 d_lb_witnessed=True witness_seed=20260901 space=2^11
 module=M1 target=power-map-gf2n instance=n=11 d=31 d_ub=5 gap=0 bound_capped=False d_exact=5 d_lb_witnessed=True witness_seed=20260901 space=2^11
 module=M1 target=inverse-map-gf2n instance=n=11 d_ub=10 gap=0 bound_capped=False d_exact=10 d_lb_witnessed=True witness_seed=20260902 space=2^11
 module=M1 target=random-function-sha256-prf instance=n=12 m=12 seed=20260825 d_ub=no-bound-path gap=n/a d_exact=12 d_lb_witnessed=True witness_seed=20260904 space=2^12
-records=20 head_hash=569bc0d6c2a72254
-log=runs/PREREG-M1/PREREG-M1.d978251dd021453da8b5746124349121.jsonl
-content_sha256=f5f5e3f394bbcad7
+records=36 head_hash=b5a0bc2ffce1b9da
+log=runs/PREREG-M1/PREREG-M1.17cfa18bfe5147119a405d9ec6cf40fc.jsonl
+content_sha256=cb26746f2da9bd8a

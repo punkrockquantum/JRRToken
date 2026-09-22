@@ -895,6 +895,38 @@ CATALOGUE: tuple[Mutant, ...] = (
         "f(x) ^ f(x) = 0 -- the accumulation is what carries the behaviour, so "
         "the accumulation is what is mutated",
     ),
+    # -- provenance coverage (D-054) -----------------------------------------
+    Mutant(
+        "COVR-01",
+        "provenance",
+        "scripts/ci_checks.py",
+        "        passed=bool(matching),",
+        "        passed=True,",
+        ("tests/test_ci_checks.py",),
+        "the check that a pre-registration has a run behind it stops failing, so "
+        "a prereg edited and never re-run passes CI silently -- the exact state "
+        "D-054 found the repository in",
+    ),
+    Mutant(
+        "COVR-02",
+        "provenance",
+        "scripts/ci_checks.py",
+        "            if digest == current_digest:",
+        "            if digest != current_digest:",
+        ("tests/test_ci_checks.py",),
+        "the coverage check counts the runs that do NOT reference the current "
+        "text, so an edited-and-never-re-run pre-registration looks best covered",
+    ),
+    Mutant(
+        "COVR-03",
+        "provenance",
+        "scripts/ci_checks.py",
+        "        if path.name == \"index.jsonl\":",
+        "        if False:",
+        ("tests/test_ci_checks.py",),
+        "the per-prereg index is counted as a run, inflating the denominator and "
+        "letting the index alone satisfy the check",
+    ),
     # -- differential (module 3) ---------------------------------------------
     Mutant(
         "DIFF-01",

@@ -71,3 +71,62 @@ def test_every_python_file_in_the_tree_parses() -> None:
         if ".pytest_cache" in path.parts:
             continue
         ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+
+# -- the pre-registration must have a run behind it --------------------------
+
+
+def _write_log(directory: Path, name: str, digest: str) -> None:
+    """A minimal run log: the check reads only the first record's digest."""
+    import json
+
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / name).write_text(
+        json.dumps({"kind": "run_start", "payload": {"prereg_sha256": digest}}) + "\n",
+        encoding="utf-8",
+    )
+
+
+def test_the_check_passes_when_a_run_references_the_current_text(tmp_path: Path) -> None:
+    from scripts.ci_checks import _prereg_run_coverage
+
+    _write_log(tmp_path, "a.jsonl", "aaaa")
+    _write_log(tmp_path, "b.jsonl", "bbbb")
+    result = _prereg_run_coverage("bbbb", tmp_path)
+    assert result.passed
+    assert "runs_referencing_current_text=1/2" in result.detail
+
+
+def test_the_check_fails_when_the_prereg_was_edited_and_not_re_run(tmp_path: Path) -> None:
+    """The failing branch, executed.
+
+    This is the state commit 2df6785 left the repository in: the
+    pre-registration was edited while every committed run referenced the older
+    text, so no run stood behind the document as it then read. Nothing in CI
+    reported it, which is why this check exists (D-054).
+    """
+    from scripts.ci_checks import _prereg_run_coverage
+
+    _write_log(tmp_path, "a.jsonl", "old-digest")
+    _write_log(tmp_path, "b.jsonl", "old-digest")
+    result = _prereg_run_coverage("new-digest", tmp_path)
+    assert not result.passed
+    assert "none of 2" in result.detail
+    assert "execute.py" in result.detail, "a failure must say how to clear it"
+
+
+def test_a_missing_run_directory_fails_rather_than_passing_vacuously(tmp_path: Path) -> None:
+    from scripts.ci_checks import _prereg_run_coverage
+
+    result = _prereg_run_coverage("any", tmp_path / "absent")
+    assert not result.passed
+
+
+def test_the_index_is_not_counted_as_a_run(tmp_path: Path) -> None:
+    """runs/<prereg>/index.jsonl sits beside the logs and is not one."""
+    from scripts.ci_checks import _prereg_run_coverage
+
+    _write_log(tmp_path, "index.jsonl", "current")
+    _write_log(tmp_path, "a.jsonl", "current")
+    result = _prereg_run_coverage("current", tmp_path)
+    assert "runs_referencing_current_text=1/1" in result.detail

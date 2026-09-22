@@ -1708,3 +1708,111 @@ is evidence that each new module is the only instrument capable of finding the
 next one. M5 and M6 should be expected to find more, and finding one is not a
 defect in this repository's discipline — failing to look would be.
 
+
+## D-054 — every committed run was non-compliant, and nothing said so
+
+A sense-check pass ran `scripts/synthesis.py` and found:
+
+```
+runs_audited=7
+every run: chain_valid=True prereg_digest_matches=False compliant=False
+```
+
+Chains intact, so no log had been tampered with. The failure was uniform and in
+one field: every run recorded `prereg_sha256=33f742cb…` while PREREG-M1.md now
+hashes to `196274c2…`.
+
+### What happened
+
+`git log` on the pre-registration shows four commits. Two edits (`7b86060`,
+`b61fd80`) precede the first run log and are the ones D-015 already covers — no
+run existed, so no result's digest referred to the earlier text. The fourth,
+**`2df6785`**, does not:
+
+```
+744715c (first run logs)  precedes  2df6785   True
+cc94531 (later run logs)  precedes  2df6785   True
+```
+
+It added one line:
+
+```
++ - `feasibility_ceiling_provenance`: declared-project-budget
+```
+
+That line came from closing E-02 — recording that the ceiling 63.1 is this
+project's declared compute budget rather than a sourced number. **No threshold
+moved**; `feasibility_ceiling_log2: 63.1` is unchanged. But the file's hash
+changed, and with it the compliance of every run ever recorded.
+
+D-015 predicted this exactly: *"Any edit after the first run would be a
+different matter: the auditor would report a `prereg_sha256` deviation on every
+earlier run, which is the intended behaviour and not something to work around."*
+It then happened, and nothing noticed for three commits.
+
+### Why it was not a one-line mistake
+
+The edit was not careless. `scripts/ci_checks.py` requires PREREG-M1.md to
+contain `derive_thresholds.render_block()` **verbatim**, so adding a field to the
+derivation *forces* an edit to the pre-registration. The two requirements —
+"the derived block must match its derivation" and "a pre-registration is fixed
+once a run references it" — are in direct tension, and the first silently wins.
+Anyone improving the derivation invalidates every prior run's compliance as a
+side effect.
+
+### What was done
+
+**Not** reverting the line. Reverting would break the derived-block check unless
+`derive_thresholds.py` were reverted too, and that would discard E-02's
+provenance annotation to make an audit pass — the wrong direction entirely.
+
+**Not** rewriting the old runs. Results are append-only. They correctly record
+the text they actually ran under.
+
+The remedy is the one the design already implies: **re-run**. A run executed on
+a clean tree under the current text is compliant, and the repository now has
+one (`PREREG-M1.d97938e2…`, deviations=0). Old runs keep pointing where they
+always pointed.
+
+And a sixth CI check, `current_prereg_has_a_run`, makes the invariant
+enforceable instead of merely documented: the current pre-registration text must
+have at least one run behind it. That is satisfiable — edit the document, re-run —
+where a check demanding historical consistency never could be. Its failing branch
+is exercised by a test rather than only asserted, because a check nobody has seen
+fail is a check nobody has seen work.
+
+## D-055 — `--write` did not gate what its name implied, and it cost a run
+
+Found in the same pass, by running the executor to produce the compliant run
+above.
+
+`scripts/execute.py --write` gates **only** whether `reports/out/execution.txt`
+is refreshed. The run log is written unconditionally, because `runner.start()`
+opens it. The docstring read `Run: python scripts/execute.py [--write]`, which
+invites exactly the reading I made: that the bare form is a dry run.
+
+Two logs resulted where one was intended, and the second is **non-compliant**
+through the first:
+
+```
+d97938e2  first invocation, clean tree   deviations=0  compliant=True
+17cfa18b  second, --write                deviations=1  compliant=False
+```
+
+The first invocation wrote a log and touched the index, which left the tree
+dirty; the second therefore recorded `working_tree_clean=False`. A misread flag
+produced a non-compliant result with no warning at any point.
+
+**Decision: make the tool say what it does, and give it a real preview.**
+`--preview` builds the readiness report and lists what would run and what would
+be refused **without constructing a runner at all** — necessary, because merely
+building one opens the log. The docstring now states plainly that every ordinary
+invocation appends a run, and `--preview --write` is refused as meaningless
+rather than silently accepted.
+
+Both logs are kept. Deleting the accidental one would be rewriting results, and
+the non-compliant one is an honest record of a tree that was in fact dirty. The
+test for this path exercises `--preview` only: a test that ran the executor for
+real would append to `runs/` and dirty the tree for everything after it, which
+is the defect D-033 records.
+

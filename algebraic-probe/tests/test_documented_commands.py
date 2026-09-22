@@ -49,9 +49,13 @@ def test_the_derivation_command_runs_without_warnings() -> None:
 
 
 def test_the_structural_checks_command_runs_clean() -> None:
+    """The count is asserted rather than derived from ``CHECKS``, which would
+    make the test agree with the code by construction and pass through a check
+    that was added but never wired in."""
     result = run("scripts/ci_checks.py")
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "checks=5 failed=0" in result.stdout
+    assert "checks=6 failed=0" in result.stdout
+    assert "check=current_prereg_has_a_run passed=True" in result.stdout
 
 
 @pytest.mark.slow
@@ -129,3 +133,32 @@ def test_the_registry_report_lists_every_registered_module(tmp_path) -> None:
     assert f"modules={len(registered)}" in registry
     for module_id in registered:
         assert f"module={module_id}" in registry, module_id
+
+
+@pytest.mark.slow
+def test_the_executor_preview_writes_no_run_log() -> None:
+    """``--preview`` must be safe to run from a test.
+
+    An ordinary invocation of scripts/execute.py appends a run to the tracked,
+    append-only log -- ``--write`` gates only reports/out/execution.txt, which
+    is the misreading D-054 records. So this exercises the preview path and
+    asserts the run directory is unchanged; a test that called the executor for
+    real would write into runs/ and leave the tree dirty for everything after
+    it, which is the defect D-033 records.
+    """
+    runs = ROOT / "runs" / "PREREG-M1"
+    before = sorted(p.name for p in runs.glob("*.jsonl"))
+    result = run("scripts/execute.py", "--preview")
+    assert result.returncode == 0, result.stderr
+    assert "mode=preview wrote_run_log=False measured=False" in result.stdout
+    assert "would_run module=M1" in result.stdout
+    assert sorted(p.name for p in runs.glob("*.jsonl")) == before
+
+
+@pytest.mark.slow
+def test_the_executor_refuses_preview_combined_with_write() -> None:
+    result = run("scripts/execute.py", "--preview", "--write")
+    assert result.returncode != 0
+    assert "writes nothing" in result.stderr
+
+

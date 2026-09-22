@@ -109,12 +109,84 @@ def check_runner_precedes_prereg() -> CheckResult:
     )
 
 
+def check_current_prereg_has_a_run() -> CheckResult:
+    """At least one committed run must reference the pre-registration as it
+    now stands.
+
+    D-015 noted that editing a pre-registration after a run exists makes the
+    auditor report a ``prereg_sha256`` deviation on every earlier run, and that
+    this is intended rather than something to work around. What it did not do
+    was stop the edit happening unnoticed, and it did: commit 2df6785 appended
+    ``feasibility_ceiling_provenance`` to PREREG-M1.md when seven runs already
+    referenced the older text, leaving every committed run non-compliant and
+    nothing in CI saying so (D-054).
+
+    The invariant this enforces is satisfiable rather than historical. Old runs
+    keep pointing at the text they actually ran under -- results are append-only
+    and are never rewritten to match. But whoever edits a pre-registration must
+    re-run against it, so that the current text has at least one run behind it.
+    """
+    from provenance.prereg import load as load_prereg
+
+    prereg = load_prereg("modules/degree/prereg/PREREG-M1.md")
+    return _prereg_run_coverage(prereg.sha256, ROOT / "runs" / prereg.prereg_id)
+
+
+def _prereg_run_coverage(current_digest: str, run_dir: Path) -> CheckResult:
+    """The body of the check above, parameterised so it can be tested.
+
+    A check whose failing branch has never been executed is a check nobody has
+    seen work. ``tests/test_ci_checks.py`` points this at a temporary run
+    directory whose logs carry a different digest and asserts that it fails.
+    """
+    import json
+
+    if not run_dir.is_dir():
+        return CheckResult(
+            name="current_prereg_has_a_run",
+            passed=False,
+            detail=f"no run directory at {run_dir}",
+        )
+
+    matching, total = [], 0
+    for path in sorted(run_dir.glob("*.jsonl")):
+        if path.name == "index.jsonl":
+            continue
+        total += 1
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            digest = (record.get("payload") or {}).get("prereg_sha256") or record.get(
+                "prereg_sha256"
+            )
+            if digest == current_digest:
+                matching.append(path.name)
+            break
+
+    return CheckResult(
+        name="current_prereg_has_a_run",
+        passed=bool(matching),
+        detail=(
+            f"runs_referencing_current_text={len(matching)}/{total}"
+            if matching
+            else (
+                f"the pre-registration has digest {current_digest[:16]} and none "
+                f"of {total} "
+                "committed runs reference it: the pre-registration was edited and "
+                "not re-run. Run scripts/execute.py on a clean tree."
+            )
+        ),
+    )
+
+
 CHECKS = (
     check_verify_does_not_import_modules,
     check_modules_do_not_import_verify,
     check_reports_have_no_prose,
     check_prereg_derived_block_matches_derivation,
     check_runner_precedes_prereg,
+    check_current_prereg_has_a_run,
 )
 
 

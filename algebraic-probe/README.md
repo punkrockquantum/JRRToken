@@ -404,9 +404,11 @@ to the bypass documented above.
 
 ```
 814 tests, 0 failed in 8m04s (whole suite, slow lane included)
-5 structural CI checks, 0 failed
-132 mutants across 15 layers, 0 survivors (>=5 per layer)
-compliance audit: chains unbroken, deviations reported
+6 structural CI checks, 0 failed
+135 mutants across 15 layers, 0 survivors (>=5 per layer)
+compliance audit: 9 runs, chains unbroken; 1 compliant, 8 carrying a
+  reported deviation -- 7 of those reference a pre-registration text that was
+  later edited (D-054), which is the auditor working as designed
 ```
 
 ---
@@ -416,10 +418,11 @@ compliance audit: chains unbroken, deviations reported
 ```bash
 cd algebraic-probe
 pytest -q                                # 814 passed (whole suite)
-python scripts/ci_checks.py              # checks=5 failed=0
-python scripts/mutation_test.py          # mutants=132 survivors=0
+python scripts/ci_checks.py              # checks=6 failed=0
+python scripts/mutation_test.py          # mutants=135 survivors=0
 python scripts/readiness_report.py       # per-target go/no-go
-python scripts/execute.py                # run what the gates authorise
+python scripts/execute.py --preview      # what would run; writes nothing
+python scripts/execute.py                # run what the gates authorise, and log it
 python scripts/exhaust.py                # exact degree over whole spaces, ~25s
 python scripts/witness_calibration.py    # probe vs known truth, ~28s
 python scripts/landscape.py              # what degree cannot see, ~1s

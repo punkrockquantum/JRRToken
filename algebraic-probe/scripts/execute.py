@@ -9,7 +9,21 @@ An unauthorised pair is refused here, not skipped quietly: the refusal and its
 reason are recorded in the same log as the results, so the log says what was not
 run as well as what was.
 
-Run:  python scripts/execute.py [--write]
+**Every ordinary invocation appends a run to the append-only log.** There is no
+such thing as running this script without recording it, which is the point of a
+provenance runner. ``--write`` does *not* gate that; it gates only whether
+``reports/out/execution.txt`` is refreshed, and its name once suggested
+otherwise -- a reading that cost two run logs, one of them non-compliant,
+because the first invocation dirtied the tree that the second was measured
+against (D-054).
+
+Use ``--preview`` to see what would run. It builds the readiness report and
+lists the authorised and refused pairs without constructing a runner, so it
+writes nothing and measures nothing.
+
+Run:  python scripts/execute.py --preview     # what would run; writes nothing
+      python scripts/execute.py               # runs, and appends a run log
+      python scripts/execute.py --write       # also refreshes reports/out/
 """
 
 from __future__ import annotations
@@ -281,11 +295,59 @@ def execute(write: bool) -> tuple[str, int]:
     return text, 0
 
 
+def preview() -> tuple[str, int]:
+    """What an ordinary invocation would run, without running or recording it.
+
+    Constructs no ``ProvenanceRunner``: ``start()`` opens the log, so merely
+    building one would append a run. This reads the readiness report and
+    nothing else.
+    """
+    report = build_report()
+    authorised = {pair for pair in report.authorised_runs}
+    lines = [
+        f"commit={report.commit}",
+        "mode=preview wrote_run_log=False measured=False",
+        f"authorised_runs={len(authorised)}",
+    ]
+    for module in report.modules:
+        for target in module.targets:
+            blocking = [f"{o.gate_id}:{o.name}" for o in target.blocking_failures]
+            if blocking:
+                lines.append(
+                    f"would_refuse module={module.module_id} "
+                    f"target={target.target_id} blocking={blocking}"
+                )
+    for module_id, target_id in sorted(authorised):
+        instances = INSTANCES.get(target_id, [])
+        for label, _ in instances:
+            lines.append(
+                f"would_run module={module_id} target={target_id} instance={label}"
+            )
+    return "\n".join(lines) + "\n", 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--write", action="store_true")
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help=(
+            "also refresh reports/out/execution.txt. This does NOT gate the run "
+            "log: an ordinary invocation appends one either way."
+        ),
+    )
+    parser.add_argument(
+        "--preview",
+        action="store_true",
+        help="list what would run and what would be refused; writes nothing",
+    )
     args = parser.parse_args()
-    text, code = execute(args.write)
+    if args.preview:
+        if args.write:
+            parser.error("--preview writes nothing, so --write is meaningless with it")
+        text, code = preview()
+    else:
+        text, code = execute(args.write)
     print(text)
     return code
 
