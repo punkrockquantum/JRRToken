@@ -324,7 +324,37 @@ The result arrived through a failing test whose expectation was wrong — the fi
 draft flipped block bit 0, which lies in W[15] and which a 4-round compression
 never reads, so the zero output difference held 50/50 (D-050).
 
-### 10. Six blindness classes, each naming what the measure cannot see
+### 10. SHA-256 stops offering a word-level split at round 24 — Tier E
+
+Cut the round sequence; a block word one chunk consumes and the other does not is
+*neutral* for that chunk. A cut with neutral words on **both** sides is what lets
+the two halves be enumerated separately and met in the middle.
+
+| rounds | independent cuts | matching freedom |
+|---:|---:|---:|
+| 16 | 15 | 256 bits |
+| 20 | 10 | 128 |
+| 23 | 7 | 32 |
+| 24 | **0** | **0** |
+
+Matching freedom falls by **exactly one 32-bit word per round** from 16 and
+reaches zero at 24; the last round count with a word-level split is **23**. The
+closed form is what the test asserts, not the table.
+
+This continues finding 7 rather than repeating it: round 16 is where the block is
+fully consumed, and from there the schedule ties the two halves together one word
+at a time until no split survives.
+
+`verify/mitm.py` checks it by evaluating the real `message_schedule` and flipping
+bits, and the two paths **agree exactly** at every word below 24 — consumption is
+an upper bound in principle and tight in fact here.
+
+**Scope:** a split is necessary for a meet-in-the-middle attack and nowhere near
+sufficient. Nothing models matching, memory, partial matching or bicliques.
+PREREG-M5 registers that 256 bits of balanced freedom sits *above* the 63.1-bit
+feasibility ceiling, so this is reported as structure and never as an attack.
+
+### 11. Seven blindness classes, each naming what the measure cannot see
 
 | class | structure the measure misses |
 |---|---|
@@ -334,6 +364,7 @@ never reads, so the zero output difference held 50/50 (D-050).
 | `landscape_geometry` | hierarchical organisation of the search landscape |
 | `cancellation` (M2) | terms that cancel: full reachability with constant outputs |
 | `impossible` (M3) | the low side of a one-sided threshold: **50%** of an APN table is exactly impossible |
+| `cancellation` (M5) | a split hidden by a cancelling term: wiring finds **0** cuts where truth finds **3** |
 
 Their union is the honest description of what remains unexamined.
 
@@ -397,8 +428,9 @@ to the bypass documented above.
 | `modules/degree/` — Module 1 | built, measuring; **PARTIAL** (11/11 module gates, **5/7** targets GO) |
 | `modules/reach/` — Module 2 | **built**, 10/11 gates, calibration-blocked (E-05) |
 | `modules/differential/` — Module 3 | **built**, **11/11 module gates**, **first Tier S path**; NO-GO on its one target, blocked on a named but unreachable anchor (E-04 class) |
+| `modules/mitm/` — Module 5 | **built**, **10/11** gates; NO-GO on its one target, blocked on a named but unreachable anchor (E-04 class) |
 | `modules/hod/` — Module 4 | built, **9/11** gates, calibration-blocked (E-05) |
-| Modules 5, 6 | not started; no longer blocked on a missing target, only unwritten |
+| Module 6 | not started; no longer blocked on a missing target, only unwritten |
 
 ### Verification at this commit
 
@@ -444,14 +476,14 @@ reach any of them. What is left:
 
 | # | Blocker | What it holds up |
 |---|---|---|
-| **E-04** | two ground-truth citations unreachable (egress) | M1 on `keccak-f[25]` and `mimc-gf2n`; **M3 on SHA-256** (`CITE-SHA256-DIFF`, same class) |
+| **E-04** | ground-truth citations unreachable (egress) | M1 on `keccak-f[25]` and `mimc-gf2n`, **M3** and **M5** on SHA-256 — four module-target pairs, one act |
 | **E-05** | no published anchor exists for M2/M4/M6 | those modules ship calibration-blocked |
 | **E-01** | the Tier S closure is unconfirmed | whether the statistical layer has any purpose |
 | **E-09** | may exhaustive in-repo truth substitute for a published anchor? | recommendation: no, in the general form |
 | **E-11** | the enlarged blindness statement | accept it, or commission a landscape module |
 
 Eleven items, with the arithmetic for each, are in `ESCALATIONS.md`. Every
-judgement call is in `DECISIONS.md` (53 entries), including the ones where a
+judgement call is in `DECISIONS.md` (57 entries), including the ones where a
 measurement refuted something I had written, and the ones where a control
 expectation turned out to be a number I had guessed rather than computed.
 
@@ -470,7 +502,7 @@ stats/        BH, Clopper-Pearson, censored regression, power analysis
 provenance/   commit embedding, hash chaining, audit
 reports/      lint plus generated output in reports/out/ (no prose, enforced)
 runs/         committed run logs, append-only and hash-chained
-checkpoints/  per-stage findings, A through K
+checkpoints/  per-stage findings, A through L
 REPORT.md     the single operator-facing report; contains judgement
 DECISIONS.md  every judgement call, with reasoning
 ESCALATIONS.md  what waits on the operator, and what each item blocks

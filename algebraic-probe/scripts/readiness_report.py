@@ -126,10 +126,18 @@ INVENTORY: tuple[SpecSheet, ...] = (
         title="Meet-in-the-middle and biclique structure",
         quantity="splitting points, independent chunks, matching degrees of freedom",
         declared_tiers="P,E",
-        package=None,
-        prereg_path=None,
-        verify_symbol=None,
+        package="modules.mitm",
+        prereg_path="modules/mitm/prereg/PREREG-M5.md",
+        verify_symbol="verify.mitm:observed_dependence",
         calibration_anchor="published preimage attacks on reduced-round SHA-256",
+        control_strategy="split-enumeration",
+        support_probe="split-paths",
+        targets=(
+            # Section 5 names an anchor, so the target's ground truth rests on a
+            # citation E-04 holds unverified. Gate T02 blocks it -- a different
+            # and repairable state from "no anchor exists", which is E-05.
+            ("sha256-compression-parametrised", "core.sha256", "CITE-SHA256-MITM"),
+        ),
     ),
     SpecSheet(
         module_id="M6",
@@ -291,7 +299,31 @@ def _support_probes():
             pass
         return paths
 
-    return {"degree-paths": degree_paths, "differential-paths": differential_paths}
+    def split_paths(measure_module, target):
+        """The deductive cut and the exhaustive sweep, each tried separately.
+
+        Both are Tier P/E paths over the schedule's wiring, so neither depends
+        on the target being small enough to evaluate -- the 512-bit primary
+        target is supported by both.
+        """
+        paths = []
+        try:
+            measure_module.split_at(1, 0, min(getattr(target, "n_rounds", 1), 2))
+            paths.append("split")
+        except Exception:
+            pass
+        try:
+            measure_module.enumerate_splits(0, min(getattr(target, "n_rounds", 1), 2))
+            paths.append("enumeration")
+        except Exception:
+            pass
+        return paths
+
+    return {
+        "degree-paths": degree_paths,
+        "differential-paths": differential_paths,
+        "split-paths": split_paths,
+    }
 
 
 def _blindness_runners():
@@ -368,11 +400,36 @@ def _blindness_runners():
             computation_id="READINESS-BLIND-M3-001",
         )
 
+    def mitm():
+        from verify.mitm import observed_dependence_of
+
+        from modules.mitm.blindness import cancellation
+
+        def consumption(target, start, end):
+            return target.wiring_consumption(start, end)
+
+        def dependence(target, start, end):
+            observed = observed_dependence_of(
+                target.evaluate, target.block_words, target.n_rounds
+            )
+            union = set()
+            for t in range(start, end):
+                union |= observed[t]
+            return frozenset(union)
+
+        return cancellation.check(
+            consumption,
+            dependence,
+            test_id="scripts/readiness_report.py::check_blindness",
+            computation_id="READINESS-BLIND-M5-001",
+        )
+
     return {
         "modules.degree": degree,
         "modules.reach": reach,
         "modules.hod": hod,
         "modules.differential": differential,
+        "modules.mitm": mitm,
     }
 
 
@@ -453,11 +510,70 @@ def _recomputers():
             return row.get(parameters["dout"], 0)
         raise _Unrecomputable(f"no recomputation for quantity {case.quantity!r}")
 
+    def split_enumeration(target, case):
+        """Module 5's controls, recomputed from the observed schedule.
+
+        The module closes the recurrence over word indices as a graph. This
+        rebuilds the consumption sets by evaluating the real
+        core.sha256.message_schedule and watching which words move, then
+        redoes the set arithmetic. Same question, different route.
+        """
+        from verify.mitm import observed_dependence, observed_dependence_of
+
+        parameters = case.parameters or {}
+        if not hasattr(target, "n_rounds"):
+            raise _Unrecomputable("target carries no schedule to observe")
+        start = parameters.get("start", 0)
+        end = parameters.get("end", target.n_rounds)
+        if end == 0:
+            raise _Unrecomputable("an empty round range has nothing to recompute")
+
+        # Observe whichever schedule the case names. The blindness case's target
+        # brings its own -- recomputing it against SHA-256's would be checking a
+        # different function than the case is about, which is what an earlier
+        # draft of this did: it reported 7 independent cuts for a counterexample
+        # whose answer is 0.
+        if hasattr(target, "evaluate") and hasattr(target, "block_words"):
+            per_word = observed_dependence_of(
+                target.evaluate, target.block_words, target.n_rounds
+            )
+        else:
+            per_word = observed_dependence(end)
+
+        def consumed(lo, hi):
+            union = set()
+            for t in range(lo, hi):
+                union |= per_word[t]
+            return frozenset(union)
+
+        def neutral(cut):
+            fwd, bwd = consumed(start, cut), consumed(cut, end)
+            return fwd - bwd, bwd - fwd
+
+        if case.quantity == "neutral_word_count":
+            fwd, bwd = neutral(parameters["cut"])
+            return len(fwd) + len(bwd)
+        if case.quantity == "independent_split_count":
+            return sum(
+                1
+                for cut in range(start, end + 1)
+                if all(neutral(cut))
+            )
+        if case.quantity == "matching_dof_bits":
+            best = 0
+            for cut in range(start, end + 1):
+                fwd, bwd = neutral(cut)
+                if fwd and bwd:
+                    best = max(best, 32 * min(len(fwd), len(bwd)))
+            return best
+        raise _Unrecomputable(f"no recomputation for quantity {case.quantity!r}")
+
     return {
         "exhaustive-anf": exhaustive_anf,
         "schedule-closure": schedule_closure,
         "implied-order": implied_order,
         "differential-count": differential_count,
+        "split-enumeration": split_enumeration,
     }
 
 

@@ -31,8 +31,9 @@ with every deviation reported; provenance chain verified.
 | J — M2 built | **Module 2**, unblocked by E-03. Union reachability complete at round **16**, per-output-bit at **21**. One registered hypothesis confirmed, one **refuted**. 9/11 gates; calibration-blocked on E-05 |
 | I — SHA-256 | **E-03 authorised.** Primary target implemented, FIPS-validated, **GO**. Naive ARX bound vacuous (512 from round 1); support-capping gives **32r−1**. Proven lower bound 16; one round saturates any exhaustible window |
 | K — M3 built | **Module 3**, the first with a declared Tier S path. x³ over GF(2ⁿ) measured APN with **exactly 50%** of its table impossible. Sampled SHA-256 differential propagation starts at round **16** — the same round M2 reached structurally, by a path sharing no code. Tier S discipline found **untested** and now pinned. **11/11 module gates**, the first module whose machinery is complete and which is held back only by a target |
+| L — M5 built | **Module 5**. Matching freedom falls **exactly one word per round** from 16 and hits zero at **24**; last round with a word-level split is **23**. Consumption and observed dependence agree *exactly* on the real schedule. Two structural findings: a blindness case cannot also be a recomputable control, and one mutant was equivalent because its function admitted a single input. 10/11 gates; blocked on an unreachable named anchor |
 
-Per-stage detail in `checkpoints/` (A–K). Operator items in `ESCALATIONS.md` (11, six closed).
+Per-stage detail in `checkpoints/` (A–L). Operator items in `ESCALATIONS.md` (11, six closed).
 
 ### Stage A — the divergence was a loose bound, not a defect
 
@@ -65,7 +66,7 @@ not, at every round.
 
 ### Stage E — combined blindness
 
-**Six** implemented, run and passing blindness classes. Their union is the
+**Seven** implemented, run and passing blindness classes. Their union is the
 honest description of what remains unexamined: anything expressible as a small
 implicit relation system over the extension field; anything over multiplicative
 or non-affine subsets (a distinguisher on **7** inputs where the degree measure
@@ -74,12 +75,53 @@ the degree measure fails to see in 5 of 5 cluster counts tested**; anything a
 dependency analysis reports as fully diffused while its output bits are provably
 constant; **anything on the low side of a one-sided differential threshold — half
 of an APN table is exactly impossible and a search looking upward reports
-nothing**; MITM and rotational structure; and degree over prime fields, where the
-metric is undefined.
+nothing**; **a meet-in-the-middle split hidden by a cancelling term, where the
+wiring finds no cut and the truth finds three**; rotational structure; and degree
+over prime fields, where the metric is undefined.
 
-Two were added after the run. The landscape class came from an outside challenge
-that the null might be incomplete — it was, see Stage H. The impossible-
-differential class came with M3, see Stage K.
+Three were added after the run. The landscape class came from an outside
+challenge that the null might be incomplete — it was, see Stage H. The
+impossible-differential class came with M3 (Stage K) and the cancelling-schedule
+class with M5 (Stage L).
+
+Note what left the list: "MITM" was named as unexamined and now is not, while
+rotational structure still is. The union shrinks only when a module is built.
+
+### Stage L — where SHA-256 stops splitting
+
+Module 5 cuts the round sequence and asks which block words each side can move
+alone. A word consumed by one chunk and not the other is *neutral*; a cut with
+neutral words on **both** sides is what permits a meet.
+
+| rounds | independent cuts | matching freedom |
+|---:|---:|---:|
+| 16 | 15 | 256 bits |
+| 18 | 12 | 192 |
+| 20 | 10 | 128 |
+| 22 | 8 | 64 |
+| 23 | 7 | 32 |
+| 24 | **0** | **0** |
+
+Matching freedom falls by **exactly one 32-bit word per round** from 16, reaching
+zero at 24. The last round count with a word-level split is **23**. The closed
+form `(24 - end) * 32` is asserted rather than the table, so a misread schedule
+fails loudly instead of going stale.
+
+This continues M2's finding rather than repeating it: M2 measured that round 16
+is where the block is fully consumed; M5 measures that from there the schedule
+ties the halves together one word at a time until, eight rounds later, no
+word-level split survives.
+
+**The two paths agree exactly.** `verify/mitm.py` evaluates the real
+`message_schedule` and flips bits; at every word below 24 the observed dependence
+*equals* the closure. Consumption is an upper bound in principle and tight in
+fact here — asserted as a test, because if it ever went loose every null this
+module emits would weaken.
+
+**Scope, in the pre-registration rather than in prose.** `balanced_matching_dof_bits`
+is 256 against a feasibility ceiling of 63.1, and PREREG-M5 registers that
+`False` explicitly. Degrees of freedom on paper are not an attack budget, and
+nothing here models matching, memory, partial matching or bicliques.
 
 ### Stage K — the first Tier S module, and what it cost
 
@@ -176,7 +218,7 @@ targets differ.
 | **M2** | Dependency-graph reachability, free-round budget | **10/11** | — | NO-GO (E-05) |
 | **M3** | Differential characteristic search | **11/11** | 0/1 | NO-GO (E-04 class: anchor named, unreachable) |
 | M4 | Higher-order differentials, integral distinguishers | **9/11** | — | NO-GO (E-05 + depends on M1) |
-| M5 | Meet-in-the-middle and biclique structure | 2/11 | — | NO-GO |
+| **M5** | Meet-in-the-middle and biclique structure | **10/11** | 0/1 | NO-GO (E-04 class: anchor named, unreachable) |
 | M6 | Rotational-XOR propagation | 1/11 | — | NO-GO |
 
 ### M1 per-target
@@ -436,8 +478,9 @@ mutants=67 survivors=0     scripts/mutation_test.py  (9 layers, ≥5 each)
 ```
 
 Mutants per layer, ≥5 each by the declared minimum: arx 8, core 10,
-differential 12, exhaustive 5, harness 11, landscape 8, measure 12, modules 7,
-provenance 12, reach 8, reports 7, stats 6, tiers 9, verify 12, witness 8.
+differential 12, exhaustive 5, harness 11, landscape 8, measure 12, mitm 11,
+modules 7, provenance 12, reach 8, reports 7, stats 6, tiers 9, verify 12,
+witness 8.
 
 Structural checks: `verify/` does not import `modules/`; `modules/` does not
 import `verify/` (so a module cannot verify itself); `reports/out/` holds no

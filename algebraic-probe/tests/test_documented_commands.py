@@ -126,6 +126,7 @@ def test_the_registry_report_lists_every_registered_module(tmp_path) -> None:
     import modules.degree.spec  # noqa: F401  (registers)
     import modules.differential.spec  # noqa: F401  (registers)
     import modules.hod.spec  # noqa: F401  (registers)
+    import modules.mitm.spec  # noqa: F401  (registers)
     import modules.reach.spec  # noqa: F401  (registers)
 
     registered = REGISTRY.ids()

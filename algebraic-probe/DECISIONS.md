@@ -1816,3 +1816,74 @@ test for this path exercises `--preview` only: a test that ran the executor for
 real would append to `runs/` and dirty the tree for everything after it, which
 is the defect D-033 records.
 
+
+## D-056 — a blindness case cannot also be a recomputable control
+
+Module 5's blindness class is `CancellingSchedule`, whose whole construction is
+that the wiring and the truth **disagree**: consumption says the tail uses every
+block word, evaluation says it uses one. The first draft made that schedule the
+target of the calibration suite's blindness case, asserting the module's null
+(0 independent splits).
+
+It failed gate G08. The independent path recomputed the case and got **3**.
+
+That is not a defect in either path. It is structural, and worth stating because
+it constrains how every future module's blindness case must be written:
+
+- `run_controls` checks the **module** against the case's expected value, so the
+  expected value must be what the module emits — the null.
+- G08 checks the **independent path** against the same expected value.
+- A blindness counterexample is built so those two disagree.
+
+So a case whose counterexample exhibits the blindness cannot pass both. One of
+the two checks must see the disagreement, and `_Unrecomputable` is not an escape:
+the gate treats it as a failure, correctly, since otherwise a real disagreement
+could be hidden behind a raised exception.
+
+**Decision: follow the pattern Module 3 already set.** The blindness *case*
+asserts a value both paths agree on — for M5, 0 independent splits on SHA-256 at
+24 rounds, where observed dependence equals the closure at every word — and the
+*disagreement* is asserted in `tests/test_blindness_mitm.py`, which can hold two
+measures at once. The case's note carries the cross-reference so a reader
+following the suite is not left thinking the class was dropped.
+
+This was already how M3 worked; nobody had written down why. M3's blindness case
+asserts a maximum differential count both paths agree on, and the impossible
+half of the table — the actual blindness — lives in its own test. I rediscovered
+the constraint by violating it.
+
+Recorded here rather than left implicit because the alternative reading is
+tempting and wrong: that G08 failing on a blindness case means the blindness
+class is broken. It means the case was asked to do two incompatible jobs.
+
+## D-057 — an equivalent mutant that was equivalent by construction
+
+`MITM-06` drops the final round from `last_independent_round`'s sweep. It
+survived, and the reason is worth separating from the usual one.
+
+The usual equivalent mutant here is a step masked by a later step — four of the
+five identified so far. This one is different: `last_independent_round` could
+only ever be asked about SHA-256, because it took neither a round range nor a
+consumption function. Nothing splits at SHA-256's round 64, so dropping round 64
+from the sweep changes no output that any caller could observe. The mutant was
+equivalent **because the function's interface admitted exactly one input**.
+
+**Decision: widen the interface rather than retire the mutant.** The function now
+takes `max_end` and `consume`, like every other entry point in the module did
+already — it was the only one that did not. Measured against the counterexample's
+true dependence, where a split survives to the final round, the off-by-one is
+visible and the mutant dies.
+
+The general point: a function with one possible input cannot be mutation-tested,
+and "no test distinguishes these" then says nothing about the tests. Before
+recording a sixth equivalent mutant I should check whether the equivalence is a
+fact about the code or an artefact of what the code can be asked.
+
+`MITM-08` in the same layer is the mirror image and was **not** equivalent. It
+inverts the soundness subtraction, `observed - consumed` to `consumed -
+observed`. On SHA-256 the two sets are equal at every word, so every soundness
+assertion passed either way. The fix was a test on the counterexample, where
+consumption is strictly looser — the same lesson as D-051's straddling cell:
+untested, not equivalent, and the difference is found by asking which inputs
+could tell them apart.
+

@@ -493,3 +493,95 @@ class CancellingXor:
             for index in range(self.n)
             if (self.rows_a[index] ^ self.rows_b[index]) == 0
         )
+
+
+@dataclass(frozen=True, slots=True)
+class CancellingSchedule:
+    """A message schedule whose wiring carries words that cancel inside it.
+
+    Present as a blindness class for Module 5. That module decides whether a
+    meet-in-the-middle split exists by asking which block words each chunk
+    *consumes*, and it answers by closing a recurrence over word indices --
+    unioning the operands of every step, exactly as Module 2's reachability
+    does. A word that reaches a chunk through the wiring and cancels inside it
+    is still counted as consumed, so it is not counted neutral, so a split that
+    really exists is not found.
+
+    The recurrence here is ``W[t] = W[t-4] XOR W[t-4] XOR W[t-1]``. The first
+    two terms are the same word and annihilate, so every derived word is simply
+    ``W[t-1]`` and the whole tail depends on block word 3 alone. The wiring,
+    which cannot see that, reports the tail as consuming every block word.
+
+    Cut at round 3 over the eight rounds:
+
+    ====================  ===================  ==================
+    quantity              by the wiring        in truth
+    ====================  ===================  ==================
+    forward  [0, 3)       {0, 1, 2}            {0, 1, 2}
+    backward [3, 8)       {0, 1, 2, 3}         {3}
+    forward neutral       {}                   {0, 1, 2}
+    backward neutral      {3}                  {3}
+    independent split     **no**               **yes**
+    ====================  ===================  ==================
+
+    So the module emits "no independent split at this cut" for a schedule that
+    has one, with three words of forward freedom going unreported. The failure
+    is in the safe direction for a security claim -- it under-reports attack
+    structure rather than inventing it -- which is precisely why it is worth
+    stating: a null from this module is not evidence that no split exists.
+    """
+
+    block_words: int = 4
+    n_rounds: int = 8
+
+    target_id: str = "cancelling-schedule"
+
+    #: The recurrence's back-references, with the repeated one written twice.
+    #: Module 5's closure unions these; the arithmetic cancels the pair.
+    offsets: tuple[int, ...] = (4, 4, 1)
+
+    @staticmethod
+    def create(block_words: int = 4, n_rounds: int = 8) -> "CancellingSchedule":
+        if block_words < 1:
+            raise ValueError("block_words must be positive")
+        if n_rounds < block_words:
+            raise ValueError("n_rounds must be at least block_words")
+        return CancellingSchedule(block_words=block_words, n_rounds=n_rounds)
+
+    def evaluate(self, words: list[int]) -> list[int]:
+        """Expand the schedule. The XOR pair cancels, so W[t] == W[t-1]."""
+        if len(words) != self.block_words:
+            raise ValueError(f"expected {self.block_words} block words")
+        out = list(words)
+        for t in range(self.block_words, self.n_rounds):
+            value = 0
+            for offset in self.offsets:
+                value ^= out[t - offset]
+            out.append(value)
+        return out
+
+    def wiring_sources(self, index: int) -> frozenset[int]:
+        """Closure over the offsets: what the wiring says W[index] is built from.
+
+        Deliberately the same shape of computation Module 5 performs, because
+        the point of the class is that this computation is correct about the
+        wiring and wrong about the function.
+        """
+        if not 0 <= index < self.n_rounds:
+            raise ValueError(f"index {index} out of range")
+        sources: list[frozenset[int]] = []
+        for t in range(index + 1):
+            if t < self.block_words:
+                sources.append(frozenset({t}))
+                continue
+            union: set[int] = set()
+            for offset in self.offsets:
+                union |= sources[t - offset]
+            sources.append(frozenset(union))
+        return sources[index]
+
+    def wiring_consumption(self, start: int, end: int) -> frozenset[int]:
+        union: set[int] = set()
+        for t in range(start, end):
+            union |= self.wiring_sources(t)
+        return frozenset(union)

@@ -895,6 +895,127 @@ CATALOGUE: tuple[Mutant, ...] = (
         "f(x) ^ f(x) = 0 -- the accumulation is what carries the behaviour, so "
         "the accumulation is what is mutated",
     ),
+    # -- mitm (module 5) -----------------------------------------------------
+    Mutant(
+        "MITM-01",
+        "mitm",
+        "modules/mitm/measure.py",
+        "SCHEDULE_OFFSETS = (16, 15, 7, 2)",
+        "SCHEDULE_OFFSETS = (16, 15, 7, 3)",
+        ("tests/test_module_mitm.py",),
+        "the recurrence's back-references are wrong, so the consumption closure "
+        "describes a different message schedule and every split is computed for "
+        "a function that is not SHA-256",
+    ),
+    Mutant(
+        "MITM-02",
+        "mitm",
+        "modules/mitm/measure.py",
+        "        return bool(self.forward_neutral) and bool(self.backward_neutral)",
+        "        return bool(self.forward_neutral) or bool(self.backward_neutral)",
+        ("tests/test_module_mitm.py",),
+        "a cut with freedom on one side only counts as independent, so the "
+        "extremes -- where one chunk is empty -- all look splittable and the "
+        "last independent round is overstated",
+    ),
+    Mutant(
+        "MITM-03",
+        "mitm",
+        "modules/mitm/measure.py",
+        "        return min(self.forward_dof_bits, self.backward_dof_bits)",
+        "        return max(self.forward_dof_bits, self.backward_dof_bits)",
+        ("tests/test_module_mitm.py",),
+        "matching freedom is taken from the long side rather than the short one, "
+        "overstating what a meet could use -- wrong in the direction that "
+        "flatters an attack",
+    ),
+    Mutant(
+        "MITM-04",
+        "mitm",
+        "modules/mitm/measure.py",
+        "        return self.forward_words - self.backward_words",
+        "        return self.forward_words",
+        ("tests/test_module_mitm.py",),
+        "neutral words stop being the difference of the two sets, so words both "
+        "chunks consume are counted as freedom one chunk has alone",
+    ),
+    Mutant(
+        "MITM-05",
+        "mitm",
+        "modules/mitm/measure.py",
+        "    for t in range(start, end):\n        union |= schedule_word_sources(t)",
+        "    for t in range(start, end):\n        union |= schedule_word_sources(start)",
+        ("tests/test_module_mitm.py",),
+        "a chunk's consumption is taken from its first round alone, so the "
+        "later rounds' words go unrecorded and consumption stops containing "
+        "dependence",
+    ),
+    Mutant(
+        "MITM-06",
+        "mitm",
+        "modules/mitm/measure.py",
+        "    for end in range(start, max_end + 1):",
+        "    for end in range(start, max_end):",
+        ("tests/test_module_mitm.py",),
+        "the last round of the sweep is never examined for a split, so a split "
+        "available at the final round is missed. Note: this survived until "
+        "last_independent_round took its range and its consumption function as "
+        "arguments -- on SHA-256 alone nothing splits at round 64, so the "
+        "off-by-one changed no output and the mutant was equivalent by "
+        "construction rather than by luck",
+    ),
+    Mutant(
+        "MITM-07",
+        "mitm",
+        "verify/mitm.py",
+        "                    if changed[t] != reference[t]:",
+        "                    if changed[t] == reference[t]:",
+        ("tests/test_module_mitm.py", "tests/test_blindness_mitm.py"),
+        "observed dependence records the words that did NOT move, so the "
+        "independent path checks the complement of what it claims and the "
+        "soundness check no longer checks soundness",
+    ),
+    Mutant(
+        "MITM-08",
+        "mitm",
+        "verify/mitm.py",
+        "    escaping = observed - consumed",
+        "    escaping = consumed - observed",
+        ("tests/test_module_mitm.py",),
+        "the soundness check is inverted: it flags words the module counts and "
+        "the probe did not find, which is the permitted direction, and passes "
+        "the direction that would refute the module",
+    ),
+    Mutant(
+        "MITM-09",
+        "mitm",
+        "modules/mitm/blindness/cancellation.py",
+        "    return not wiring_forward_neutral",
+        "    return True",
+        ("tests/test_blindness_mitm.py",),
+        "the blindness class stops checking that the measure actually emits its "
+        "null on the counterexample, becoming a tautology",
+    ),
+    Mutant(
+        "MITM-10",
+        "mitm",
+        "modules/mitm/blindness/cancellation.py",
+        "    return bool(true_forward_neutral) and bool(true_backward_neutral)",
+        "    return True",
+        ("tests/test_blindness_mitm.py",),
+        "the blindness class stops checking that a split is really there, so it "
+        "would pass against a schedule with nothing to be blind to",
+    ),
+    Mutant(
+        "MITM-11",
+        "mitm",
+        "core/targets.py",
+        "    offsets: tuple[int, ...] = (4, 4, 1)",
+        "    offsets: tuple[int, ...] = (4, 2, 1)",
+        ("tests/test_blindness_mitm.py",),
+        "the counterexample's repeated term stops repeating, so nothing cancels "
+        "and the class is no longer a counterexample to anything",
+    ),
     # -- provenance coverage (D-054) -----------------------------------------
     Mutant(
         "COVR-01",

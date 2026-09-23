@@ -21,6 +21,7 @@ from modules.degree import spec as degree_spec  # noqa: E402  (registers the mod
 from modules.hod import spec as hod_spec  # noqa: E402  (registers the module)
 from modules.reach import spec as reach_spec  # noqa: E402  (registers the module)
 from modules.differential import spec as diff_spec  # noqa: E402  (registers the module)
+from modules.mitm import spec as mitm_spec  # noqa: E402  (registers the module)
 from modules.degree.calibration import exhaustive_truth, witness_truth  # noqa: E402
 from modules.degree.calibration.suite import SUITE  # noqa: E402
 from modules.degree.prereg.derive_thresholds import render_block  # noqa: E402
@@ -32,6 +33,7 @@ assert degree_spec.SPEC.module_id in REGISTRY.ids()
 assert hod_spec.SPEC.module_id in REGISTRY.ids()
 assert reach_spec.SPEC.module_id in REGISTRY.ids()
 assert diff_spec.SPEC.module_id in REGISTRY.ids()
+assert mitm_spec.SPEC.module_id in REGISTRY.ids()
 
 
 def registry_report() -> str:
