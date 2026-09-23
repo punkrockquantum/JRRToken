@@ -144,10 +144,12 @@ INVENTORY: tuple[SpecSheet, ...] = (
         title="Rotational-XOR propagation",
         quantity="rotational-pair propagation probability",
         declared_tiers="P,S",
-        package=None,
-        prereg_path=None,
-        verify_symbol=None,
+        package="modules.rx",
+        prereg_path="modules/rx/prereg/PREREG-M6.md",
+        verify_symbol="verify.rotational:addition_propagation_fraction",
         calibration_anchor=None,
+        control_strategy="rotational-count",
+        support_probe="rotational-paths",
     ),
 )
 
@@ -319,10 +321,36 @@ def _support_probes():
             pass
         return paths
 
+    def rotational_paths(measure_module, target):
+        """The deductive fact and the sampled estimate, tried separately.
+
+        The deductive path needs no target at all -- probability 1 for a
+        rotation-XOR circuit is a theorem -- so it is available for every
+        target including the 512-bit one. The sampled path needs a callable.
+        """
+        paths = []
+        try:
+            measure_module.linear_propagation()
+            measure_module.addition_probability(32, 1)
+            paths.append("deductive")
+        except Exception:
+            pass
+        try:
+            seeds = list(range(measure_module.SEEDS_PER_CELL))
+            width = min(getattr(target, "n_in", 16), 16)
+            measure_module.sampled_propagation(
+                lambda x: x, width, 1, seeds
+            )
+            paths.append("sampled")
+        except Exception:
+            pass
+        return paths
+
     return {
         "degree-paths": degree_paths,
         "differential-paths": differential_paths,
         "split-paths": split_paths,
+        "rotational-paths": rotational_paths,
     }
 
 
@@ -424,12 +452,29 @@ def _blindness_runners():
             computation_id="READINESS-BLIND-M5-001",
         )
 
+    def rotational():
+        from verify.rotational import count_function_propagation, rx_offsets
+
+        from modules.rx.blindness import rotational_xor
+
+        def plain(target, width, amount):
+            hits, total = count_function_propagation(target, width, amount)
+            return hits / total
+
+        return rotational_xor.check(
+            plain,
+            lambda target, width, amount: rx_offsets(target, width, amount),
+            test_id="scripts/readiness_report.py::check_blindness",
+            computation_id="READINESS-BLIND-M6-001",
+        )
+
     return {
         "modules.degree": degree,
         "modules.reach": reach,
         "modules.hod": hod,
         "modules.differential": differential,
         "modules.mitm": mitm,
+        "modules.rx": rotational,
     }
 
 
@@ -568,12 +613,55 @@ def _recomputers():
             return best
         raise _Unrecomputable(f"no recomputation for quantity {case.quantity!r}")
 
+    def rotational_count(target, case):
+        """Module 6's controls, recomputed by counting rather than deriving.
+
+        The module argues from carry cases; this counts every (x, y) pair, or
+        every input, and divides. Same question, different route.
+        """
+        from fractions import Fraction
+
+        from verify.rotational import (
+            addition_propagation_fraction,
+            count_function_propagation,
+            rx_offsets,
+        )
+
+        parameters = case.parameters or {}
+        quantity = case.quantity
+
+        if quantity == "linear_propagation":
+            width = parameters["width"]
+            hits, total = count_function_propagation(
+                target, width, parameters["amount"]
+            )
+            return 1 if hits == total else 0
+        if quantity == "rx_offset_is_zero":
+            offsets = rx_offsets(target, parameters["width"], parameters["amount"])
+            return int(len(offsets) == 1 and 0 in offsets)
+        if quantity == "additions_to_random_level":
+            width = parameters["width"]
+            if width > 12:
+                raise _Unrecomputable(
+                    f"counting every pair at width {width} is 2^{2 * width} "
+                    "evaluations; this strategy does not estimate"
+                )
+            p = addition_propagation_fraction(width, parameters["amount"])
+            floor = Fraction(1, 1 << parameters["n_out_bits"])
+            k, running = 0, Fraction(1)
+            while running > floor:
+                running *= p
+                k += 1
+            return k
+        raise _Unrecomputable(f"no recomputation for quantity {quantity!r}")
+
     return {
         "exhaustive-anf": exhaustive_anf,
         "schedule-closure": schedule_closure,
         "implied-order": implied_order,
         "differential-count": differential_count,
         "split-enumeration": split_enumeration,
+        "rotational-count": rotational_count,
     }
 
 

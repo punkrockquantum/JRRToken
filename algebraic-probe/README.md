@@ -354,7 +354,33 @@ sufficient. Nothing models matching, memory, partial matching or bicliques.
 PREREG-M5 registers that 256 bits of balanced freedom sits *above* the 63.1-bit
 feasibility ceiling, so this is reported as structure and never as an attack.
 
-### 11. Seven blindness classes, each naming what the measure cannot see
+### 11. Rotational propagation: derived here, verified by counting — Tier P
+
+A rotational pair is `(x, x <<< r)`. XOR and rotation carry it with probability
+**exactly 1** — which is why the technique exists. Modular addition does not, and
+the exact probability follows from the carry cases:
+
+```
+p(width, r) = (1 + 2^-r + 2^-(width-r) + 2^-width) / 4
+```
+
+That formula is a claim, so `verify/rotational.py` settles it by counting every
+`(x, y)` pair: widths 4, 6 and 8, every rotation amount, **zero disagreements**.
+
+| quantity | value |
+|---|---|
+| `p(32, 1)` | `6442450947/17179869184` = 2^-1.415037 |
+| additions to reach 2^-256 | **181** |
+| additions SHA-256 performs at 64 rounds | **600** |
+| round at which it crosses 181 | **23** |
+
+The 600 is instrumented, not read off the specification: a counting word wraps a
+32-bit value, tallies only `+`, and the real `compress` runs through it.
+
+So a rotational characteristic's probability is governed by how many modular
+additions a design performs, not by how many rounds it runs.
+
+### 12. Eight blindness classes, each naming what the measure cannot see
 
 | class | structure the measure misses |
 |---|---|
@@ -365,6 +391,7 @@ feasibility ceiling, so this is reported as structure and never as an attack.
 | `cancellation` (M2) | terms that cancel: full reachability with constant outputs |
 | `impossible` (M3) | the low side of a one-sided threshold: **50%** of an APN table is exactly impossible |
 | `cancellation` (M5) | a split hidden by a cancelling term: wiring finds **0** cuts where truth finds **3** |
+| `rotational_xor` (M6) | plain rotational probability **exactly 0** while an RX characteristic holds with probability **exactly 1** |
 
 Their union is the honest description of what remains unexamined.
 
@@ -428,9 +455,9 @@ to the bypass documented above.
 | `modules/degree/` — Module 1 | built, measuring; **PARTIAL** (11/11 module gates, **5/7** targets GO) |
 | `modules/reach/` — Module 2 | **built**, 10/11 gates, calibration-blocked (E-05) |
 | `modules/differential/` — Module 3 | **built**, **11/11 module gates**, **first Tier S path**; NO-GO on its one target, blocked on a named but unreachable anchor (E-04 class) |
-| `modules/mitm/` — Module 5 | **built**, **10/11** gates; NO-GO on its one target, blocked on a named but unreachable anchor (E-04 class) |
+| `modules/mitm/` — Module 5 | **built**, **11/11** module gates; NO-GO on its one target, blocked on a named but unreachable anchor (E-04 class) |
 | `modules/hod/` — Module 4 | built, **9/11** gates, calibration-blocked (E-05) |
-| Module 6 | not started; no longer blocked on a missing target, only unwritten |
+| `modules/rx/` — Module 6 | **built**, **10/11** gates, calibration-blocked (E-05) |
 
 ### Verification at this commit
 
@@ -483,7 +510,7 @@ reach any of them. What is left:
 | **E-11** | the enlarged blindness statement | accept it, or commission a landscape module |
 
 Eleven items, with the arithmetic for each, are in `ESCALATIONS.md`. Every
-judgement call is in `DECISIONS.md` (57 entries), including the ones where a
+judgement call is in `DECISIONS.md` (59 entries), including the ones where a
 measurement refuted something I had written, and the ones where a control
 expectation turned out to be a number I had guessed rather than computed.
 
@@ -502,7 +529,7 @@ stats/        BH, Clopper-Pearson, censored regression, power analysis
 provenance/   commit embedding, hash chaining, audit
 reports/      lint plus generated output in reports/out/ (no prose, enforced)
 runs/         committed run logs, append-only and hash-chained
-checkpoints/  per-stage findings, A through L
+checkpoints/  per-stage findings, A through M
 REPORT.md     the single operator-facing report; contains judgement
 DECISIONS.md  every judgement call, with reasoning
 ESCALATIONS.md  what waits on the operator, and what each item blocks

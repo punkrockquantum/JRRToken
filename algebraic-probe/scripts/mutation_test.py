@@ -895,6 +895,133 @@ CATALOGUE: tuple[Mutant, ...] = (
         "f(x) ^ f(x) = 0 -- the accumulation is what carries the behaviour, so "
         "the accumulation is what is mutated",
     ),
+    # -- rx (module 6) -------------------------------------------------------
+    Mutant(
+        "RX-01",
+        "rx",
+        "modules/rx/measure.py",
+        "        1 + Fraction(1, 1 << low) + Fraction(1, 1 << high) + Fraction(1, 1 << width)",
+        "        1 + Fraction(1, 1 << low) + Fraction(1, 1 << high)",
+        ("tests/test_module_rx.py",),
+        "the closed form drops a carry term, so the addition probability no "
+        "longer matches the count over every pair -- the derivation is wrong "
+        "and the enumeration says so",
+    ),
+    Mutant(
+        "RX-02",
+        "rx",
+        "modules/rx/measure.py",
+        "    total = Fraction(1, 4) * (",
+        "    total = Fraction(1, 2) * (",
+        ("tests/test_module_rx.py",),
+        "the four carry cases are normalised by two, inflating every rotational "
+        "probability -- wrong in the direction that flatters an attack",
+    ),
+    Mutant(
+        "RX-03",
+        "rx",
+        "modules/rx/measure.py",
+        "        1 + Fraction(1, 1 << low) + Fraction(1, 1 << high) + Fraction(1, 1 << width)",
+        "        1 + Fraction(1, 1 << (low + 1)) + Fraction(1, 1 << high) + Fraction(1, 1 << width)",
+        ("tests/test_module_rx.py",),
+        "the low-carry term is taken at the wrong bit position, so the "
+        "probability is wrong at every rotation amount but still looks "
+        "plausible. Note: swapping low and high is an *equivalent* mutant -- "
+        "the closed form is symmetric in the two, which is why p(w, r) equals "
+        "p(w, w - r) at every width, so that mutation is not in this "
+        "catalogue (D-058)",
+    ),
+    Mutant(
+        "RX-04",
+        "rx",
+        "modules/rx/measure.py",
+        "    while running > floor:",
+        "    while running >= floor:",
+        ("tests/test_module_rx.py",),
+        "the addition count runs one step past the random level, overstating "
+        "how many additions a characteristic survives",
+    ),
+    Mutant(
+        "RX-05",
+        "rx",
+        "modules/rx/measure.py",
+        "        if function(rotl(x, amount, width)) == rotl(function(x), amount, width):",
+        "        if function(rotl(x, amount, width)) == function(rotl(x, amount, width)):",
+        ("tests/test_module_rx.py",),
+        "the sampled path compares a value with itself, so every draw counts as "
+        "a hit and every target looks perfectly rotational",
+    ),
+    Mutant(
+        "RX-06",
+        "rx",
+        "modules/rx/measure.py",
+        "        return self.ci_low > self.random_level",
+        "        return self.rate > self.random_level",
+        ("tests/test_module_rx.py",),
+        "the Tier S claim is made by the point estimate instead of the "
+        "interval, the same defect DIFF-04 pins in Module 3",
+    ),
+    Mutant(
+        "RX-07",
+        "rx",
+        "modules/rx/measure.py",
+        "    return function(rotl(x, amount, width)) ^ rotl(function(x), amount, width)",
+        "    return function(rotl(x, amount, width)) ^ function(x)",
+        ("tests/test_module_rx.py", "tests/test_blindness_rx.py"),
+        "the RX offset is taken against the unrotated output, so it is no "
+        "longer the offset of a rotational pair and is not constant",
+    ),
+    Mutant(
+        "RX-08",
+        "rx",
+        "verify/rotational.py",
+        "            if left == right:",
+        "            if left != right:",
+        ("tests/test_module_rx.py",),
+        "the independent count tallies the pairs that do NOT propagate, so it "
+        "reports the complement and stops agreeing with the closed form",
+    ),
+    Mutant(
+        "RX-09",
+        "rx",
+        "verify/rotational.py",
+        "        self.tally[0] += 1",
+        "        pass",
+        ("tests/test_module_rx.py",),
+        "the addition counter stops counting, so SHA-256 appears to perform no "
+        "modular additions and any rotational characteristic looks survivable",
+    ),
+    Mutant(
+        "RX-10",
+        "rx",
+        "modules/rx/blindness/rotational_xor.py",
+        "    return plain_probability == 0.0",
+        "    return True",
+        ("tests/test_blindness_rx.py",),
+        "the blindness class stops checking that the measure emits its null, "
+        "becoming a tautology",
+    ),
+    Mutant(
+        "RX-11",
+        "rx",
+        "modules/rx/blindness/rotational_xor.py",
+        "    return distinct_offsets == EXPECTED_DISTINCT_OFFSETS",
+        "    return True",
+        ("tests/test_blindness_rx.py",),
+        "the blindness class stops checking that a rotational-XOR "
+        "characteristic is really present, so it would pass against a target "
+        "with nothing to be blind to",
+    ),
+    Mutant(
+        "RX-12",
+        "rx",
+        "core/targets.py",
+        "        return self.constant ^ self._rotl(self.constant)",
+        "        return self.constant",
+        ("tests/test_blindness_rx.py",),
+        "the counterexample's predicted offset stops being C XOR (C <<< r), so "
+        "the class's derived value no longer matches what is measured",
+    ),
     # -- mitm (module 5) -----------------------------------------------------
     Mutant(
         "MITM-01",

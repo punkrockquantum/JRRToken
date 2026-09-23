@@ -1887,3 +1887,93 @@ consumption is strictly looser — the same lesson as D-051's straddling cell:
 untested, not equivalent, and the difference is found by asking which inputs
 could tell them apart.
 
+
+## D-058 — three survivors in one layer, three different reasons
+
+Module 6's first mutation run left `RX-03`, `RX-04` and `RX-06` alive. They look
+alike in the report and are not alike at all, and separating them is the whole
+value of the exercise.
+
+### RX-03 — genuinely equivalent
+
+`low, high = amount, width - amount` swapped to `width - amount, amount`. The
+closed form is
+
+```
+p = (1 + 2^-low + 2^-high + 2^-width) / 4
+```
+
+which is **symmetric in low and high**. Swapping them is a no-op, at every width
+and every rotation amount — checked, not assumed. This is the sixth equivalent
+mutant identified and the first that is equivalent because of an algebraic
+symmetry in the formula rather than because of masking.
+
+It is replaced by a mutant that perturbs one carry term's bit position, which is
+not symmetric and dies immediately. The symmetry itself is now asserted as a
+test, because a property that makes a whole class of mutation equivalent is
+worth stating once rather than rediscovering.
+
+It also explains a measurement: the probability profile satisfies
+`p(w, r) == p(w, w - r)`, so rotation by 1 and by `width - 1` are equally good
+for an attacker. That is a consequence of the same symmetry, and H2 registered it
+as a prediction before it was checked.
+
+### RX-04 — equivalent because the branch was unreachable
+
+`while running > floor` to `while running >= floor`. These differ only when
+`p ** k` lands *exactly* on the floor. Every probability this module derives has
+a non-power-of-two numerator — verified across widths 4, 8, 16 and 32 at every
+rotation amount — so `p ** k` is never exactly `2 ** -n` and the branch could not
+be reached by any caller.
+
+This is D-057's pattern a second time: a function that can only be asked about
+values it computes itself cannot be mutation-tested on inputs it never receives.
+Fixed the same way, by widening the interface. `additions_to_random_level` now
+takes an optional explicit probability, and with `p = 1/2` against a 4-bit level
+the boundary is exact: `p^4 == 2^-4`, so a loop continuing while equal answers 5
+where the correct answer is 4.
+
+Twice in two modules is no longer a coincidence. **Before recording any further
+mutant as equivalent, check whether the equivalence is a fact about the code or
+an artefact of what the code can be asked.**
+
+### RX-06 — not equivalent, merely untested
+
+`ci_low > random_level` replaced by `rate > random_level`: the Tier S rule,
+decided by the point estimate instead of the interval. Identical to `DIFF-04`
+(D-051), and it survived for the identical reason — every sampled cell in this
+module sat at 0 hits or at 50, where both fall on the same side.
+
+Found by constructing the missing cell rather than weakening the mutant: a
+function propagating on a sparse set gives 1 hit in 50, a rate of 0.02 against a
+2^-8 random level of 0.0039, with an exact lower bound of 0.000506. The point
+estimate clears the level and the interval does not.
+
+That this recurred in a second Tier S module says the straddling cell is not a
+curiosity but a **required fixture** for any module that samples. It is the only
+test that distinguishes the rule from its point-estimate impostor.
+
+## D-059 — a control must be computable by both paths, or it checks nothing
+
+Module 6's intermediate control first asked for `additions_to_random_level` at
+width **32** — the figure the module actually reports. Gate G08 failed, because
+the independent path counts every `(x, y)` pair and 2^64 of them is not a
+computation.
+
+The first instinct was to have the recomputer raise `_Unrecomputable` with an
+explanation. That is wrong, and the gate is right to treat it as a failure: a
+control only one path can compute cross-checks nothing, and letting an exception
+stand in for agreement would hide a real disagreement behind a message.
+
+**Decision: the control moves to width 8, where both paths run and agree (183),
+and the 32-bit figure stays what the module reports rather than what a control
+asserts.** The closed form behind the 32-bit value is checked against counting at
+widths 4, 6 and 8, at every rotation amount, so it is not unchecked — it is
+checked where checking is possible, and the case note says exactly that.
+
+This is the same shape as D-056 but a different cause. There, a blindness case
+could not be a control because the two paths are *built* to disagree. Here, a
+control could not be a control because one path cannot run at all. Both reduce
+to: a calibration case asserts a value **two independent paths produce**, and a
+case that does not meet that bar belongs somewhere else.
+

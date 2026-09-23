@@ -128,6 +128,7 @@ def test_the_registry_report_lists_every_registered_module(tmp_path) -> None:
     import modules.hod.spec  # noqa: F401  (registers)
     import modules.mitm.spec  # noqa: F401  (registers)
     import modules.reach.spec  # noqa: F401  (registers)
+    import modules.rx.spec  # noqa: F401  (registers)
 
     registered = REGISTRY.ids()
     assert registered, "a registry with nothing in it would pass vacuously"

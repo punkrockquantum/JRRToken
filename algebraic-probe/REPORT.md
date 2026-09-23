@@ -31,9 +31,10 @@ with every deviation reported; provenance chain verified.
 | J — M2 built | **Module 2**, unblocked by E-03. Union reachability complete at round **16**, per-output-bit at **21**. One registered hypothesis confirmed, one **refuted**. 9/11 gates; calibration-blocked on E-05 |
 | I — SHA-256 | **E-03 authorised.** Primary target implemented, FIPS-validated, **GO**. Naive ARX bound vacuous (512 from round 1); support-capping gives **32r−1**. Proven lower bound 16; one round saturates any exhaustible window |
 | K — M3 built | **Module 3**, the first with a declared Tier S path. x³ over GF(2ⁿ) measured APN with **exactly 50%** of its table impossible. Sampled SHA-256 differential propagation starts at round **16** — the same round M2 reached structurally, by a path sharing no code. Tier S discipline found **untested** and now pinned. **11/11 module gates**, the first module whose machinery is complete and which is held back only by a target |
+| M — M6 built | **Module 6**, the last the brief specifies. Rotational probability of modular addition **derived here and verified by counting** every pair; `p(32,1) = 2^-1.415037` exactly, **181** additions to the random level, and SHA-256 performs **600** (instrumented, not read off the spec). Blindness class exact at both ends: plain probability **0**, rotational-XOR probability **1**. 10/11 gates; E-05, no anchor named |
 | L — M5 built | **Module 5**. Matching freedom falls **exactly one word per round** from 16 and hits zero at **24**; last round with a word-level split is **23**. Consumption and observed dependence agree *exactly* on the real schedule. Two structural findings: a blindness case cannot also be a recomputable control, and one mutant was equivalent because its function admitted a single input. 10/11 gates; blocked on an unreachable named anchor |
 
-Per-stage detail in `checkpoints/` (A–L). Operator items in `ESCALATIONS.md` (11, six closed).
+Per-stage detail in `checkpoints/` (A–M). Operator items in `ESCALATIONS.md` (11, six closed).
 
 ### Stage A — the divergence was a loose bound, not a defect
 
@@ -66,7 +67,7 @@ not, at every round.
 
 ### Stage E — combined blindness
 
-**Seven** implemented, run and passing blindness classes. Their union is the
+**Eight** implemented, run and passing blindness classes. Their union is the
 honest description of what remains unexamined: anything expressible as a small
 implicit relation system over the extension field; anything over multiplicative
 or non-affine subsets (a distinguisher on **7** inputs where the degree measure
@@ -76,16 +77,58 @@ dependency analysis reports as fully diffused while its output bits are provably
 constant; **anything on the low side of a one-sided differential threshold — half
 of an APN table is exactly impossible and a search looking upward reports
 nothing**; **a meet-in-the-middle split hidden by a cancelling term, where the
-wiring finds no cut and the truth finds three**; rotational structure; and degree
-over prime fields, where the metric is undefined.
+wiring finds no cut and the truth finds three**; **a rotational-XOR
+characteristic of probability 1 behind a plain rotational probability of exactly
+0**; and degree over prime fields, where the metric is undefined.
 
-Three were added after the run. The landscape class came from an outside
+Four were added after the run. The landscape class came from an outside
 challenge that the null might be incomplete — it was, see Stage H. The
-impossible-differential class came with M3 (Stage K) and the cancelling-schedule
-class with M5 (Stage L).
+impossible-differential class came with M3 (Stage K), the cancelling-schedule
+class with M5 (Stage L) and the rotational-XOR class with M6 (Stage M).
 
-Note what left the list: "MITM" was named as unexamined and now is not, while
-rotational structure still is. The union shrinks only when a module is built.
+Note what left the list. "MITM and rotational structure" was named as unexamined
+and now neither is: both have modules, and each arrived carrying a new blindness
+class of its own. Building a module removes an item from the union and adds one,
+which is the honest shape of the thing — the list does not shrink, it becomes
+more specific.
+
+### Stage M — rotational propagation, and the module list completes
+
+M6 measures how a rotational pair `(x, x <<< r)` survives a design. Two facts:
+
+- **XOR and rotation carry it with probability exactly 1** — rotation
+  distributes over XOR and rotations compose, so a circuit of those two is
+  completely transparent at any depth. Tier P, and checked exhaustively anyway.
+- **Modular addition does not.** The exact probability is derived from the carry
+  cases and **verified by counting every (x, y) pair**: at widths 4, 6 and 8, at
+  every rotation amount, the closed form and the enumeration agree with zero
+  disagreements.
+
+At SHA-256's width, `p(32, 1) = 6442450947/17179869184 = 2^-1.415037`, reported
+as an exact rational rather than a decimal. **181** additions sink the
+characteristic to the 2^-256 level.
+
+**What SHA-256 performs, instrumented rather than read off the spec.** A counting
+word wraps a 32-bit value and tallies only `+`, and the real `compress` is run
+through it: 8 additions for the feed-forward, 7 per round, 10 once the schedule
+starts deriving words, **600** at 64 rounds. The 181-addition threshold is
+crossed at **round 23**.
+
+An earlier draft reported 5 additions for a single round — it wrapped only the
+message words, so every addition on the state alone went uncounted. The number it
+produced was a different quantity from the one its name promised.
+
+*Module 5's last independent round is also 23. The two computations share no
+mechanism and the agreement is chance — recorded, and asserted in the test, so it
+is not later read as structure.*
+
+**The blindness class, with both numbers exact.** `f(x) = (x <<< r) XOR C` with
+`C` not rotation-invariant: the plain relation holds at **no input at all**
+(probability exactly 0, the strongest null available) while the offset between
+the two sides is the same constant everywhere — a rotational-XOR characteristic
+of probability exactly **1**. Measured at width 16: 0/65536 propagation, one
+distinct offset across all 65536 inputs. A design's round constants alone produce
+that null. It is why the technique is named for both halves.
 
 ### Stage L — where SHA-256 stops splitting
 
@@ -218,8 +261,8 @@ targets differ.
 | **M2** | Dependency-graph reachability, free-round budget | **10/11** | — | NO-GO (E-05) |
 | **M3** | Differential characteristic search | **11/11** | 0/1 | NO-GO (E-04 class: anchor named, unreachable) |
 | M4 | Higher-order differentials, integral distinguishers | **9/11** | — | NO-GO (E-05 + depends on M1) |
-| **M5** | Meet-in-the-middle and biclique structure | **10/11** | 0/1 | NO-GO (E-04 class: anchor named, unreachable) |
-| M6 | Rotational-XOR propagation | 1/11 | — | NO-GO |
+| **M5** | Meet-in-the-middle and biclique structure | **11/11** | 0/1 | NO-GO (E-04 class: anchor named, unreachable) |
+| **M6** | Rotational-XOR propagation | **10/11** | — | NO-GO (E-05: no anchor named) |
 
 ### M1 per-target
 

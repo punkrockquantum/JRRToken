@@ -585,3 +585,76 @@ class CancellingSchedule:
         for t in range(start, end):
             union |= self.wiring_sources(t)
         return frozenset(union)
+
+
+@dataclass(frozen=True, slots=True)
+class RotateXorConstant:
+    """``f(x) = (x <<< r) XOR C``: a round that is transparent to an RX pair.
+
+    Present as a blindness class for Module 6. The plain rotational relation
+    asks whether ``f(x <<< r) == f(x) <<< r``. Here:
+
+        f(x <<< r)   = (x <<< 2r) XOR C
+        f(x) <<< r   = (x <<< 2r) XOR (C <<< r)
+
+    which agree only when ``C == C <<< r``. For a constant that is not
+    rotation-invariant they never agree, at any input, so the plain measure
+    reports probability **exactly 0** -- its null, and the strongest form of it.
+
+    But the offset between the two sides is ``C XOR (C <<< r)``: the *same*
+    value at every input. That is a rotational-XOR characteristic of probability
+    **exactly 1**. The structure is total and the plain measure sees none of it,
+    which is the reason the technique is named for both halves.
+
+    ``rotation_invariant_constant`` builds the other case -- a ``C`` equal to its
+    own rotation -- so a test can show the class turns off when the mechanism
+    is removed rather than only that it turns on.
+    """
+
+    width: int
+    amount: int
+    constant: int
+
+    target_id: str = "rotate-xor-constant"
+
+    @property
+    def n_in(self) -> int:
+        return self.width
+
+    @property
+    def n_out(self) -> int:
+        return self.width
+
+    @staticmethod
+    def create(width: int = 16, amount: int = 3, constant: int = 0x00FF) -> "RotateXorConstant":
+        if width < 2:
+            raise ValueError("width must be at least 2")
+        if not 0 < amount < width:
+            raise ValueError(f"amount must be in (0, {width})")
+        return RotateXorConstant(
+            width=width, amount=amount, constant=constant & ((1 << width) - 1)
+        )
+
+    @staticmethod
+    def rotation_invariant_constant(width: int, amount: int) -> int:
+        """A constant equal to its own rotation, so the class stops applying.
+
+        The all-ones word is invariant under every rotation, so with it the
+        plain relation holds everywhere and there is nothing for the measure to
+        miss -- the control that shows the blindness needs the mechanism.
+        """
+        return (1 << width) - 1
+
+    def _rotl(self, value: int) -> int:
+        width, amount = self.width, self.amount % self.width
+        mask = (1 << width) - 1
+        value &= mask
+        return ((value << amount) | (value >> (width - amount))) & mask
+
+    def __call__(self, x: int) -> int:
+        return self._rotl(x) ^ self.constant
+
+    @property
+    def expected_rx_offset(self) -> int:
+        """``C XOR (C <<< r)`` -- the constant offset, derived not measured."""
+        return self.constant ^ self._rotl(self.constant)
