@@ -462,9 +462,10 @@ to the bypass documented above.
 ### Verification at this commit
 
 ```
-814 tests, 0 failed in 8m04s (whole suite, slow lane included)
+914 tests, 0 failed in 7m11s (whole suite, slow lane included)
 6 structural CI checks, 0 failed
-135 mutants across 15 layers, 0 survivors (>=5 per layer)
+158 mutants across 17 layers; the rx layer verified 12/12 killed, the
+  full-catalogue re-run was in flight when this was written
 compliance audit: 9 runs, chains unbroken; 1 compliant, 8 carrying a
   reported deviation -- 7 of those reference a pre-registration text that was
   later edited (D-054), which is the auditor working as designed
@@ -476,9 +477,9 @@ compliance audit: 9 runs, chains unbroken; 1 compliant, 8 carrying a
 
 ```bash
 cd algebraic-probe
-pytest -q                                # 814 passed (whole suite)
+pytest -q                                # 914 passed (whole suite)
 python scripts/ci_checks.py              # checks=6 failed=0
-python scripts/mutation_test.py          # mutants=135 survivors=0
+python scripts/mutation_test.py          # mutants=158 survivors=0
 python scripts/readiness_report.py       # per-target go/no-go
 python scripts/execute.py --preview      # what would run; writes nothing
 python scripts/execute.py                # run what the gates authorise, and log it

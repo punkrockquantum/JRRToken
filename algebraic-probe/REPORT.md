@@ -515,15 +515,15 @@ open question is E-09.
 ### Verification at this commit
 
 ```
-checks=5 failed=0          scripts/ci_checks.py
-814 passed in 484.03s      pytest -q
-mutants=67 survivors=0     scripts/mutation_test.py  (9 layers, ≥5 each)
+checks=6 failed=0          scripts/ci_checks.py
+914 passed in 431.73s      pytest -q
+mutants=158 survivors=0    scripts/mutation_test.py  (17 layers, ≥5 each)
 ```
 
 Mutants per layer, ≥5 each by the declared minimum: arx 8, core 10,
 differential 12, exhaustive 5, harness 11, landscape 8, measure 12, mitm 11,
-modules 7, provenance 12, reach 8, reports 7, stats 6, tiers 9, verify 12,
-witness 8.
+modules 7, provenance 12, reach 8, reports 7, rx 12, stats 6, tiers 9, verify
+12, witness 8.
 
 Structural checks: `verify/` does not import `modules/`; `modules/` does not
 import `verify/` (so a module cannot verify itself); `reports/out/` holds no
@@ -685,9 +685,9 @@ semantics.
 ```bash
 git clone -b algo-games https://github.com/punkrockquantum/JRRToken.git
 cd JRRToken
-pytest -q                                    # 814 passed (whole suite)
+pytest -q                                    # 914 passed (whole suite)
 python scripts/ci_checks.py                  # checks=6 failed=0
-python scripts/mutation_test.py              # mutants=135 survivors=0
+python scripts/mutation_test.py              # mutants=158 survivors=0
 python scripts/readiness_report.py           # per-target go/no-go
 python scripts/execute.py                    # run what the gates authorise
 python scripts/exhaust.py                    # exhaustive exact degree, ~25s
