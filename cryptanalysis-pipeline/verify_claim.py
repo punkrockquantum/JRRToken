@@ -202,6 +202,12 @@ def check_scope(ladder: Ladder, rung: Rung, spec: Spec) -> tuple[bool, str]:
       to believe.
     """
     reasons = []
+    if rung.rounds in ladder.contended_rounds:
+        reasons.append(
+            f"rounds={rung.rounds} was measured while another solver was "
+            "running, so its wall-clock reflects scheduling and the cost "
+            "comparison cannot rest on it"
+        )
     if ladder.planted:
         reasons.append(
             "the instance is planted, so a solution existed by construction; "

@@ -95,6 +95,38 @@ class SolverOutcome:
         return " ".join(parts)
 
 
+#: Process names whose presence means another solver is competing for CPU.
+CONTENDING = ("Singular", "msolve")
+
+
+def contending_solvers() -> tuple[str, ...]:
+    """Other solver processes currently running.
+
+    The cost gate compares wall-clock, so a second solver on the same machine
+    inflates the observable and the comparison becomes a measurement of
+    scheduling rather than of mathematics. Two deep ladders ran concurrently
+    once in this project and the timings from that window are not usable.
+
+    Read from /proc rather than by shelling out to ps, so the check itself
+    neither spawns a process nor matches its own command line -- the self-match
+    trap that has bitten this codebase before.
+    """
+    import os
+
+    found = []
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit() or int(entry) == os.getpid():
+            continue
+        try:
+            with open(f"/proc/{entry}/comm", encoding="utf-8") as handle:
+                name = handle.read().strip()
+        except (OSError, ProcessLookupError):
+            continue
+        if name in CONTENDING:
+            found.append(f"{name}[{entry}]")
+    return tuple(found)
+
+
 def _run(command: list[str], stdin: str | None, timeout: float) -> tuple[int, str, str, float, float]:
     """Invoke a solver, returning exit code, output, elapsed and peak memory.
 

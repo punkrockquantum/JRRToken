@@ -38,7 +38,15 @@ from pathlib import Path
 from compile_polysys import compile_cico
 from reference import CicoProblem, brute_force_solutions, validate
 from roundtrip import round_trip
-from solvers import NO_SOLUTION, POSITIVE_DIM, SOLVED, WALL, Corroboration, corroborate
+from solvers import (
+    NO_SOLUTION,
+    POSITIVE_DIM,
+    SOLVED,
+    WALL,
+    Corroboration,
+    contending_solvers,
+    corroborate,
+)
 from spec import Spec
 
 #: Rate assignments brute force will enumerate to cross-check a rung. Above
@@ -138,6 +146,10 @@ class Ladder:
     roundtrip_passed: bool
     wall_at: int | None
     planted: bool = True
+    #: Any rung measured while another solver was running. Timings from a
+    #: contended window measure scheduling, not mathematics, so the cost gate
+    #: must not rest on them.
+    contended_rounds: tuple[int, ...] = field(default=())
     solver_versions: tuple[str, ...] = field(default=())
 
     @property
@@ -240,7 +252,8 @@ class Ladder:
         for rung in self.rungs:
             lines.append("  " + rung.render())
         lines.append(
-            f"  solved_rungs={len(self.solved_rungs)}/{len(self.rungs)} "
+            f"  contended_rounds={list(self.contended_rounds)} "
+            f"solved_rungs={len(self.solved_rungs)}/{len(self.rungs)} "
             f"wall_at={self.wall_at} "
             f"deviations={[r.rounds for r in self.deviations]} "
             f"sanity_failures={[r.rounds for r in self.sanity_failures]} "
@@ -336,6 +349,7 @@ def run_ladder(
     wall_at: int | None = None
     versions: set[str] = set()
     roundtrip_ok = True
+    contended: list[int] = []
 
     for rounds in range(1, limit + 1):
         problem = problem_at(rounds)
@@ -349,7 +363,12 @@ def run_ladder(
                 f"reference disagree and no measurement is meaningful:\n{trip.render()}"
             )
 
+        # Exclusivity, checked per rung rather than once: a competing solver
+        # can start at any point during a long ladder.
+        before = contending_solvers()
         corroboration: Corroboration = corroborate(system, timeout=timeout)
+        if before or contending_solvers():
+            contended.append(rounds)
         versions.add(f"{corroboration.primary.solver}/{corroboration.primary.version}")
         versions.add(f"{corroboration.secondary.solver}/{corroboration.secondary.version}")
 
@@ -408,6 +427,7 @@ def run_ladder(
         roundtrip_passed=roundtrip_ok,
         wall_at=wall_at,
         solver_versions=tuple(sorted(versions)),
+        contended_rounds=tuple(contended),
     )
 
 
