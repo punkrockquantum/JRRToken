@@ -96,6 +96,14 @@ class CicoProblem:
     rounds: int
     free_rate: int | None = None
     fixed_rate: tuple[int, ...] = ()
+    #: Required output values for the capacity elements. Zero is the classical
+    #: CICO statement. A **planted** instance sets these from the reference
+    #: implementation at a chosen witness, so a solution is known to exist by
+    #: construction -- see ``planted`` below.
+    target_output: tuple[int, ...] = ()
+    #: The witness a planted instance was built around, kept only so the
+    #: pipeline can check whether it recovered it. Never used in solving.
+    planted_witness: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         free = self.spec.capacity if self.free_rate is None else self.free_rate
@@ -138,10 +146,67 @@ class CicoProblem:
         rate = [v % self.spec.prime for v in free] + list(self.fixed_rate)
         return [0] * self.spec.capacity + rate
 
+    @property
+    def required_output(self) -> tuple[int, ...]:
+        """The capacity values the output must take. Zero unless planted."""
+        if self.target_output:
+            return self.target_output
+        return tuple(0 for _ in range(self.spec.capacity))
+
+    @property
+    def is_planted(self) -> bool:
+        return bool(self.target_output)
+
     def holds(self, free: list[int]) -> bool:
         """Whether this assignment solves the problem, per the reference."""
         out = permute(self.input_from_rate(free), self.spec, self.rounds)
-        return all(out[i] == 0 for i in range(self.spec.capacity))
+        want = self.required_output
+        return all(out[i] == want[i] for i in range(self.spec.capacity))
+
+    @staticmethod
+    def planted(
+        spec: Spec,
+        rounds: int,
+        witness: list[int] | None = None,
+        free_rate: int | None = None,
+    ) -> "CicoProblem":
+        """A CICO instance built around a known solution.
+
+        Why this exists. The classical statement requires the output capacity to
+        be **zero**, and whether any input achieves that is a property of the
+        instance -- over F_p with one free variable the solution count is
+        roughly Poisson(1), so a given instance often has none. At a small
+        prime that is discoverable by exhausting the free space. At a
+        cryptographic prime it is not: the search is the attack.
+
+        So the forward round-trip cannot be supplied with material at p = 2^30
+        by searching, and the driver correctly refuses to pass vacuously. A
+        planted instance fixes that by *choosing* the target: evaluate the
+        reference at a witness and require the output it produced. A solution
+        then exists by construction, at any field size.
+
+        **What a planted instance does and does not measure.** It measures the
+        solver's difficulty on a system of this shape -- the equations differ
+        from the zero-target instance only in a constant term, so the monomial
+        structure, the variable count and the degree profile are identical.
+        It is *not* evidence that the zero-target instance is solvable, and
+        ``is_planted`` is carried on every result so that no report can blur
+        the two.
+        """
+        base = CicoProblem(spec=spec, rounds=rounds, free_rate=free_rate)
+        if witness is None:
+            witness = [(i * 2654435761 + 12345) % spec.prime for i in range(base.n_free)]
+        if len(witness) != base.n_free:
+            raise ReferenceRefused(f"witness must have {base.n_free} elements")
+        out = permute(base.input_from_rate(witness), spec, rounds)
+        return CicoProblem(
+            spec=spec,
+            rounds=rounds,
+            free_rate=free_rate,
+            fixed_rate=base.fixed_rate,
+            target_output=tuple(out[i] for i in range(spec.capacity)),
+            planted_witness=tuple(v % spec.prime for v in witness),
+        )
 
     def render(self) -> str:
         return (
@@ -149,6 +214,7 @@ class CicoProblem:
             f"capacity={self.spec.capacity} rate={self.spec.rate} "
             f"free={self.n_free} constraints={self.n_constraints} "
             f"zero_dimensional={self.is_zero_dimensional} "
+            f"planted={self.is_planted} "
             f"generic_cost_log2={self.generic_cost_log2:.2f}"
         )
 

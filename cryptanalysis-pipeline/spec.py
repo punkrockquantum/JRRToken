@@ -41,10 +41,18 @@ from typing import Iterator
 #: for the S-box exponents below, which is what makes x -> x^d a permutation.
 CALIBRATION_PRIMES: tuple[int, ...] = (11, 13, 17, 23, 29, 31, 37, 41, 101, 257)
 
-#: A 31-bit prime of the shape ZK proof systems use (p = 2^30 + 3 is prime).
-#: Large enough that exhaustive search is infeasible, small enough that msolve
-#: arithmetic stays cheap.
-FIELD_31BIT = (1 << 30) + 3
+#: 30-bit primes admitting the two standard S-box exponents as permutations.
+#: x -> x^d permutes F_p exactly when gcd(d, p-1) = 1, so the prime must be
+#: chosen against the exponent: 2^30 + 3 is prime but is 1 mod 3, so x^3 is
+#: *not* a permutation there. ``Spec.create`` refuses that combination, which
+#: is how the first draft of this constant was caught.
+FIELD_30BIT_CUBE = 1073741831   # 2^30 + 7, and 2 mod 3
+FIELD_30BIT_QUINT = 1073741827  # 2^30 + 3, and 2 mod 5
+
+#: A 16-bit prime usable with both exponents, for cheap ladders. Recorded with
+#: a caveat: msolve returns empty output for p = 65537 in this build, so the
+#: corroborating solver carries these cells alone.
+FIELD_16BIT = 65537
 
 
 class SpecRefused(Exception):

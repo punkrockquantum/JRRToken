@@ -57,11 +57,21 @@ def trace_sbox_values(state: list[int], spec: Spec, rounds: int) -> list[int]:
     return outputs
 
 
+def _problem_of(system: PolynomialSystem) -> CicoProblem:
+    """The system's own problem, never a reconstruction of one."""
+    if system.problem is None:
+        raise RoundTripFailure(
+            "the system carries no problem, so its instance cannot be "
+            "recovered; rebuilding one would lose the planted target"
+        )
+    return system.problem
+
+
 def assignment_from_rate(
     system: PolynomialSystem, rate: list[int]
 ) -> dict[str, int]:
     """The full assignment -- rate plus every intermediate -- for a rate input."""
-    problem = CicoProblem(spec=system.spec, rounds=system.rounds)
+    problem = _problem_of(system)
     state = problem.input_from_rate(rate)
     sbox_values = trace_sbox_values(state, system.spec, system.rounds)
 
@@ -88,19 +98,32 @@ class RoundTripReport:
     forward_failures: tuple[str, ...]
     reverse_checked: int
     reverse_failures: tuple[str, ...]
+    #: Set only when the forward direction has no material *and that has been
+    #: established exhaustively*: the instance genuinely has no F_p-rational
+    #: solution, so there is no model solution to push through the reference.
+    #: A budget-limited search never sets this -- see ``_find_solving_rates``.
+    forward_unavailable_reason: str = ""
 
     @property
     def passed(self) -> bool:
-        """Both directions must have run *and* found nothing wrong.
+        """Both directions must have run and found nothing wrong.
 
         A direction that checked zero cases has not passed, it has not run. The
-        first draft of this returned True with ``forward_checked=0``, because
-        none of the sampled rates happened to solve the CICO problem and the
-        forward direction was therefore never exercised -- a vacuous pass, and
-        exactly the shape of failure this test exists to prevent elsewhere.
+        first draft returned True with ``forward_checked=0`` because none of the
+        sampled rates happened to solve the CICO problem -- a vacuous pass.
+
+        The one admissible exception is an instance with **no F_p-rational
+        solution at all**, established by exhausting the free space. Then the
+        forward direction has no material by construction rather than by
+        oversight, and ``forward_unavailable_reason`` records which it was. The
+        reason must be *verified* exhaustively, never asserted, or it becomes an
+        excuse that swallows real failures.
         """
+        forward_ok = (
+            self.forward_checked > 0 or bool(self.forward_unavailable_reason)
+        )
         return (
-            self.forward_checked > 0
+            forward_ok
             and self.reverse_checked > 0
             and not self.forward_failures
             and not self.reverse_failures
@@ -108,9 +131,9 @@ class RoundTripReport:
 
     @property
     def vacuous(self) -> tuple[str, ...]:
-        """Which directions did not run at all."""
+        """Directions that ran nothing *without* a verified reason."""
         empty = []
-        if not self.forward_checked:
+        if not self.forward_checked and not self.forward_unavailable_reason:
             empty.append("forward")
         if not self.reverse_checked:
             empty.append("reverse")
@@ -122,6 +145,8 @@ class RoundTripReport:
             f"  forward checked={self.forward_checked} failures={len(self.forward_failures)}",
             f"  reverse checked={self.reverse_checked} failures={len(self.reverse_failures)}",
         ]
+        if self.forward_unavailable_reason:
+            lines.append(f"  forward not applicable: {self.forward_unavailable_reason}")
         if self.vacuous:
             lines.append(
                 f"  VACUOUS: {list(self.vacuous)} ran zero cases, so nothing was checked"
@@ -139,7 +164,7 @@ def check_reverse(system: PolynomialSystem, rates: list[list[int]]) -> tuple[int
         # The model's CICO output equations only vanish when the rate actually
         # solves the problem, so those are checked separately from the S-box
         # equations, which must vanish for *every* input.
-        problem = CicoProblem(spec=system.spec, rounds=system.rounds)
+        problem = _problem_of(system)
         satisfied, residuals = evaluate_system(system, assignment)
         sbox_count = len(residuals) - system.spec.capacity
         sbox_ok = all(r == 0 for r in residuals[:sbox_count])
@@ -162,7 +187,7 @@ def check_forward(
     system: PolynomialSystem, assignments: list[dict[str, int]]
 ) -> tuple[int, list[str]]:
     """Every model solution must solve the CICO problem per the reference."""
-    problem = CicoProblem(spec=system.spec, rounds=system.rounds)
+    problem = _problem_of(system)
     failures: list[str] = []
     for assignment in assignments:
         satisfied, residuals = evaluate_system(system, assignment)
@@ -203,15 +228,20 @@ def round_trip(
 
     reverse_checked, reverse_failures = check_reverse(system, sample_rates)
 
+    unavailable = ""
     if model_solutions is None:
         # The forward direction needs rates that genuinely solve the problem,
-        # and a sampled spread almost never contains one -- p^capacity of the
-        # rate space solves it, which at p=101 is one in 101. So search for
-        # them, exhaustively where the space allows.
-        problem = CicoProblem(spec=spec, rounds=system.rounds)
+        # and a sampled spread almost never contains one -- roughly one in p of
+        # the free space does. So search for them.
+        problem = _problem_of(system)
         solving_rates = [rate for rate in sample_rates if problem.holds(rate)]
+        if not solving_rates and problem.is_planted:
+            # A planted instance carries its witness, so the forward direction
+            # needs no search at any field size. This is the only reason the
+            # ladder runs at a cryptographic prime.
+            solving_rates = [list(problem.planted_witness)]
         if not solving_rates:
-            solving_rates = _find_solving_rates(problem, wanted=3)
+            solving_rates, unavailable = _find_solving_rates(problem, wanted=3)
         model_solutions = [
             assignment_from_rate(system, rate) for rate in solving_rates
         ]
@@ -224,37 +254,51 @@ def round_trip(
         forward_failures=tuple(forward_failures),
         reverse_checked=reverse_checked,
         reverse_failures=tuple(reverse_failures),
+        forward_unavailable_reason=unavailable,
     )
 
 
 def _find_solving_rates(
     problem: CicoProblem, wanted: int = 3, budget: int = 2_000_000
-) -> list[list[int]]:
-    """Rates that solve the CICO problem, found by direct search.
+) -> tuple[list[list[int]], str]:
+    """Solving assignments, and -- if there are none -- why that is admissible.
 
-    Used only to *supply the forward round-trip test with material*, never as
-    an attack: the search is over the whole rate space and costs exactly what
-    generic costs. Raises rather than returning an empty list, because an empty
-    list would make the forward direction vacuous and that is the failure this
-    function exists to remove.
+    Used only to supply the forward round-trip test with material, never as an
+    attack: the search covers the whole free space and costs exactly what
+    generic costs.
+
+    Returns ``(found, unavailable_reason)``. The reason is non-empty **only**
+    when the whole free space was exhausted and contained no solution, which is
+    a legitimate property of the instance -- with one free variable over F_p
+    the solution count is roughly Poisson(1), so an empty instance is common
+    and is not a defect.
+
+    A search that ran out of budget returns no reason and raises, because then
+    nothing has been established and a silent pass would hide a real failure.
     """
     spec = problem.spec
-    total = spec.prime**spec.rate
+    total = spec.prime**problem.n_free
+    exhaustive = total <= budget
     found: list[list[int]] = []
     for encoded in range(min(total, budget)):
-        rate, rest = [], encoded
-        for _ in range(spec.rate):
-            rate.append(rest % spec.prime)
+        free, rest = [], encoded
+        for _ in range(problem.n_free):
+            free.append(rest % spec.prime)
             rest //= spec.prime
-        if problem.holds(rate):
-            found.append(rate)
+        if problem.holds(free):
+            found.append(free)
             if len(found) >= wanted:
-                return found
-    if not found:
-        raise RoundTripFailure(
-            f"no rate in {min(total, budget)} candidates solves {problem.render()}, "
-            "so the forward direction cannot be exercised. Either the problem is "
-            "unsatisfiable -- which would itself be a finding -- or the search "
-            "budget is too small."
+                return found, ""
+    if found:
+        return found, ""
+    if exhaustive:
+        return [], (
+            f"no F_p-rational solution exists: all {total} assignments over the "
+            f"free space were checked. The forward direction has no material by "
+            f"construction, not by oversight."
         )
-    return found
+    raise RoundTripFailure(
+        f"no solution found in {budget} of {total} candidates for "
+        f"{problem.render()}, and the space was not exhausted, so nothing is "
+        "established. Raise the budget or state the instance differently."
+    )

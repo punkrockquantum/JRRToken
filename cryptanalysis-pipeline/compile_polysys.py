@@ -34,6 +34,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from polynomial import Poly
 from reference import CicoProblem
 from spec import Spec
 
@@ -52,6 +53,11 @@ class PolynomialSystem:
 
     spec: Spec
     rounds: int
+    #: The problem this system encodes. Carried because reconstructing one from
+    #: the spec and round count loses everything else about it -- an earlier
+    #: version did that and silently rebuilt a planted instance as an
+    #: un-planted one, so the round-trip lost the witness it had been given.
+    problem: "CicoProblem | None"
     variables: tuple[str, ...]
     equations: tuple[str, ...]
     #: Which variables are the free rate elements, in rate order. Decoding a
@@ -60,6 +66,10 @@ class PolynomialSystem:
     #: Degree of each equation, so the system's shape is reportable without
     #: re-parsing it.
     degrees: tuple[int, ...] = field(default=())
+    #: The equations as Poly objects. Kept so evaluation never re-parses the
+    #: rendered strings -- re-parsing is how a second reading of the model
+    #: drifts from the first.
+    polys: tuple[Poly, ...] = field(default=())
 
     @property
     def n_variables(self) -> int:
@@ -114,27 +124,19 @@ class PolynomialSystem:
         )
 
 
-def _linear(terms: dict[str, int], constant: int, prime: int) -> str:
-    """Render a linear expression ``sum(coeff * var) + constant`` over F_p."""
-    parts = []
-    for name, coefficient in terms.items():
-        c = coefficient % prime
-        if c:
-            parts.append(f"{c}*{name}")
-    k = constant % prime
-    if k or not parts:
-        parts.append(str(k))
-    return "(" + "+".join(parts) + ")"
-
-
 def compile_cico(problem: CicoProblem) -> PolynomialSystem:
-    """Build the polynomial system for a CICO problem.
+    """Build the polynomial system for a CICO problem, in **expanded** form.
 
-    State elements are carried as linear forms in the variables -- a dict of
-    coefficients plus a constant -- so constant addition and the MDS layer are
-    exact symbolic operations that introduce nothing. Only the S-box introduces
-    a variable and an equation, which is why the system's size is the S-box
-    count and not the round count.
+    State elements are carried as ``Poly`` objects, so constant addition and the
+    MDS layer are exact polynomial operations and only the S-box introduces a
+    variable and an equation. Every equation handed to a solver is a sum of
+    monomials.
+
+    The expansion is not cosmetic. The first version emitted the factored form
+    ``(1*x0+61)^3-y1``, which msolve silently mis-parses -- it returns ``[-1]``,
+    *no solution in the algebraic closure*, for a system with a demonstrable
+    solution. See ``polynomial.py``'s docstring; the two-solver corroboration is
+    what caught it.
     """
     spec = problem.spec
     p = spec.prime
@@ -148,66 +150,50 @@ def compile_cico(problem: CicoProblem) -> PolynomialSystem:
         )
 
     variables: list[str] = []
-    equations: list[str] = []
-    degrees: list[int] = []
+    equations: list[Poly] = []
 
-    # The input: capacity fixed to zero, `free_rate` rate elements free, the
-    # remaining rate elements pinned. Pinning is what makes the system
-    # zero-dimensional -- see CicoProblem's docstring.
     rate_variables = tuple(f"x{i}" for i in range(problem.n_free))
     variables.extend(rate_variables)
 
-    # Each state element is (linear-form-in-variables, constant).
-    state: list[tuple[dict[str, int], int]] = []
-    for i in range(spec.capacity):
-        state.append(({}, 0))
-    for name in rate_variables:
-        state.append(({name: 1}, 0))
-    for pinned in problem.fixed_rate:
-        state.append(({}, pinned % p))
+    # Capacity zero, free rate variable, then the pinned rate elements. Pinning
+    # is what makes the system zero-dimensional -- see CicoProblem.
+    state: list[Poly] = [Poly.constant(0, p) for _ in range(spec.capacity)]
+    state.extend(Poly.variable(name, p) for name in rate_variables)
+    state.extend(Poly.constant(v, p) for v in problem.fixed_rate)
 
     sbox_index = 0
     for round_index, kind in enumerate(spec.round_kinds()):
         if round_index >= rounds:
             break
 
-        # Add round constants: exact, in the constant term.
         state = [
-            (terms, (constant + spec.constants[round_index][i]) % p)
-            for i, (terms, constant) in enumerate(state)
+            element + spec.constants[round_index][i]
+            for i, element in enumerate(state)
         ]
 
-        # S-box: the only thing that costs a variable and an equation.
         targets = range(spec.width) if kind == "full" else range(1)
         for i in targets:
-            terms, constant = state[i]
             fresh = f"y{sbox_index}"
             sbox_index += 1
             variables.append(fresh)
-            expression = _linear(terms, constant, p)
-            equations.append(f"{expression}^{spec.sbox_exponent}-{fresh}")
-            degrees.append(spec.sbox_exponent)
-            state[i] = ({fresh: 1}, 0)
+            equations.append(
+                state[i].power(spec.sbox_exponent) - Poly.variable(fresh, p)
+            )
+            state[i] = Poly.variable(fresh, p)
 
-        # MDS: exact linear recombination of the forms.
-        combined: list[tuple[dict[str, int], int]] = []
+        combined: list[Poly] = []
         for i in range(spec.width):
-            terms: dict[str, int] = {}
-            constant = 0
+            acc = Poly.constant(0, p)
             for j in range(spec.width):
-                coefficient = spec.mds[i][j]
-                inner_terms, inner_constant = state[j]
-                for name, value in inner_terms.items():
-                    terms[name] = (terms.get(name, 0) + coefficient * value) % p
-                constant = (constant + coefficient * inner_constant) % p
-            combined.append((terms, constant))
+                acc = acc + state[j].scale(spec.mds[i][j])
+            combined.append(acc)
         state = combined
 
-    # The output constraint: capacity elements zero.
+    # The output constraint. For a planted instance this is the value the
+    # reference produced at the witness; otherwise zero.
+    want = problem.required_output
     for i in range(spec.capacity):
-        terms, constant = state[i]
-        equations.append(_linear(terms, constant, p))
-        degrees.append(1)
+        equations.append(state[i] - want[i])
 
     if not equations:
         raise CompileRefused("no equations were generated; the model is empty")
@@ -215,10 +201,12 @@ def compile_cico(problem: CicoProblem) -> PolynomialSystem:
     return PolynomialSystem(
         spec=spec,
         rounds=rounds,
+        problem=problem,
         variables=tuple(variables),
-        equations=tuple(equations),
+        equations=tuple(e.render() for e in equations),
         rate_variables=rate_variables,
-        degrees=tuple(degrees),
+        degrees=tuple(e.degree for e in equations),
+        polys=tuple(equations),
     )
 
 
@@ -240,30 +228,11 @@ def evaluate_system(
 ) -> tuple[bool, tuple[int, ...]]:
     """Whether an assignment satisfies every equation, and each residual.
 
-    Used by the reverse round-trip test: a known-good pair from the reference
-    implementation must make every residual zero. Implemented by rebuilding the
-    system's own arithmetic rather than by calling a solver, so it is an
-    independent reading of the model.
+    Evaluates the ``Poly`` objects directly rather than re-parsing the rendered
+    strings. An earlier version evaluated the strings through ``eval``, which
+    made the check a second parser rather than a second reading -- and a parser
+    that agreed with the renderer by construction.
     """
-    from reference import sbox
-
-    spec = system.spec
-    p = spec.prime
-    residuals = []
-    for equation in system.equations:
-        residuals.append(_evaluate_expression(equation, assignment, p, spec.sbox_exponent))
-    return all(r % p == 0 for r in residuals), tuple(r % p for r in residuals)
-
-
-def _evaluate_expression(text: str, assignment: dict[str, int], prime: int, exponent: int) -> int:
-    """Evaluate one generated equation.
-
-    The generated syntax is restricted -- integers, variable names, ``+``,
-    ``*``, ``-``, ``^`` and parentheses -- so it maps onto Python arithmetic by
-    replacing ``^`` with ``**``. Evaluated in a namespace holding only the
-    assignment, so a name the model did not declare raises instead of resolving.
-    """
-    expression = text.replace("^", "**")
-    namespace = {"__builtins__": {}}
-    namespace.update({k: v % prime for k, v in assignment.items()})
-    return eval(expression, namespace) % prime  # noqa: S307 - restricted namespace
+    p = system.spec.prime
+    residuals = tuple(poly.evaluate(assignment) % p for poly in system.polys)
+    return all(r == 0 for r in residuals), residuals
