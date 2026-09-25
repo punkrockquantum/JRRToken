@@ -294,3 +294,140 @@ def test_a_missing_artefact_is_not_a_silent_pass(tmp_path: Path) -> None:
     ok, detail = regenerate(tmp_path / "absent.json", lambda: "")
     assert not ok
     assert "nothing to regenerate" in detail
+
+
+# -- L5 wired into L3 --------------------------------------------------------
+#
+# These build Ladder and Rung objects directly. No solver is invoked, which is
+# deliberate: the record-keeping must be checkable without a 900-second run,
+# and a test that needs Singular is a test nobody runs before committing.
+
+from ladder import Ladder, Rung  # noqa: E402
+from solvers import SOLVED, WALL  # noqa: E402
+
+
+def rung(rounds: int, ideal: int | None, status: str = SOLVED, seconds: float = 1.0) -> Rung:
+    return Rung(
+        rounds=rounds,
+        n_variables=rounds + 1,
+        n_equations=rounds + 1,
+        status=status,
+        seconds=seconds,
+        peak_memory_mb=10.0,
+        ideal_degree=ideal,
+        max_degree=3,
+        basis_size=2,
+        matrix_cells=None,
+        predicted_degree=3**rounds,
+        rational_solutions=None,
+        solvers_agree=True,
+    )
+
+
+def ladder_of(*rungs: Rung, planted: bool = True, wall_at: int | None = None,
+              contended: tuple[int, ...] = ()) -> Ladder:
+    return Ladder(
+        spec_render="spec=test digest=abcd1234abcd1234",
+        spec_digest="abcd1234abcd1234",
+        problem_render="cico test",
+        rungs=rungs,
+        validation_passed=True,
+        roundtrip_passed=True,
+        wall_at=wall_at,
+        planted=planted,
+        contended_rounds=contended,
+        solver_versions=("msolve/0.6.5", "Singular/4.3.2"),
+    )
+
+
+def test_the_committed_record_carries_the_facts_that_decide_scope() -> None:
+    """Both of these were printed by render() and absent from to_json(), so the
+    artefact a reader actually gets omitted the two facts that govern what the
+    numbers beside them may be used for."""
+    record = json.loads(
+        ladder_of(rung(1, 3), rung(2, 9), planted=True, contended=(2,)).to_json()
+    )
+    assert record["planted"] is True
+    assert record["contended_rounds"] == [2]
+    assert record["rung_tiers"] == {"1": "E", "2": "E"}
+    assert record["growth_model_tier"] == MODEL
+
+
+def test_a_rung_without_its_observable_is_tier_dash_in_the_record() -> None:
+    record = json.loads(ladder_of(rung(1, 3), rung(2, None, status=WALL)).to_json())
+    assert record["rung_tiers"] == {"1": "E", "2": "-"}
+
+
+def test_the_record_kind_follows_the_pre_registered_criteria() -> None:
+    reached = ladder_of(rung(1, 3), rung(2, 9), rung(3, 27))
+    assert reached.record_kind == "no-deviation"
+    walled = ladder_of(rung(1, 3), rung(2, None, status=WALL), wall_at=2)
+    assert walled.record_kind == "wall"
+    # A deviation is the finding whether or not the ladder later walled.
+    deviated = ladder_of(rung(1, 3), rung(2, 8), rung(3, None, status=WALL), wall_at=3)
+    assert deviated.deviations[0].rounds == 2
+    assert deviated.record_kind == "deviation"
+
+
+def test_the_blindness_statement_is_written_from_the_run() -> None:
+    """Not a template. It names this ladder's highest closed round, and its
+    planted and contended facts, so a reader cannot skip it as boilerplate."""
+    blindness = ladder_of(
+        rung(1, 3), rung(2, 9), rung(3, None, status=WALL),
+        wall_at=3, planted=True, contended=(2,),
+    ).blindness()
+    assert "rounds above 2 were never closed" in blindness
+    assert "planted" in blindness
+    assert "rounds [2] were measured while another solver was running" in blindness
+
+
+def test_an_unplanted_uncontended_ladder_says_less_about_its_blindness() -> None:
+    blindness = ladder_of(rung(1, 3), rung(2, 9), planted=False).blindness()
+    assert "planted" not in blindness
+    assert "another solver" not in blindness
+    assert "degree collapse" in blindness
+
+
+def test_the_ladder_record_passes_through_the_l5_mint() -> None:
+    prereg = load_prereg(PREREG)
+    record = ladder_of(rung(1, 3), rung(2, 9)).to_record(prereg)
+    assert record["kind"] == "no-deviation"
+    assert record["prereg_sha256"] == prereg.sha256
+    assert record["blindness"]
+    assert record["ideal_degrees"] == {"1": 3, "2": 9}
+    assert record["highest_closed_round"] == 2
+
+
+def test_a_ladder_with_no_solvers_cannot_be_recorded() -> None:
+    """The mint refusal reaches the ladder: a run that recorded no solver
+    version cannot be logged, because the version is part of the claim."""
+    bare = Ladder(
+        spec_render="spec=test", spec_digest="abcd", problem_render="cico",
+        rungs=(rung(1, 3),), validation_passed=True, roundtrip_passed=True,
+        wall_at=None, planted=False, solver_versions=(),
+    )
+    with pytest.raises(ProvenanceRefused) as excinfo:
+        bare.to_record(load_prereg(PREREG))
+    assert "cannot be re-run" in str(excinfo.value)
+
+
+def test_saving_appends_to_the_chain_and_verifies(tmp_path: Path) -> None:
+    from ladder import save
+
+    prereg = load_prereg(PREREG)
+    first = save(ladder_of(rung(1, 3), rung(2, 9)), tmp_path, prereg=prereg)
+    assert first.exists()
+    log = ResultLog(tmp_path / "log.jsonl")
+    ok, detail = log.verify()
+    assert ok, detail
+    assert log.records()[0].payload["kind"] == "no-deviation"
+
+
+def test_saving_without_a_prereg_leaves_the_chain_untouched(tmp_path: Path) -> None:
+    """A record naming no pre-registration is refused at mint time, so the
+    chain is not started at all rather than started with a record that could
+    never be extended."""
+    from ladder import save
+
+    save(ladder_of(rung(1, 3)), tmp_path)
+    assert not (tmp_path / "log.jsonl").exists()

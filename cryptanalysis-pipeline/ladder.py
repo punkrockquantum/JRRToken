@@ -36,6 +36,15 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from compile_polysys import compile_cico
+from provenance import (
+    MODEL,
+    PreRegistration,
+    ResultLog,
+    Tier,
+    assert_all_exhausted,
+    mint_record,
+    tier_of_rung,
+)
 from reference import CicoProblem, brute_force_solutions, validate
 from roundtrip import round_trip
 from solvers import (
@@ -77,19 +86,22 @@ class Rung:
     detail: str = ""
 
     @property
-    def tier(self) -> str:
-        """E only for a rung that produced its observable.
+    def tier_label(self) -> Tier | None:
+        """The tier, decided in L5 so the rule has one definition.
 
-        A decisive status is necessary and not sufficient: the measurement is
-        the ideal degree, and a rung without one has not measured anything.
-        ``NO_SOLUTION`` is the exception -- an empty variety has degree 0 and
-        that *is* the observable.
+        ``None`` means this rung measured nothing, which is a legitimate
+        outcome: a decisive status is necessary and not sufficient, because the
+        observable is the ideal degree and a rung without one has not measured
+        anything. ``NO_SOLUTION`` is the exception -- an empty variety has
+        degree 0 and that *is* the observable.
         """
-        if self.status == NO_SOLUTION:
-            return "E"
-        if self.status in {SOLVED, POSITIVE_DIM} and self.ideal_degree is not None:
-            return "E"
-        return "-"
+        return tier_of_rung(self.status, self.ideal_degree, no_solution=NO_SOLUTION)
+
+    @property
+    def tier(self) -> str:
+        """The label as it is printed: ``E``, or ``-`` for no measurement."""
+        label = self.tier_label
+        return "-" if label is None else str(label)
 
     @property
     def degree_deficit(self) -> int | None:
@@ -188,6 +200,14 @@ class Ladder:
             for r in self.solved_rungs
             if r.ideal_degree and r.ideal_degree > 0 and r.rounds > 0
         ]
+        # A regression guard, and stated as one: today it cannot fire, because
+        # ``solved_rungs`` filters on the same predicate it checks. It exists so
+        # that a later rung type -- a sampled solving degree, say -- cannot
+        # reach the fit by widening that filter. The guard's own behaviour is
+        # tested directly in L5's tests rather than through this call.
+        assert_all_exhausted(
+            [r.tier_label for r in self.solved_rungs], "the growth-model fit"
+        )
         models: dict[str, dict[str, float]] = {}
         if len(points) < 3:
             return models
@@ -263,7 +283,7 @@ class Ladder:
         if models:
             for name, params in models.items():
                 rendered = " ".join(f"{k}={v:.6g}" for k, v in params.items())
-                lines.append(f"  model={name} {rendered} tier=MODEL-not-a-measurement")
+                lines.append(f"  model={name} {rendered} tier={MODEL}")
             lines.append(f"  models_diverge_beyond_round={self.divergence_round()}")
         else:
             lines.append(
@@ -284,19 +304,112 @@ class Ladder:
         return "\n".join(lines)
 
     def to_json(self) -> str:
+        """The record as it is committed.
+
+        ``planted`` and ``contended_rounds`` are in here because they were
+        once not: the render printed both and the saved JSON dropped them, so
+        the committed artefact -- the one a reader actually gets -- omitted the
+        two facts that decide what the numbers beside them may be used for. A
+        scope refusal that exists only in a terminal is not a refusal.
+        """
         payload = {
             "spec": self.spec_render,
             "spec_digest": self.spec_digest,
             "problem": self.problem_render,
+            "planted": self.planted,
+            "contended_rounds": list(self.contended_rounds),
             "validation_passed": self.validation_passed,
             "roundtrip_passed": self.roundtrip_passed,
             "wall_at": self.wall_at,
             "solver_versions": list(self.solver_versions),
             "rungs": [asdict(r) for r in self.rungs],
+            "rung_tiers": {str(r.rounds): r.tier for r in self.rungs},
+            "deviations": [r.rounds for r in self.deviations],
+            "sanity_failures": [r.rounds for r in self.sanity_failures],
+            "disagreements": [r.rounds for r in self.disagreements],
             "growth_models": self.growth_models(),
+            "growth_model_tier": MODEL,
             "models_diverge_beyond_round": self.divergence_round(),
         }
         return json.dumps(payload, indent=2, sort_keys=True)
+
+    # -- L5 --------------------------------------------------------------
+
+    @property
+    def record_kind(self) -> str:
+        """What this ladder is, by the pre-registered criteria.
+
+        Ordering matters: a deviation is the finding whether or not the ladder
+        later hit a wall, and a wall is a result in its own right. Only a
+        ladder that reached its prediction at every solved rung is a
+        no-deviation record.
+        """
+        if self.deviations:
+            return "deviation"
+        if self.wall_at is not None:
+            return "wall"
+        return "no-deviation"
+
+    def blindness(self) -> str:
+        """What this ladder could not have seen. Assembled from its own facts.
+
+        Required by L5 on every negative, and written from the run rather than
+        from a template, because a template is a sentence a reader learns to
+        skip.
+        """
+        highest = max((r.rounds for r in self.solved_rungs), default=0)
+        parts = [
+            f"rounds above {highest} were never closed, so nothing here "
+            f"constrains them",
+            "one monomial ordering (degrevlex) and one solver pair were tried, "
+            "so a collapse visible only under a different ordering would not "
+            "appear",
+            "the observable is the ideal degree; an attack that does not "
+            "proceed by degree collapse is outside what this measures",
+        ]
+        if self.planted:
+            parts.append(
+                "the instances are planted, so a solution existed by "
+                "construction and the zero-target instance was never attempted"
+            )
+        if self.contended_rounds:
+            parts.append(
+                f"rounds {list(self.contended_rounds)} were measured while "
+                "another solver was running, so their wall-clock reflects "
+                "scheduling"
+            )
+        return "; ".join(parts)
+
+    def to_record(self, prereg: PreRegistration) -> dict:
+        """The log payload, minted through L5 so its refusals apply."""
+        return mint_record(
+            kind=self.record_kind,
+            spec_digest=self.spec_digest,
+            solver_versions=self.solver_versions,
+            prereg_sha256=prereg.sha256,
+            blindness=self.blindness(),
+            payload={
+                "prereg_id": prereg.prereg_id,
+                "spec": self.spec_render,
+                "problem": self.problem_render,
+                "planted": self.planted,
+                "contended_rounds": list(self.contended_rounds),
+                "wall_at": self.wall_at,
+                "solved_rungs": len(self.solved_rungs),
+                "highest_closed_round": max(
+                    (r.rounds for r in self.solved_rungs), default=0
+                ),
+                "ideal_degrees": {
+                    str(r.rounds): r.ideal_degree for r in self.solved_rungs
+                },
+                "predicted_degrees": {
+                    str(r.rounds): r.predicted_degree for r in self.solved_rungs
+                },
+                "deviations": [r.rounds for r in self.deviations],
+                "disagreements": [r.rounds for r in self.disagreements],
+                "models_diverge_beyond_round": self.divergence_round(),
+            },
+        )
 
 
 class LadderRefused(Exception):
@@ -431,11 +544,34 @@ def run_ladder(
     )
 
 
-def save(ladder: Ladder, directory: str | Path) -> Path:
+def save(
+    ladder: Ladder,
+    directory: str | Path,
+    prereg: PreRegistration | None = None,
+) -> Path:
     """Write the ladder as JSON, named by the spec digest so a result names its
-    input and a re-run overwrites nothing it did not produce."""
+    input and a re-run overwrites nothing it did not produce.
+
+    With a pre-registration, the run is also appended to the L5 hash chain at
+    ``<directory>/log.jsonl`` and the pre-registration is checked against its
+    committed blob first -- an uncommitted document cannot stamp a run. Without
+    one, only the JSON is written and the chain is not touched, because a record
+    naming no pre-registration is refused at mint time and a half-written chain
+    is worse than none.
+
+    A name collision raises rather than overwriting: results are append-only,
+    and a second-resolution timestamp is not a guarantee of uniqueness.
+    """
     out = Path(directory)
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"ladder-{ladder.spec_digest}-{int(time.time())}.json"
+    if path.exists():
+        raise LadderRefused(
+            f"{path} already exists; results are append-only and this run will "
+            "not overwrite one it did not produce"
+        )
     path.write_text(ladder.to_json(), encoding="utf-8")
+    if prereg is not None:
+        prereg.assert_committed()
+        ResultLog(out / "log.jsonl").append(ladder.to_record(prereg))
     return path
