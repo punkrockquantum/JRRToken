@@ -156,6 +156,22 @@ class SweepReport:
     cells: tuple[Cell, ...]
     budget_seconds: float
     seconds_used: float
+    #: The per-rung and round limits actually used, and the pre-registered ones
+    #: beside them. Carried because the docstring on ``run_sweep`` claimed a
+    #: departure from the document was "recorded" while nothing recorded it --
+    #: a claim the code did not keep, which is the failure this whole layer is
+    #: built against.
+    timeout_seconds: float = 0.0
+    max_rounds: int = 0
+    prereg_timeout_seconds: float = 0.0
+    prereg_max_rounds: int = 0
+
+    @property
+    def as_pre_registered(self) -> bool:
+        return (
+            self.timeout_seconds == self.prereg_timeout_seconds
+            and self.max_rounds == self.prereg_max_rounds
+        )
 
     @property
     def attempted(self) -> tuple[Cell, ...]:
@@ -178,7 +194,19 @@ class SweepReport:
             f"prime={self.prime}",
             f"  budget={self.budget_seconds:.0f}s used={self.seconds_used:.0f}s "
             f"attempted={len(self.attempted)}/{len(self.cells)}",
+            f"  per_rung_timeout={self.timeout_seconds:.0f}s "
+            f"max_rounds={self.max_rounds} "
+            f"as_pre_registered={self.as_pre_registered}",
         ]
+        if not self.as_pre_registered:
+            lines.append(
+                f"  DEPARTURE: {self.prereg_id} fixes "
+                f"timeout_seconds={self.prereg_timeout_seconds:.0f} and "
+                f"max_rounds={self.prereg_max_rounds}; this ran at "
+                f"{self.timeout_seconds:.0f} and {self.max_rounds}. A cell run "
+                "at a different budget has a different wall and is not the "
+                "pre-registered measurement."
+            )
         for cell in self.cells:
             lines.append("  " + cell.render())
         lines.append(
@@ -278,6 +306,10 @@ def run_sweep(
         cells=tuple(cells),
         budget_seconds=budget_seconds,
         seconds_used=time.perf_counter() - started,
+        timeout_seconds=per_rung,
+        max_rounds=rounds_cap,
+        prereg_timeout_seconds=prereg.field_float("timeout_seconds"),
+        prereg_max_rounds=prereg.field_int("max_rounds"),
     )
 
 

@@ -149,3 +149,32 @@ def _stub_ladder():
         rungs=(rung,), validation_passed=True, roundtrip_passed=True,
         wall_at=None, planted=True, solver_versions=("stub/0",),
     )
+
+
+def test_the_report_carries_the_budget_it_actually_ran_at(monkeypatch) -> None:
+    """run_sweep's docstring said a departure from the document was recorded
+    while nothing recorded it -- a claim the code did not keep, which is the
+    failure this layer is built against."""
+    monkeypatch.setattr(W, "contending_solvers", lambda: ())
+    monkeypatch.setattr(W, "run_ladder", lambda *a, **k: _stub_ladder())
+    report = W.run_sweep(
+        prime=101, budget_seconds=600.0, only="t2-f2-p1", timeout=30.0, max_rounds=2
+    )
+    assert report.timeout_seconds == 30.0
+    assert report.max_rounds == 2
+    assert report.prereg_timeout_seconds == 900.0
+    assert report.prereg_max_rounds == 10
+    assert not report.as_pre_registered
+    rendered = report.render()
+    assert "DEPARTURE" in rendered
+    assert "is not the pre-registered measurement" in rendered
+
+
+def test_a_pre_registered_run_reports_no_departure(monkeypatch) -> None:
+    monkeypatch.setattr(W, "contending_solvers", lambda: ())
+    monkeypatch.setattr(W, "run_ladder", lambda *a, **k: _stub_ladder())
+    report = W.run_sweep(prime=101, budget_seconds=600.0, only="t2-f2-p1")
+    assert report.as_pre_registered
+    assert report.timeout_seconds == 900.0
+    assert report.max_rounds == 10
+    assert "DEPARTURE" not in report.render()
