@@ -362,6 +362,23 @@ def _git(*args: str, cwd: Path) -> str:
 _FIELD_START = re.compile(r"^-\s+`([A-Za-z0-9_]+)`\s*:\s*(.*)$")
 
 
+def _unwrap(value: str) -> str:
+    """Remove backticks that quote the *whole* value, and no others.
+
+    ``strip("`")`` looks equivalent and is not: a value that merely begins with
+    inline code -- ``\`reference.predicted_ideal_degree\`, which propagates
+    ...`` -- loses its opening backtick and nothing closes it, so the field
+    reads as mismatched markup. The content hash covers the raw document, so
+    this corrupts only what a reader of the parsed field sees, which is exactly
+    the audience that matters.
+    """
+    if len(value) > 1 and value.startswith("`") and value.endswith("`"):
+        inner = value[1:-1]
+        if "`" not in inner:
+            return inner
+    return value
+
+
 def _parse_fields(text: str) -> dict[str, str]:
     """``- `key`: value`` entries, with indented continuation lines joined.
 
@@ -375,7 +392,7 @@ def _parse_fields(text: str) -> dict[str, str]:
 
     def flush() -> None:
         if current is not None:
-            fields[current] = " ".join(p for p in parts if p).strip().strip("`")
+            fields[current] = _unwrap(" ".join(p for p in parts if p).strip())
 
     for line in text.splitlines():
         match = _FIELD_START.match(line)

@@ -431,3 +431,53 @@ def test_saving_without_a_prereg_leaves_the_chain_untouched(tmp_path: Path) -> N
 
     save(ladder_of(rung(1, 3)), tmp_path)
     assert not (tmp_path / "log.jsonl").exists()
+
+
+PREREG_002 = (
+    Path(__file__).resolve().parents[1]
+    / "prereg"
+    / "PREREG-002-poseidon-shape-partial-rounds.md"
+)
+
+
+def test_the_second_prereg_is_a_new_document_not_an_edit() -> None:
+    """PREREG-001 states its prediction as 3^r, which is not the prediction for
+    a spec with leading partial rounds. Rewriting a committed pre-registration
+    to cover a new target is the move this layer exists to prevent, so the new
+    target gets a new document and both remain readable."""
+    first, second = load_prereg(PREREG), load_prereg(PREREG_002)
+    assert first.prereg_id == "PREREG-001"
+    assert second.prereg_id == "PREREG-002"
+    assert first.sha256 != second.sha256
+    assert "3^r" in first.fields["prediction"]
+    assert "predicted_ideal_degree" in second.fields["prediction"]
+
+
+def test_the_second_prereg_fixes_the_partial_round_hypothesis_in_advance() -> None:
+    """Stated before the runs so that finding it is a confirmation rather than
+    a story told afterwards."""
+    hypothesis = load_prereg(PREREG_002).fields["partial_round_hypothesis"]
+    assert "below the propagated bound at a partial round" in hypothesis
+    assert "at no full round" in hypothesis
+
+
+def test_a_field_beginning_with_inline_code_keeps_its_backtick() -> None:
+    """strip("`") looks equivalent to unwrapping and is not: a value that
+    merely begins with inline code loses its opening backtick and nothing
+    closes it."""
+    prediction = load_prereg(PREREG_002).fields["prediction"]
+    assert prediction.startswith("`reference.predicted_ideal_degree`")
+    assert prediction.count("`") % 2 == 0
+
+
+def test_a_fully_quoted_field_is_unwrapped() -> None:
+    from provenance import _unwrap
+
+    assert _unwrap("`PREREG-001`") == "PREREG-001"
+    assert _unwrap("`a` and `b`") == "`a` and `b`"
+    assert _unwrap("plain") == "plain"
+    assert _unwrap("`") == "`"
+
+
+def test_the_second_prereg_is_committed_before_any_run_stamps_it() -> None:
+    assert len(load_prereg(PREREG_002).assert_committed()) == 40
