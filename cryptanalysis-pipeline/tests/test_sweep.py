@@ -178,3 +178,46 @@ def test_a_pre_registered_run_reports_no_departure(monkeypatch) -> None:
     assert report.timeout_seconds == 900.0
     assert report.max_rounds == 10
     assert "DEPARTURE" not in report.render()
+
+
+def test_a_cell_that_raises_does_not_kill_the_sweep(monkeypatch) -> None:
+    """The first width-3 cell raised in the round-trip test and the sweep died
+    with seven cells measured, seven never attempted, and no report saying so.
+    The coverage accounting is the sweep's whole purpose, so an unanticipated
+    exception cannot be allowed to take it with it."""
+    monkeypatch.setattr(W, "contending_solvers", lambda: ())
+    seen: list[int] = []
+
+    def flaky(spec, **kwargs):
+        seen.append(spec.width)
+        if spec.width == 3:
+            raise RuntimeError("expected 1 free rate elements")
+        return _stub_ladder()
+
+    monkeypatch.setattr(W, "run_ladder", flaky)
+    report = W.run_sweep(prime=101, budget_seconds=600.0, max_rounds=1, timeout=1.0)
+
+    assert 3 in seen, "the width-3 cells must still have been attempted"
+    assert len(report.attempted) == 7
+    assert len(report.failures) == 7
+    assert not report.unattempted
+    rendered = report.render()
+    assert "PIPELINE FAILURE" in rendered
+    assert "defects in this code, not properties of the primitive" in rendered
+    assert "expected 1 free rate elements" in rendered
+
+
+def test_a_failed_cell_is_not_counted_as_unattempted(monkeypatch) -> None:
+    """A cell nobody got to and a cell that broke the pipeline are different
+    facts, and only one of them is a bug report."""
+    monkeypatch.setattr(W, "contending_solvers", lambda: ())
+    monkeypatch.setattr(
+        W, "run_ladder", lambda *a, **k: (_ for _ in ()).throw(ValueError("boom"))
+    )
+    report = W.run_sweep(
+        prime=101, budget_seconds=600.0, only="t2-f2-p1", max_rounds=1, timeout=1.0
+    )
+    assert len(report.failures) == 1
+    assert not report.unattempted
+    assert not report.attempted
+    assert "COVERAGE" not in report.render()

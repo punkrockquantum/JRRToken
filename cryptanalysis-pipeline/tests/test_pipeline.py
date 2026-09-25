@@ -425,3 +425,22 @@ def test_the_prediction_never_reads_as_an_empty_variety() -> None:
         rounds_full_first=0, rounds_partial=1, rounds_full_last=1, capacity=1,
     )
     assert predicted_ideal_degree(CicoProblem(spec=spec, rounds=1), 1) == 1
+
+
+def test_the_round_trip_runs_at_every_width_the_sweep_uses() -> None:
+    """The regression test for the defect that killed the first sweep. The
+    default sample rates were built from spec.rate when the problem takes
+    n_free values, and those differ for every width above 2: at width 3 with
+    capacity 1 the rate is two elements and only one is free. Every earlier run
+    was width 2, where the two readings coincide."""
+    from compile_polysys import compile_cico
+    from roundtrip import round_trip
+
+    for width in (2, 3, 4):
+        spec = S.poseidon_like(prime=101, width=width, rounds_full=2, rounds_partial=1)
+        problem = CicoProblem.planted(spec, rounds=spec.rounds)
+        assert problem.n_free == spec.capacity
+        report = round_trip(compile_cico(problem))
+        assert report.passed, f"width={width}: {report.render()}"
+        assert report.forward_checked > 0
+        assert report.reverse_checked > 0

@@ -219,10 +219,20 @@ def round_trip(
     """
     spec = system.spec
     if sample_rates is None:
+        # One value per *free* rate element, not per rate element. Those differ
+        # the moment free_rate < rate, which is every width above 2: at width 3
+        # with capacity 1 the rate is 2 elements and only 1 of them is free,
+        # the other being pinned by the problem. Building the samples from
+        # spec.rate produced 2-element vectors for a 1-free problem and
+        # input_from_rate refused them, so the first width-3 cell of the
+        # Poseidon sweep died in the round-trip test before any solver ran.
+        # Every earlier run was width 2, where rate == free_rate and the two
+        # readings coincide.
         p = spec.prime
-        corners = [[0] * spec.rate, [1] * spec.rate, [(p - 1)] * spec.rate]
+        n_free = _problem_of(system).n_free
+        corners = [[0] * n_free, [1] * n_free, [(p - 1)] * n_free]
         spread = [
-            [(7 * (i + 1) + 13 * j) % p for j in range(spec.rate)] for i in range(5)
+            [(7 * (i + 1) + 13 * j) % p for j in range(n_free)] for i in range(5)
         ]
         sample_rates = corners + spread
 

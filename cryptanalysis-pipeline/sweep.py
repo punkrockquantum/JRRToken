@@ -134,8 +134,15 @@ class Cell:
     reason: str = ""
     ladder: Ladder | None = None
     seconds: float = 0.0
+    #: Set when the cell raised something the pipeline did not anticipate. Kept
+    #: distinct from "not attempted", because a cell nobody got to and a cell
+    #: that broke the pipeline are different facts and only one of them is a
+    #: bug report.
+    failed: bool = False
 
     def render(self) -> str:
+        if self.failed:
+            return f"cell {self.shape.label()} PIPELINE FAILURE: {self.reason}"
         if not self.ran:
             return f"cell {self.shape.label()} NOT ATTEMPTED: {self.reason}"
         assert self.ladder is not None
@@ -179,7 +186,11 @@ class SweepReport:
 
     @property
     def unattempted(self) -> tuple[Cell, ...]:
-        return tuple(c for c in self.cells if not c.ran)
+        return tuple(c for c in self.cells if not c.ran and not c.failed)
+
+    @property
+    def failures(self) -> tuple[Cell, ...]:
+        return tuple(c for c in self.cells if c.failed)
 
     @property
     def deviating(self) -> tuple[Cell, ...]:
@@ -212,6 +223,12 @@ class SweepReport:
         lines.append(
             f"  deviating_cells={[c.shape.label() for c in self.deviating]}"
         )
+        if self.failures:
+            lines.append(
+                f"  PIPELINE FAILURES: {len(self.failures)} cells raised. These "
+                "are defects in this code, not properties of the primitive, and "
+                "nothing about those cells is measured."
+            )
         if self.unattempted:
             lines.append(
                 f"  COVERAGE: {len(self.unattempted)} of {len(self.cells)} cells "
@@ -281,6 +298,21 @@ def run_sweep(
         except LadderRefused as exc:
             cells.append(
                 Cell(shape, ran=False, reason=f"ladder refused: {exc}",
+                     seconds=time.perf_counter() - cell_started)
+            )
+            continue
+        except Exception as exc:  # noqa: BLE001 - deliberate; see below
+            # An unanticipated exception in one cell used to kill the sweep, and
+            # with it the coverage accounting that is the sweep's whole purpose:
+            # the first width-3 cell raised in the round-trip test and the run
+            # died with seven cells measured, seven never attempted, and no
+            # report saying so. Catching it here is not swallowing it -- the
+            # cell is recorded as a PIPELINE FAILURE, which is louder in the
+            # report than a traceback in a log file, and the remaining grid
+            # still runs.
+            cells.append(
+                Cell(shape, ran=False, failed=True,
+                     reason=f"{type(exc).__name__}: {exc}",
                      seconds=time.perf_counter() - cell_started)
             )
             continue
