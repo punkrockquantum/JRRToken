@@ -25,6 +25,7 @@ produce. ``SolverOutcome.status`` distinguishes that cleanly from a crash.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import resource
 import shutil
@@ -158,12 +159,65 @@ def _run(command: list[str], stdin: str | None, timeout: float) -> tuple[int, st
 # -- msolve ------------------------------------------------------------------
 
 
-def msolve_version() -> str:
-    if not shutil.which("msolve"):
-        raise SolverUnavailable("msolve is not on PATH")
-    code, out, err, _, _ = _run(["msolve", "-h"], None, timeout=20)
+def _package_version(package: str) -> str | None:
+    """The distribution's recorded version, or None where there is no dpkg."""
+    if not shutil.which("dpkg"):
+        return None
+    _, out, _, _, _ = _run(["dpkg", "-s", package], None, timeout=20)
+    match = re.search(r"^Version:\s*(\S+)", out, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def _binary_fingerprint(name: str) -> str:
+    """A hash of the executable, labelled as a fingerprint rather than a
+    version, for a solver that was built from source and reports neither."""
+    path = shutil.which(name)
+    if path is None:  # pragma: no cover - callers check first
+        raise SolverUnavailable(f"{name} is not on PATH")
+    return "sha256:" + hashlib.sha256(Path(path).read_bytes()).hexdigest()[:16]
+
+
+def _solver_version(binary: str, package: str, banner: list[str]) -> str:
+    """An installable identifier for a solver, and never the word "unknown".
+
+    Three sources, and the last one cannot fail.
+
+    **The package database first.** This is the reversal of the obvious order,
+    and it is deliberate. What the field is for is being able to install the
+    same program, and ``0.6.5-1build2`` is that where ``0.6.5`` is not. It is
+    also stable between invocations, which the banner was observed not to be:
+    parsing Singular's banner returned no match twice during this work and then
+    matched on twelve consecutive further attempts, and the cause was not
+    established. Rather than guess at it, the recorded value no longer depends
+    on it.
+
+    **The banner second**, for a solver built from source on a machine with no
+    package database.
+
+    **A hash of the executable last.** Worse than a version for a reader,
+    better than nothing for a re-run, and labelled as a fingerprint so it is
+    not mistaken for one.
+
+    What this replaced: msolve's ``-h`` output carries no version number at all
+    -- the banner names the authors and the calling convention and stops -- so
+    every ladder so far logged ``msolve/unknown`` while PREREG-001 required
+    msolve 0.6.5. That string is not a version, and it was not a refusal
+    either. L5 now refuses to mint a record containing one.
+    """
+    if not shutil.which(binary):
+        raise SolverUnavailable(f"{binary} is not on PATH")
+    packaged = _package_version(package)
+    if packaged:
+        return packaged
+    _, out, err, _, _ = _run(banner, None, timeout=20)
     match = re.search(r"(\d+\.\d+\.\d+)", out + err)
-    return match.group(1) if match else "unknown"
+    if match:
+        return match.group(1)
+    return _binary_fingerprint(binary)
+
+
+def msolve_version() -> str:
+    return _solver_version("msolve", "msolve", ["msolve", "-h"])
 
 
 def solve_with_msolve(
@@ -247,11 +301,7 @@ def solve_with_msolve(
 
 
 def singular_version() -> str:
-    if not shutil.which("Singular"):
-        raise SolverUnavailable("Singular is not on PATH")
-    code, out, err, _, _ = _run(["Singular", "--version"], None, timeout=20)
-    match = re.search(r"(\d+\.\d+\.\d+)", out + err)
-    return match.group(1) if match else "unknown"
+    return _solver_version("Singular", "singular", ["Singular", "--version"])
 
 
 def solve_with_singular(

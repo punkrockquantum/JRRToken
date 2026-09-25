@@ -481,3 +481,63 @@ def test_a_fully_quoted_field_is_unwrapped() -> None:
 
 def test_the_second_prereg_is_committed_before_any_run_stamps_it() -> None:
     assert len(load_prereg(PREREG_002).assert_committed()) == 40
+
+
+# -- solver versions ---------------------------------------------------------
+
+
+def test_the_mint_refuses_a_version_that_is_not_a_version() -> None:
+    """Seven ladders logged msolve/unknown. A non-empty string was the
+    requirement; being able to install the same program is the requirement."""
+    for bad in ("msolve/unknown", "msolve/", "singular/n/a", "msolve/latest"):
+        with pytest.raises(ProvenanceRefused) as excinfo:
+            a_record(solver_versions=(bad, "singular/4.3.2"))
+        assert "is not a version" in str(excinfo.value)
+
+
+def test_the_mint_accepts_a_package_version_and_a_fingerprint() -> None:
+    for good in ("0.6.5-1build2", "1:4.3.2-p10+ds-1.1build1", "sha256:c2722288d22c3a1e"):
+        assert a_record(solver_versions=(f"msolve/{good}",))["solver_versions"] == [
+            f"msolve/{good}"
+        ]
+
+
+def test_the_installed_solvers_report_installable_versions() -> None:
+    """A cross-check between the machine and the document: PREREG-001 requires
+    msolve 0.6.5 and Singular 4.3.2, and what the adapters report must contain
+    those. If this fails, either the environment changed or a run is about to
+    be logged against a pre-registration it does not satisfy."""
+    from provenance import NON_VERSIONS
+    from solvers import msolve_version, singular_version
+
+    msolve, singular = msolve_version(), singular_version()
+    assert msolve.lower() not in NON_VERSIONS
+    assert singular.lower() not in NON_VERSIONS
+    assert "0.6.5" in msolve, msolve
+    assert "4.3.2" in singular, singular
+
+
+def test_the_version_falls_back_to_a_labelled_fingerprint(monkeypatch) -> None:
+    """With no package database and a banner that carries no version, the
+    recorded value is a hash of the executable -- worse than a version for a
+    reader, better than nothing for a re-run, and labelled as what it is."""
+    import solvers as L2
+
+    monkeypatch.setattr(L2, "_package_version", lambda package: None)
+    monkeypatch.setattr(L2, "_run", lambda *a, **k: (0, "no version here", "", 0.0, 0.0))
+    version = L2._solver_version("msolve", "msolve", ["msolve", "-h"])
+    assert version.startswith("sha256:")
+    assert len(version) == len("sha256:") + 16
+    from provenance import NON_VERSIONS
+
+    assert version.lower() not in NON_VERSIONS
+
+
+def test_the_banner_is_still_used_where_there_is_no_package(monkeypatch) -> None:
+    import solvers as L2
+
+    monkeypatch.setattr(L2, "_package_version", lambda package: None)
+    monkeypatch.setattr(
+        L2, "_run", lambda *a, **k: (0, "SomeSolver version 9.8.7 built today", "", 0.0, 0.0)
+    )
+    assert L2._solver_version("msolve", "msolve", ["msolve", "-h"]) == "9.8.7"

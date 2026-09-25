@@ -193,6 +193,13 @@ class ChainRecord:
 #: citation, and nothing else.
 REQUIRED_RECORD_FIELDS = ("kind", "spec_digest", "solver_versions", "prereg_sha256")
 
+#: Version strings that are not versions. A record carrying one of these names
+#: no solver anybody can install, while passing every non-empty check -- which
+#: is what happened: seven ladders logged ``msolve/unknown`` because msolve's
+#: banner carries no version number and nothing looked further.
+NON_VERSIONS = ("unknown", "none", "?", "n/a", "unspecified", "latest")
+
+
 #: Record kinds whose meaning is "we found nothing", and which therefore must
 #: state what the experiment could not have seen.
 NEGATIVE_KINDS = ("no-deviation", "wall", "no-solution", "structure")
@@ -225,6 +232,16 @@ def mint_record(
             "cannot be re-run; a Gröbner result is a claim about a program and "
             "the program's version is part of the claim"
         )
+    for entry in solver_versions:
+        name, _, version = str(entry).partition("/")
+        if not version.strip() or version.strip().lower() in NON_VERSIONS:
+            raise ProvenanceRefused(
+                f"record kind={kind} names solver {name!r} at version "
+                f"{version.strip() or '(empty)'!r}, which is not a version. A "
+                "non-empty string is not the requirement -- being able to "
+                "install the same program is. Read it from the package "
+                "database or fall back to a hash of the executable."
+            )
     if not prereg_sha256.strip():
         raise ProvenanceRefused(
             f"record kind={kind} names no pre-registration; what counts as a "
@@ -366,9 +383,9 @@ def _unwrap(value: str) -> str:
     """Remove backticks that quote the *whole* value, and no others.
 
     ``strip("`")`` looks equivalent and is not: a value that merely begins with
-    inline code -- ``\`reference.predicted_ideal_degree\`, which propagates
-    ...`` -- loses its opening backtick and nothing closes it, so the field
-    reads as mismatched markup. The content hash covers the raw document, so
+    inline code -- a backtick-quoted function name followed by ", which
+    propagates ..." -- loses its opening backtick and nothing closes it, so the
+    field reads as mismatched markup. The content hash covers the raw document, so
     this corrupts only what a reader of the parsed field sees, which is exactly
     the audience that matters.
     """
