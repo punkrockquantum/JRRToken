@@ -361,3 +361,67 @@ def test_the_fitted_models_are_labelled_as_models() -> None:
     assert "exponential" in models and "polynomial" in models
     # d^r means log2(degree)/round is log2(d), and the fit must find it.
     assert abs(models["exponential"]["log2_degree_per_round"] - 1.5849625) < 1e-6
+
+
+# -- the prediction, derived rather than assumed ------------------------------
+
+
+def test_the_prediction_agrees_with_d_to_the_rounds_where_it_should() -> None:
+    """Every spec run so far has a full first round, so the derived prediction
+    must reproduce d^r exactly -- otherwise this change would silently move the
+    deficit on results already committed."""
+    from reference import predicted_ideal_degree
+
+    spec = mimc_sponge(prime=S.FIELD_30BIT_CUBE, rounds=8)
+    for rounds in range(1, 9):
+        problem = CicoProblem(spec=spec, rounds=rounds)
+        assert predicted_ideal_degree(problem, rounds) == 3**rounds
+
+
+def test_a_leading_partial_round_lowers_the_prediction() -> None:
+    """A partial round applies the S-box to element 0, element 0 starts as a
+    capacity element fixed to zero, and a constant to the d-th power is a
+    constant. So the free variable's degree does not multiply until MDS has
+    mixed it into element 0.
+
+    This matters because the error runs in the dangerous direction: d^r would
+    overstate the prediction, making degree_deficit positive at a rung where
+    nothing collapsed, and a positive deficit is what the pre-registered break
+    criterion looks for. It would have produced a lead with no structure."""
+    from reference import predicted_ideal_degree
+
+    spec = S.Spec.create(
+        name="leading-partial", prime=101, width=3, sbox_exponent=3,
+        rounds_full_first=0, rounds_partial=3, rounds_full_last=2, capacity=1,
+    )
+    assert list(spec.round_kinds())[:3] == ["partial", "partial", "partial"]
+    derived = [predicted_ideal_degree(CicoProblem(spec=spec, rounds=r), r)
+               for r in range(1, 6)]
+    assert derived == [1, 3, 9, 27, 81]
+    # One round of lag, held for the rest of the ladder.
+    assert all(d * 3 == 3**r for r, d in enumerate(derived, start=1))
+
+
+def test_the_poseidon_shape_keeps_the_full_prediction() -> None:
+    """poseidon_like splits full rounds across both ends, so the first round is
+    full whenever rounds_full >= 2 and no lag appears."""
+    from reference import predicted_ideal_degree
+
+    spec = S.poseidon_like(prime=101, width=3, rounds_full=2, rounds_partial=1)
+    assert list(spec.round_kinds()) == ["full", "partial", "full"]
+    for rounds in range(1, 4):
+        problem = CicoProblem(spec=spec, rounds=rounds)
+        assert predicted_ideal_degree(problem, rounds) == 3**rounds
+
+
+def test_the_prediction_never_reads_as_an_empty_variety() -> None:
+    """A capacity output constant in the free variables still gives one
+    solution or none; a predicted degree of zero would read as a proof that the
+    variety is empty."""
+    from reference import predicted_ideal_degree
+
+    spec = S.Spec.create(
+        name="one-partial", prime=101, width=2, sbox_exponent=3,
+        rounds_full_first=0, rounds_partial=1, rounds_full_last=1, capacity=1,
+    )
+    assert predicted_ideal_degree(CicoProblem(spec=spec, rounds=1), 1) == 1

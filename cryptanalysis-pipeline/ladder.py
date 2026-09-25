@@ -45,7 +45,12 @@ from provenance import (
     mint_record,
     tier_of_rung,
 )
-from reference import CicoProblem, brute_force_solutions, validate
+from reference import (
+    CicoProblem,
+    brute_force_solutions,
+    predicted_ideal_degree,
+    validate,
+)
 from roundtrip import round_trip
 from solvers import (
     NO_SOLUTION,
@@ -78,7 +83,10 @@ class Rung:
     max_degree: int | None
     basis_size: int | None
     matrix_cells: int | None
-    #: The Bezout-style prediction, d ** rounds.
+    #: The Bezout-style prediction, derived from the round structure by
+    #: ``reference.predicted_ideal_degree``. Equal to ``d ** rounds`` whenever
+    #: the free variable reaches an S-box in round 1, and lower by a factor of
+    #: ``d`` per leading partial round when it does not.
     predicted_degree: int
     #: F_p-rational solutions, where brute force was affordable.
     rational_solutions: int | None
@@ -519,7 +527,7 @@ def run_ladder(
             max_degree=secondary.max_degree,
             basis_size=secondary.basis_size,
             matrix_cells=primary.matrix_cells,
-            predicted_degree=spec.sbox_exponent**rounds,
+            predicted_degree=predicted_ideal_degree(problem, rounds),
             rational_solutions=rational,
             solvers_agree=corroboration.agree,
             detail=f"{primary.detail} | {secondary.detail}",

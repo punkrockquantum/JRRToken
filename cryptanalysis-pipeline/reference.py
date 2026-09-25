@@ -349,3 +349,54 @@ def validate(spec: Spec, exhaustive_limit: int = 200_000) -> ValidationReport:
         checks.append(("each_round_changes_the_state", a != b, ""))
 
     return ValidationReport(spec_digest=spec.digest(), checks=tuple(checks))
+
+
+def predicted_ideal_degree(problem: "CicoProblem", rounds: int) -> int:
+    """The Bézout-style prediction for the ideal's degree, from the round
+    structure rather than from ``d ** rounds``.
+
+    The two agree for every spec whose first round applies the S-box to an
+    element the free variable reaches -- which is every spec run so far, so no
+    committed result changes. They diverge for a spec whose **leading rounds
+    are partial**: a partial round applies the S-box to element 0, element 0
+    starts as a capacity element fixed to zero, and a constant raised to the
+    d-th power is still a constant. The free variable's degree therefore does
+    not multiply until the MDS layer has mixed it into element 0, and
+    ``d ** rounds`` overstates the prediction by a factor of ``d`` per leading
+    partial round.
+
+    That error runs in the dangerous direction. An overstated prediction makes
+    ``degree_deficit`` positive at a rung where nothing collapsed, and a
+    positive deficit is exactly what the pre-registered break criterion looks
+    for. It would have produced a lead with no structure behind it.
+
+    The propagation. Each state element carries the degree of its dependence on
+    the free variables: capacity elements and pinned rate elements start at 0
+    (they are constants), free rate elements at 1. An S-box multiplies a
+    non-zero degree by ``d`` and leaves 0 alone. The MDS layer is a Cauchy
+    matrix, so every output is a combination of every input with no zero
+    coefficient, and each output takes the maximum degree present.
+
+    This is an upper bound on the degree of the eliminated univariate
+    polynomial, hence on the number of solutions over the closure. It is stated
+    as the prediction, not measured: ``Rung.ideal_degree`` is the measurement,
+    and the gap between them is the subject.
+    """
+    spec = problem.spec
+    degrees = [0] * spec.width
+    for i in range(spec.capacity, spec.capacity + problem.n_free):
+        degrees[i] = 1
+    for index, kind in enumerate(spec.round_kinds()):
+        if index >= rounds:
+            break
+        targets = range(spec.width) if kind == "full" else range(1)
+        for i in targets:
+            if degrees[i]:
+                degrees[i] *= spec.sbox_exponent
+        highest = max(degrees)
+        degrees = [highest] * spec.width
+    # The constraint is on the capacity outputs, and after an MDS layer every
+    # element carries the same bound. max(..., 1) because a capacity output
+    # that is constant in the free variables still gives one solution or none,
+    # and a predicted degree of zero would read as an empty variety.
+    return max(max(degrees[: spec.capacity], default=1), 1)
