@@ -1,0 +1,5 @@
+# Ladder runs under runs/ are COMMITTED, not ignored: a measurement that is
+# not in the history cannot be rerun against, and results are append-only.
+__pycache__/
+*.py[cod]
+.pytest_cache/
