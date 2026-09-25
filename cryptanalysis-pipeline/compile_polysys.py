@@ -98,6 +98,10 @@ class PolynomialSystem:
                 'printf("GB_SIZE %s", size(G));',
                 'printf("GB_DIM %s", dim(G));',
                 'printf("GB_MAXDEG %s", deg(G[size(G)]));',
+                # vdim is the quotient ring's vector-space dimension: the number
+                # of solutions over the algebraic closure with multiplicity.
+                # Only defined for a zero-dimensional ideal.
+                'if (dim(G) == 0) { printf("GB_VDIM %s", vdim(G)); }',
                 "quit;",
             ]
         )
@@ -147,16 +151,20 @@ def compile_cico(problem: CicoProblem) -> PolynomialSystem:
     equations: list[str] = []
     degrees: list[int] = []
 
-    # The input: capacity fixed to zero, rate free.
-    rate_variables = tuple(f"x{i}" for i in range(spec.rate))
+    # The input: capacity fixed to zero, `free_rate` rate elements free, the
+    # remaining rate elements pinned. Pinning is what makes the system
+    # zero-dimensional -- see CicoProblem's docstring.
+    rate_variables = tuple(f"x{i}" for i in range(problem.n_free))
     variables.extend(rate_variables)
 
     # Each state element is (linear-form-in-variables, constant).
     state: list[tuple[dict[str, int], int]] = []
     for i in range(spec.capacity):
         state.append(({}, 0))
-    for i, name in enumerate(rate_variables):
+    for name in rate_variables:
         state.append(({name: 1}, 0))
+    for pinned in problem.fixed_rate:
+        state.append(({}, pinned % p))
 
     sbox_index = 0
     for round_index, kind in enumerate(spec.round_kinds()):

@@ -74,18 +74,56 @@ def permute(state: list[int], spec: Spec, rounds: int | None = None) -> list[int
 class CicoProblem:
     """Constrained Input, Constrained Output.
 
-    The standard attack target for a sponge permutation: the input's capacity
-    elements are fixed to zero and the output's capacity elements are required
-    to be zero, leaving the rate free. A solution is a rate assignment making
-    both hold.
+    The input's capacity elements are fixed to zero and the output's capacity
+    elements are required to be zero. The rate is free -- but only ``free_rate``
+    of it; the remaining rate elements are pinned to ``fixed_rate``.
 
-    Its cost is what a security claim is about: generic difficulty is ``p **
-    capacity`` for a width-``t`` permutation, because that many output
-    constraints must be hit by chance.
+    **Why ``free_rate`` exists.** The first version of this class left the whole
+    rate free, and both solvers correctly reported the resulting ideal as
+    *positive-dimensional*: with rate 2 against capacity 1 there is more freedom
+    than constraint, so solutions form a one-parameter family and brute force
+    finds about ``p`` of them. Finding one is then trivial and is not an attack
+    -- it is the normal state of an under-constrained system.
+
+    The attack-relevant problem is **zero-dimensional**: as many free input
+    variables as output constraints, so the solution set is finite and its size
+    is the ideal's degree. That is the formulation whose difficulty the generic
+    bound ``p ** capacity`` describes, and the one a Gröbner engine is the right
+    tool for. ``free_rate`` defaults to ``capacity`` for exactly that reason.
     """
 
     spec: Spec
     rounds: int
+    free_rate: int | None = None
+    fixed_rate: tuple[int, ...] = ()
+
+    def __post_init__(self) -> None:
+        free = self.spec.capacity if self.free_rate is None else self.free_rate
+        if not 0 < free <= self.spec.rate:
+            raise ReferenceRefused(
+                f"free_rate must be in (0, {self.spec.rate}]; got {free}"
+            )
+        object.__setattr__(self, "free_rate", free)
+        pinned = self.spec.rate - free
+        if len(self.fixed_rate) != pinned:
+            object.__setattr__(
+                self, "fixed_rate", tuple((i * 7 + 1) % self.spec.prime for i in range(pinned))
+            )
+
+    @property
+    def n_free(self) -> int:
+        return int(self.free_rate)
+
+    @property
+    def n_constraints(self) -> int:
+        return self.spec.capacity
+
+    @property
+    def is_zero_dimensional(self) -> bool:
+        """Free variables matched to constraints. Not a guarantee -- the ideal's
+        actual dimension is what the solver reports -- but the necessary
+        condition, and the driver refuses a ladder that fails it."""
+        return self.n_free == self.n_constraints
 
     @property
     def generic_cost_log2(self) -> float:
@@ -94,20 +132,23 @@ class CicoProblem:
 
         return self.spec.capacity * math.log2(self.spec.prime)
 
-    def input_from_rate(self, rate: list[int]) -> list[int]:
-        if len(rate) != self.spec.rate:
-            raise ReferenceRefused(f"rate must have {self.spec.rate} elements")
-        return [0] * self.spec.capacity + [v % self.spec.prime for v in rate]
+    def input_from_rate(self, free: list[int]) -> list[int]:
+        if len(free) != self.n_free:
+            raise ReferenceRefused(f"expected {self.n_free} free rate elements")
+        rate = [v % self.spec.prime for v in free] + list(self.fixed_rate)
+        return [0] * self.spec.capacity + rate
 
-    def holds(self, rate: list[int]) -> bool:
-        """Whether this rate assignment solves the problem, per the reference."""
-        out = permute(self.input_from_rate(rate), self.spec, self.rounds)
+    def holds(self, free: list[int]) -> bool:
+        """Whether this assignment solves the problem, per the reference."""
+        out = permute(self.input_from_rate(free), self.spec, self.rounds)
         return all(out[i] == 0 for i in range(self.spec.capacity))
 
     def render(self) -> str:
         return (
             f"cico spec={self.spec.name} rounds={self.rounds} "
             f"capacity={self.spec.capacity} rate={self.spec.rate} "
+            f"free={self.n_free} constraints={self.n_constraints} "
+            f"zero_dimensional={self.is_zero_dimensional} "
             f"generic_cost_log2={self.generic_cost_log2:.2f}"
         )
 
@@ -121,21 +162,21 @@ def brute_force_solutions(problem: CicoProblem, limit: int | None = None) -> lis
     raises rather than silently truncating.
     """
     spec = problem.spec
-    total = spec.prime**spec.rate
+    total = spec.prime**problem.n_free
     if limit is not None and total > limit:
         raise ReferenceRefused(
-            f"exhaustive search over {spec.prime}^{spec.rate} = {total} rate "
+            f"exhaustive search over {spec.prime}^{problem.n_free} = {total} "
             f"assignments exceeds the stated limit of {limit}; this path does "
             "not sample"
         )
     solutions = []
     for encoded in range(total):
-        rate, rest = [], encoded
-        for _ in range(spec.rate):
-            rate.append(rest % spec.prime)
+        free, rest = [], encoded
+        for _ in range(problem.n_free):
+            free.append(rest % spec.prime)
             rest //= spec.prime
-        if problem.holds(rate):
-            solutions.append(rate)
+        if problem.holds(free):
+            solutions.append(free)
     return solutions
 
 
