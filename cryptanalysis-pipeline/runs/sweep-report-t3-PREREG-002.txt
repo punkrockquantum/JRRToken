@@ -1,0 +1,14 @@
+exit=0
+sweep prereg=PREREG-002 sha256=dfdbad6d280c8e38 prime=1073741831
+  budget=2700s used=881s attempted=7/7
+  per_rung_timeout=900s max_rounds=10 as_pre_registered=True
+  cell t3-f2-p1 kind=no-deviation closed_to_round=3 wall_at=None deviations=[] seconds=0.1
+  cell t3-f2-p2 kind=no-deviation closed_to_round=4 wall_at=None deviations=[] seconds=0.2
+  cell t3-f2-p3 kind=no-deviation closed_to_round=5 wall_at=None deviations=[] seconds=0.6
+  cell t3-f4-p1 kind=no-deviation closed_to_round=5 wall_at=None deviations=[] seconds=1.4
+  cell t3-f4-p2 kind=no-deviation closed_to_round=6 wall_at=None deviations=[] seconds=28.4
+  cell t3-f4-p3 kind=no-deviation closed_to_round=7 wall_at=None deviations=[] seconds=850.5
+  cell t3-f1-p2 kind=no-deviation closed_to_round=3 wall_at=None deviations=[] seconds=0.1
+  deviating_cells=[]
+
+[exited with code 0]

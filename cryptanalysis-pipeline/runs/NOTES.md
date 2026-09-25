@@ -71,3 +71,64 @@ result.
    For this spec the derived propagation gives the identical value at every
    rung (checked for rounds 1–8 before the change was committed), so the
    deficits above are unaffected. A leading-partial spec would differ.
+
+## PREREG-002 sweep — the full 14-cell grid, closed
+
+Poseidon-shaped specs, p = 1073741831, planted instances, at PREREG-002's full
+900-second per-rung budget (`as_pre_registered=True`). The chain in
+`log.jsonl` holds 14 records and verifies; the grid `sweep.py` reads out of
+PREREG-002 declares 14 cells, and every one is present.
+
+Every cell is a **no-deviation** record. Measured `vdim` equalled the
+propagated prediction at every rung of every cell: no deviations, no walls, no
+solver disagreements, no contended rounds. PREREG-002's break criterion is met
+nowhere, so nothing here is a lead and nothing is promoted.
+
+| width | rounds | measured vdim per rung |
+|---|---|---|
+| 2, 3 | 3 (0f+2p+1f) | 1, 3, 9 |
+| 2, 3 | 3 (1f+1p+1f) | 3, 9, 27 |
+| 2, 3 | 4 (1f+2p+1f) | 3, 9, 27, 81 |
+| 2, 3 | 5 (1f+3p+1f) | 3, 9, 27, 81, 243 |
+| 2, 3 | 5 (2f+1p+2f) | 3, 9, 27, 81, 243 |
+| 2, 3 | 6 (2f+2p+2f) | 3, 9, 27, 81, 243, 729 |
+| 2, 3 | 7 (2f+3p+2f) | 3, 9, 27, 81, 243, 729, 2187 |
+
+### The leading-partial rows are the load-bearing measurement here
+
+The two `0f+2p+1f` cells measured **1, 3, 9** — one round of lag, held for the
+rest of the ladder. That is what `reference.predicted_ideal_degree` predicts and
+it is *not* what `d ** rounds` predicts: the hardcoded exponent would have given
+3, 9, 27, a deficit of 2, 6 and 18 at the three rungs, and a positive deficit is
+the first clause of the break criterion. Those two cells would have reported a
+deviation at every rung, in both widths, with nothing behind it.
+
+So the derived prediction is no longer only an argument about constants raised to
+powers. It is a measurement: the solver reports the lag the propagation
+predicts, in the two cells PREREG-002 named in advance for exactly this reason.
+
+### The partial-round hypothesis, as pre-registered
+
+PREREG-002 states: a `vdim` below the propagated bound at a partial round and at
+no full round is the deviation this ladder looks for. **It did not occur.** The
+degree multiplied by 3 through every partial round in all 14 cells, which is
+what the family's security argument requires of them. This run is consistent
+with that argument and does not test it anywhere near deployed parameters.
+
+### What this run does not establish
+
+- **No wall was reached, and the grid could not reach one.** PREREG-002 fixes
+  `max_rounds` at 10, but `poseidon_like` shapes in this grid total at most 7
+  rounds, so the round cap never bound and no cell was budget-limited. The grid
+  measured closable systems only; it says nothing about where these shapes stop
+  being solvable. The deep MiMC-sponge ladder is the only wall this project has
+  measured.
+- **All instances are planted.** A solution existed by construction in every
+  cell, so no cell is evidence about the zero-target CICO problem.
+- **One monomial ordering, one solver pair, one 30-bit prime.** Deployed
+  Poseidon uses 255-bit primes and round counts an order of magnitude higher,
+  and nothing here extrapolates to them.
+- **The width-2 half has no sweep report.** Its seven cells are in the chain,
+  but the run that produced them died on the first width-3 cell before printing
+  a report, and the report was not reconstructed afterwards. Coverage of all 14
+  cells rests on the 14 chain records, not on a single report artefact.
