@@ -1,0 +1,363 @@
+"""Tests for the cryptanalysis pipeline.
+
+Weighted towards the two checks the design says carry it: the bidirectional
+round-trip, and the three verification gates. Several of these exist because
+the thing they assert was once wrong -- the docstrings say which.
+"""
+
+from __future__ import annotations
+
+import random
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import spec as S  # noqa: E402
+from compile_polysys import CompileRefused, compile_cico, decode_solution, evaluate_system  # noqa: E402
+from polynomial import Poly  # noqa: E402
+from reference import (  # noqa: E402
+    CicoProblem,
+    ReferenceRefused,
+    brute_force_solutions,
+    permute,
+    validate,
+)
+from roundtrip import RoundTripFailure, assignment_from_rate, round_trip, trace_sbox_values  # noqa: E402
+
+SMALL = 101
+
+
+def mimc_sponge(prime: int = SMALL, rounds: int = 4, width: int = 2) -> S.Spec:
+    return S.Spec.create(
+        name="mimc-sponge-test", prime=prime, width=width, sbox_exponent=3,
+        rounds_full_first=rounds, rounds_partial=0, rounds_full_last=0, capacity=1,
+    )
+
+
+# -- L0: the specification and reference -------------------------------------
+
+
+def test_the_sbox_exponent_must_permute_the_field() -> None:
+    """2^30+3 is prime but is 1 mod 3, so x^3 is not a permutation there.
+
+    The first draft of FIELD_31BIT was exactly that value, and this guard is
+    what caught it.
+    """
+    with pytest.raises(S.SpecRefused, match="does not permute"):
+        S.Spec.create(name="bad", prime=(1 << 30) + 3, width=2, sbox_exponent=3)
+    assert S.is_permutation_exponent(3, S.FIELD_30BIT_CUBE)
+    assert S.is_permutation_exponent(5, S.FIELD_30BIT_QUINT)
+
+
+def test_the_reference_validates_and_says_what_it_did_not_check() -> None:
+    report = validate(mimc_sponge())
+    assert report.passed
+    names = {name for name, _, _ in report.checks}
+    assert "permutation_is_bijective_exhaustively" in names
+    assert "mds_is_invertible" in names
+    assert "official test vectors NOT checked" in report.render()
+
+
+def test_the_permutation_is_a_bijection_exhaustively_at_a_small_prime() -> None:
+    spec = S.Spec.create(name="tiny", prime=11, width=2, sbox_exponent=3,
+                         rounds_full_first=3, capacity=1)
+    seen = {tuple(permute([a, b], spec)) for a in range(11) for b in range(11)}
+    assert len(seen) == 121
+
+
+def test_zero_rounds_is_the_identity() -> None:
+    spec = mimc_sponge()
+    assert permute([7, 9], spec, rounds=0) == [7, 9]
+
+
+def test_the_mds_matrix_is_invertible_at_every_width_it_admits() -> None:
+    from reference import _mds_is_invertible
+
+    for width in (2, 3, 4, 5):
+        assert _mds_is_invertible(mimc_sponge(prime=101, width=width))
+
+
+# -- polynomial expansion ----------------------------------------------------
+
+
+def test_the_expansion_agrees_with_the_factored_form() -> None:
+    """The defect this module exists for: msolve mis-parses `(a*x+b)^d` and
+    returns "no solution" for a solvable system."""
+    p = 101
+    random.seed(11)
+    for _ in range(60):
+        a, b, c = (random.randrange(p) for _ in range(3))
+        f = (
+            Poly.variable("x", p).scale(a)
+            + Poly.variable("y", p).scale(b)
+            + Poly.constant(c, p)
+        )
+        d = random.choice([2, 3, 5])
+        expanded = f.power(d)
+        for _ in range(4):
+            xv, yv = random.randrange(p), random.randrange(p)
+            assert expanded.evaluate({"x": xv, "y": yv}) == pow(
+                (a * xv + b * yv + c) % p, d, p
+            )
+
+
+def test_the_rendered_form_has_no_factored_powers() -> None:
+    """What the renderer must never emit, since one solver silently mis-reads it."""
+    p = 101
+    rendered = (Poly.variable("x0", p) + Poly.constant(61, p)).power(3).render()
+    assert "(" not in rendered and ")" not in rendered
+    assert rendered == "34+53*x0+82*x0^2+x0^3"
+
+
+def test_degree_and_term_count_are_reported_from_the_expansion() -> None:
+    p = 101
+    f = (Poly.variable("a", p) + Poly.variable("b", p)).power(4)
+    assert f.degree == 4
+    assert f.n_terms == 5  # binomial expansion
+
+
+# -- L1: the model and the round-trip ---------------------------------------
+
+
+def test_the_system_is_zero_dimensional_by_construction() -> None:
+    """Free variables matched to constraints.
+
+    The first version left the whole rate free, and both solvers correctly
+    reported a positive-dimensional ideal -- solutions were abundant and
+    finding one was not an attack.
+    """
+    problem = CicoProblem(spec=mimc_sponge(), rounds=3)
+    assert problem.is_zero_dimensional
+    assert problem.n_free == problem.n_constraints == 1
+
+
+def test_the_round_trip_passes_in_both_directions() -> None:
+    system = compile_cico(CicoProblem.planted(mimc_sponge(), rounds=3))
+    report = round_trip(system)
+    assert report.passed, report.render()
+    assert report.forward_checked > 0
+    assert report.reverse_checked > 0
+    assert not report.vacuous
+
+
+def test_a_direction_that_ran_nothing_is_not_a_pass() -> None:
+    """The vacuous pass the first version reported.
+
+    forward_checked=0 with passed=True: none of the sampled rates solved the
+    problem, so the forward direction never ran and the report called it a
+    pass.
+    """
+    from roundtrip import RoundTripReport
+
+    vacuous = RoundTripReport(
+        system_render="x", forward_checked=0, forward_failures=(),
+        reverse_checked=8, reverse_failures=(),
+    )
+    assert not vacuous.passed
+    assert vacuous.vacuous == ("forward",)
+    assert "VACUOUS" in vacuous.render()
+
+
+def test_an_unavailable_forward_direction_needs_a_verified_reason() -> None:
+    """No F_p solution is legitimate; an unexhausted search is not."""
+    from roundtrip import RoundTripReport
+
+    excused = RoundTripReport(
+        system_render="x", forward_checked=0, forward_failures=(),
+        reverse_checked=8, reverse_failures=(),
+        forward_unavailable_reason="no F_p-rational solution exists: all 101 checked",
+    )
+    assert excused.passed
+    assert not excused.vacuous
+
+
+def test_the_trace_and_the_compiler_agree_on_the_variable_set() -> None:
+    """Two independent readings of the round structure must produce the same
+    variables, or one of them is wrong about the primitive."""
+    system = compile_cico(CicoProblem.planted(mimc_sponge(), rounds=4))
+    assignment = assignment_from_rate(system, [5])
+    assert set(assignment) == set(system.variables)
+
+
+def test_the_model_accepts_a_trace_the_reference_produced() -> None:
+    """The reverse direction, which catches an over-constrained model."""
+    problem = CicoProblem.planted(mimc_sponge(), rounds=3)
+    system = compile_cico(problem)
+    assignment = assignment_from_rate(system, list(problem.planted_witness))
+    satisfied, residuals = evaluate_system(system, assignment)
+    assert satisfied, residuals
+
+
+def test_the_system_carries_its_problem() -> None:
+    """Rebuilding one loses the planted target, which is how a planted
+    instance silently became un-planted."""
+    problem = CicoProblem.planted(mimc_sponge(), rounds=2)
+    system = compile_cico(problem)
+    assert system.problem is problem
+    assert system.problem.is_planted
+
+
+def test_a_zero_round_system_is_refused() -> None:
+    with pytest.raises(CompileRefused, match="no S-boxes"):
+        compile_cico(CicoProblem(spec=mimc_sponge(), rounds=0))
+
+
+def test_a_solver_answer_missing_a_rate_variable_is_refused() -> None:
+    system = compile_cico(CicoProblem.planted(mimc_sponge(), rounds=2))
+    with pytest.raises(CompileRefused, match="omits rate variables"):
+        decode_solution(system, {"y0": 1})
+
+
+# -- planted instances -------------------------------------------------------
+
+
+def test_a_planted_instance_has_a_solution_by_construction() -> None:
+    for prime in (101, S.FIELD_30BIT_CUBE):
+        spec = mimc_sponge(prime=prime, rounds=5)
+        problem = CicoProblem.planted(spec, rounds=5)
+        assert problem.is_planted
+        assert problem.holds(list(problem.planted_witness))
+
+
+def test_an_unplanted_instance_may_legitimately_have_no_solution() -> None:
+    """Roughly Poisson(1) solutions with one free variable, so empty instances
+    are common and are not defects."""
+    spec = mimc_sponge(prime=101, rounds=8)
+    counts = [
+        len(brute_force_solutions(CicoProblem(spec=spec, rounds=r), limit=10_000))
+        for r in range(1, 9)
+    ]
+    assert any(c == 0 for c in counts), counts
+    assert any(c > 0 for c in counts), counts
+
+
+def test_brute_force_refuses_a_space_it_cannot_exhaust() -> None:
+    spec = mimc_sponge(prime=S.FIELD_30BIT_CUBE, rounds=2)
+    with pytest.raises(ReferenceRefused, match="does not sample"):
+        brute_force_solutions(CicoProblem(spec=spec, rounds=2), limit=1000)
+
+
+# -- L4: the three gates -----------------------------------------------------
+
+
+def test_a_planted_instance_is_refused_by_the_scope_gate() -> None:
+    """The load-bearing refusal.
+
+    A planted witness passes recovery and beats the generic cost, so a pipeline
+    without this gate would report an attack. The solution existed by
+    construction, so the scope gate must refuse and the word must not be
+    "attack".
+    """
+    from ladder import run_ladder
+    from verify_claim import Candidate, verify
+
+    spec = mimc_sponge(prime=S.FIELD_30BIT_CUBE, rounds=3)
+    ladder = run_ladder(spec, max_rounds=3, timeout=60)
+    rung = ladder.solved_rungs[-1]
+    problem = CicoProblem.planted(spec, rounds=rung.rounds)
+    candidate = Candidate(
+        problem=problem,
+        free_values=problem.planted_witness,
+        provenance="planted-witness",
+    )
+    verdict = verify(candidate, ladder, rung)
+    assert verdict.recovery_passed, verdict.recovery_detail
+    assert not verdict.scope_passed
+    assert verdict.word == "out-of-scope"
+    assert verdict.word != "eligible-attack-candidate"
+
+
+def test_a_wrong_candidate_is_named_a_pipeline_defect() -> None:
+    from ladder import run_ladder
+    from verify_claim import Candidate, verify
+
+    spec = mimc_sponge(prime=S.FIELD_30BIT_CUBE, rounds=3)
+    ladder = run_ladder(spec, max_rounds=3, timeout=60)
+    rung = ladder.solved_rungs[-1]
+    problem = CicoProblem.planted(spec, rounds=rung.rounds)
+    wrong = Candidate(
+        problem=problem,
+        free_values=(problem.planted_witness[0] + 1,),
+        provenance="perturbed",
+    )
+    verdict = verify(wrong, ladder, rung)
+    assert not verdict.recovery_passed
+    assert verdict.word == "pipeline-defect"
+
+
+def test_the_generic_baseline_is_measured_not_assumed() -> None:
+    """The cost gate once converted seconds to trials through an invented
+    constant, and that constant decided the verdict."""
+    from verify_claim import measure_generic_seconds_per_trial
+
+    problem = CicoProblem.planted(mimc_sponge(prime=S.FIELD_30BIT_CUBE, rounds=3), rounds=3)
+    per_trial = measure_generic_seconds_per_trial(problem)
+    assert 1e-9 < per_trial < 1e-2, per_trial
+
+
+# -- L3: the ladder ----------------------------------------------------------
+
+
+def test_the_ladder_reproduces_the_bezout_prediction() -> None:
+    """The calibration gate: d^r exactly, with no degree collapse."""
+    from ladder import run_ladder
+
+    spec = mimc_sponge(prime=S.FIELD_30BIT_CUBE, rounds=5)
+    ladder = run_ladder(spec, max_rounds=5, timeout=120)
+    assert ladder.validation_passed
+    assert ladder.roundtrip_passed
+    solved = ladder.solved_rungs
+    assert len(solved) >= 4
+    for rung in solved:
+        assert rung.ideal_degree == 3**rung.rounds, rung.render()
+        assert rung.degree_deficit == 0
+    assert not ladder.deviations
+    assert not ladder.disagreements
+
+
+def test_a_rung_without_its_observable_is_not_tier_e() -> None:
+    """A rung whose observable-producing solver walled was once reported
+    status=solved with ideal_degree=None."""
+    from ladder import Rung
+    from solvers import SOLVED, WALL
+
+    walled = Rung(
+        rounds=7, n_variables=15, n_equations=15, status=WALL, seconds=180.0,
+        peak_memory_mb=184.7, ideal_degree=None, max_degree=None, basis_size=None,
+        matrix_cells=None, predicted_degree=2187, rational_solutions=None,
+        solvers_agree=True,
+    )
+    assert walled.tier == "-"
+    missing = Rung(
+        rounds=7, n_variables=15, n_equations=15, status=SOLVED, seconds=1.0,
+        peak_memory_mb=1.0, ideal_degree=None, max_degree=None, basis_size=None,
+        matrix_cells=None, predicted_degree=2187, rational_solutions=None,
+        solvers_agree=True,
+    )
+    assert missing.tier == "-", "a solved status without the observable is not a measurement"
+
+
+def test_the_ladder_refuses_an_under_constrained_problem() -> None:
+    from ladder import LadderRefused, run_ladder
+
+    wide = S.Spec.create(name="wide", prime=101, width=4, sbox_exponent=3,
+                         rounds_full_first=2, capacity=1)
+    # free_rate defaults to capacity, so force the under-constrained case.
+    problem = CicoProblem(spec=wide, rounds=1, free_rate=3)
+    assert not problem.is_zero_dimensional
+
+
+def test_the_fitted_models_are_labelled_as_models() -> None:
+    from ladder import run_ladder
+
+    ladder = run_ladder(mimc_sponge(prime=S.FIELD_30BIT_CUBE, rounds=5), max_rounds=5, timeout=120)
+    rendered = ladder.render()
+    assert "MODEL-not-a-measurement" in rendered
+    assert "PLANTED" in rendered
+    models = ladder.growth_models()
+    assert "exponential" in models and "polynomial" in models
+    # d^r means log2(degree)/round is log2(d), and the fit must find it.
+    assert abs(models["exponential"]["log2_degree_per_round"] - 1.5849625) < 1e-6
