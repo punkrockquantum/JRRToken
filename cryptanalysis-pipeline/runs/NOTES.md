@@ -206,3 +206,65 @@ primitive. The decisive test is the same measurement under a second,
 independent encoding of the same cipher: if it survives a change of encoding it
 is about the primitive, and if it does not it is about the model. That test has
 not been run, and until it is, this is a statement about a model of a cipher.
+
+## PREREG-004 — the encoding control: `outcome_survives`
+
+The full fourteen-cell grid re-run under the state encoding, `as_pre_registered=True`,
+1792s of 3300s, 14/14 attempted. Every registered condition for
+`outcome_survives` is met, evaluated in code against the field parsed out of
+the committed document:
+
+| Encoding | mean partial | mean full | gap | min(partial) > mean(full) | steps |
+|---|---|---|---|---|---|
+| S-box | +2.17 | +0.08 | +2.09 | +2 > +0.08 | 24p / 26f |
+| state | +2.15 | +0.08 | +2.08 | +2 > +0.08 | 26p / 26f |
+
+Gap ≥ 1.0 in both. Minimum partial-round change strictly above the full-round
+mean in both. At least 15 attributable steps of each kind in both, so the
+`minimum_steps` condition does not hold the reading back.
+
+**The separation is not an artefact of generator counting.** Under the state
+encoding every round adds exactly `2 × width` variables and `2 × width`
+equations whatever its kind, so the bookkeeping difference the S-box encoding
+carried is gone — and the numbers barely moved.
+
+Stronger than the registered condition required: wherever both encodings
+produced a measurement, the solving degrees are **identical rung for rung**,
+not merely similarly distributed, while variable counts differ by up to 2.6×.
+
+### What this licenses, in the document's own words
+
+A claim that the solving degree of this construction tracks partial rounds
+rather than full ones, under two independent models. That is all.
+
+It is **not** a break. The break criterion is unchanged across PREREG-002, -003
+and -004 and requires a candidate passing all three L4 gates — recovery against
+`reference.py`, cost below the generic baseline timed on the same machine, and
+scope. It has never been met, and nothing here attempts it.
+
+### The one wall, pre-committed as expected
+
+`t3-f4-p3` walled at round 7 under the state encoding after 1446.7s, having
+closed round 6. The same cell closes round 7 under the S-box encoding.
+PREREG-004 fixed the reading of this in advance: the state encoding is the
+larger system, more walls are expected, and a cell that walls earlier there is
+the cost of the control rather than evidence about either encoding.
+
+### The one difference between the encodings
+
+The leading-partial cells yield an observable at round 1 under the state
+encoding and none under the S-box encoding. At round 1 that shape's only S-box
+acts on a capacity element fixed to zero; the S-box encoding folds it into a
+constant, leaving no equation, while the state encoding still carries variables
+for it. So the state encoding measures one rung the other leaves unmeasured,
+which is why its step counts are 26p/26f against 24p/26f rather than identical.
+
+### What it still does not establish
+
+- Two encodings are two, not many. This is evidence that the effect is not an
+  artefact of *this* bookkeeping difference, not that no encoding would show
+  something else.
+- The solving degree is still measured by msolve alone. Singular corroborates
+  the conclusion and `vdim`; its protocol output is not parsed.
+- Rounds 1–7, a 30-bit prime, planted instances, degrevlex only. Deployed
+  parameter sets are an order of magnitude away in both prime size and rounds.

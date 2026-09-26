@@ -1,0 +1,23 @@
+   1b5cb59..554bfbe  claude/algebraic-probe-skeleton-2uaojo -> claude/algebraic-probe-skeleton-2uaojo
+branch 'claude/algebraic-probe-skeleton-2uaojo' set up to track 'origin/claude/algebraic-probe-skeleton-2uaojo'.
+exit=0
+sweep prereg=PREREG-002 sha256=dfdbad6d280c8e38 prime=1073741831 encoding=state
+  budget=3300s used=1792s attempted=14/14
+  per_rung_timeout=900s max_rounds=10 as_pre_registered=True
+  cell t2-f2-p1 kind=no-deviation closed_to_round=3 wall_at=None deviations=[] seconds=0.1
+  cell t2-f2-p2 kind=no-deviation closed_to_round=4 wall_at=None deviations=[] seconds=0.2
+  cell t2-f2-p3 kind=no-deviation closed_to_round=5 wall_at=None deviations=[] seconds=0.5
+  cell t2-f4-p1 kind=no-deviation closed_to_round=5 wall_at=None deviations=[] seconds=0.8
+  cell t2-f4-p2 kind=no-deviation closed_to_round=6 wall_at=None deviations=[] seconds=10.4
+  cell t2-f4-p3 kind=no-deviation closed_to_round=7 wall_at=None deviations=[] seconds=281.8
+  cell t2-f1-p2 kind=no-deviation closed_to_round=3 wall_at=None deviations=[] seconds=0.1
+  cell t3-f2-p1 kind=no-deviation closed_to_round=3 wall_at=None deviations=[] seconds=0.1
+  cell t3-f2-p2 kind=no-deviation closed_to_round=4 wall_at=None deviations=[] seconds=0.3
+  cell t3-f2-p3 kind=no-deviation closed_to_round=5 wall_at=None deviations=[] seconds=1.0
+  cell t3-f4-p1 kind=no-deviation closed_to_round=5 wall_at=None deviations=[] seconds=2.3
+  cell t3-f4-p2 kind=no-deviation closed_to_round=6 wall_at=None deviations=[] seconds=47.8
+  cell t3-f4-p3 kind=wall closed_to_round=6 wall_at=7 deviations=[] seconds=1446.7
+  cell t3-f1-p2 kind=no-deviation closed_to_round=3 wall_at=None deviations=[] seconds=0.1
+  deviating_cells=[]
+
+[exited with code 0]
