@@ -448,6 +448,17 @@ class Ladder:
                 "predicted_degrees": {
                     str(r.rounds): r.predicted_degree for r in self.solved_rungs
                 },
+                # The solving degree belongs in the chained record, not only in
+                # the JSON beside it. PREREG-003 and PREREG-004 are about this
+                # quantity, and a record that omits it cannot support a claim
+                # that rests on it -- which is what the first 42 records did.
+                "solving_degrees": {
+                    str(r.rounds): r.solving_degree for r in self.solved_rungs
+                },
+                "first_zero_reduction_degrees": {
+                    str(r.rounds): r.first_zero_reduction_degree
+                    for r in self.solved_rungs
+                },
                 "deviations": [r.rounds for r in self.deviations],
                 "disagreements": [r.rounds for r in self.disagreements],
                 "models_diverge_beyond_round": self.divergence_round(),

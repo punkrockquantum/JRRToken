@@ -202,7 +202,36 @@ NON_VERSIONS = ("unknown", "none", "?", "n/a", "unspecified", "latest")
 
 #: Record kinds whose meaning is "we found nothing", and which therefore must
 #: state what the experiment could not have seen.
-NEGATIVE_KINDS = ("no-deviation", "wall", "no-solution", "structure")
+NEGATIVE_KINDS = (
+    "no-deviation",
+    "wall",
+    "no-solution",
+    "structure",
+    # An outcome record that retracts a lead, or that cannot be read at all, is
+    # a negative and owes the same blindness statement as any other.
+    "outcome-vanishes",
+    "outcome-inconclusive",
+)
+
+#: Verdict words an outcome record may carry. A pre-registration fixes the
+#: reading of each before its run; these are the names of those readings.
+OUTCOME_KINDS = (
+    "outcome-survives",
+    "outcome-vanishes",
+    "outcome-reverses",
+    "outcome-inconclusive",
+)
+
+
+def file_digest(path: "str | Path") -> str:
+    """SHA-256 of a file's bytes.
+
+    An outcome record cites the run artefacts it was computed from by content
+    hash. The ladder JSON is where the solving degrees live for runs made
+    before those degrees reached the chained record, so an outcome over those
+    runs has to address the files directly or it addresses nothing.
+    """
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def mint_record(
