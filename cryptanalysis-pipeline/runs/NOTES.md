@@ -334,3 +334,31 @@ nowhere.
 Both pre-registrations that were open are now closed in the chain. PREREG-002
 is discharged by its 42 ladder records; PREREG-003 at seq 43; PREREG-004 at
 seq 42.
+
+## PREREG-005 — the constant run, committed before any run
+
+`prereg/PREREG-005-constant-run.md` registers the question the PREREG-003
+structure cell and the PREREG-004 round-kind result both point at and neither
+can answer: whether the solving degree moves through full rounds placed after
+the last partial round, over runs of three to six such rounds rather than the
+two every earlier shape had. Eighteen cells, S-box encoding, both widths.
+
+Nothing in `runs/` is a PREREG-005 cell. `tests/test_prereg_005.py` asserts
+that, because the document has to precede the runs it governs or the stamp
+means nothing. Three things the document fixes that earlier ones did not:
+
+- **Its own verdict words**, in an `outcomes` field, and which of them is a
+  negative, in a `negatives` field. `outcome.py` now reads the vocabulary out
+  of the document (`provenance.outcome_vocabulary`), PREREG-004's from its
+  `outcome_*` fields; the module-level tuple is kept only to read records
+  already in the chain. That closes the defect seq 43 recorded.
+- **Its own shapes as explicit splits** (`1f+1p+4f`). `sweep.py` reads them,
+  builds the spec with that split, and labels the cell `t2-1f1p4f`.
+  PREREG-002's crossed-grid grammar and labels are unchanged.
+- **Its own stamp.** `sweep.py --prereg` names the document the sweep is for.
+  Runs for this document are made with `--prereg prereg/PREREG-005-constant-run.md`
+  and nothing else, so no record of theirs can carry PREREG-002's hash.
+
+Every threshold the reading turns on is a field in the document and is read
+from there at discharge time. `python3 outcome.py --prereg prereg/PREREG-005-constant-run.md`
+refuses until the sweep has produced at least one registered cell.
