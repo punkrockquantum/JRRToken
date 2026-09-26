@@ -57,6 +57,36 @@ def trace_sbox_values(state: list[int], spec: Spec, rounds: int) -> list[int]:
     return outputs
 
 
+def trace_state_values(state: list[int], spec: Spec, rounds: int) -> list[tuple[str, int]]:
+    """Every intermediate value of the state encoding, named, in compiler order.
+
+    A second, independent transcription of the round structure, exactly as
+    ``trace_sbox_values`` is for the other encoding. If this disagrees with
+    ``compile_state``, the round-trip fails and the disagreement is the finding:
+    one of the two readings is wrong about the primitive.
+    """
+    p = spec.prime
+    current = [v % p for v in state]
+    out: list[tuple[str, int]] = []
+    for index, kind in enumerate(spec.round_kinds()):
+        if index >= rounds:
+            break
+        number = index + 1
+        targets = set(range(spec.width)) if kind == "full" else {0}
+        after = []
+        for i in range(spec.width):
+            value = (current[i] + spec.constants[index][i]) % p
+            if i in targets:
+                value = sbox(value, spec)
+            out.append((f"u{number}_{i}", value))
+            after.append(value)
+        mixed = apply_mds(after, spec)
+        for i in range(spec.width):
+            out.append((f"s{number}_{i}", mixed[i] % p))
+        current = mixed
+    return out
+
+
 def _problem_of(system: PolynomialSystem) -> CicoProblem:
     """The system's own problem, never a reconstruction of one."""
     if system.problem is None:
@@ -73,12 +103,22 @@ def assignment_from_rate(
     """The full assignment -- rate plus every intermediate -- for a rate input."""
     problem = _problem_of(system)
     state = problem.input_from_rate(rate)
-    sbox_values = trace_sbox_values(state, system.spec, system.rounds)
 
     assignment = {name: rate[i] % system.spec.prime
                   for i, name in enumerate(system.rate_variables)}
-    for index, value in enumerate(sbox_values):
-        assignment[f"y{index}"] = value
+    if system.encoding == "state":
+        for name, value in trace_state_values(state, system.spec, system.rounds):
+            assignment[name] = value
+    elif system.encoding == "sbox":
+        for index, value in enumerate(
+            trace_sbox_values(state, system.spec, system.rounds)
+        ):
+            assignment[f"y{index}"] = value
+    else:
+        raise RoundTripFailure(
+            f"no trace is defined for encoding {system.encoding!r}; a system "
+            "the round-trip cannot check must not be handed to a solver"
+        )
 
     declared = set(system.variables)
     produced = set(assignment)

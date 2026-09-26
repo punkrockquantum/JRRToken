@@ -63,6 +63,12 @@ class PolynomialSystem:
     #: Which variables are the free rate elements, in rate order. Decoding a
     #: solver answer back to a candidate attack reads these.
     rate_variables: tuple[str, ...]
+    #: Which encoding produced this system. ``"sbox"`` is one variable per
+    #: S-box output; ``"state"`` is one variable per state element per stage.
+    #: The round-trip test dispatches on this, so both encodings are checked by
+    #: the same load-bearing code rather than by two implementations that could
+    #: each be wrong in a different way.
+    encoding: str = "sbox"
     #: Degree of each equation, so the system's shape is reportable without
     #: re-parsing it.
     degrees: tuple[int, ...] = field(default=())
