@@ -304,3 +304,33 @@ PREREG-003 is **still not discharged in the chain.** Its `model_criterion`
 (failed 0 of 12) and `structure_criterion` (met in 2 cells) are recorded in
 this file and evaluated in code, but no outcome record names PREREG-003. That
 is open work, not a closed loop.
+
+### PREREG-003 discharged at seq 43 — and it fixed no verdict vocabulary
+
+`runs/log.jsonl` seq 43 is an `outcome-unworded` record naming PREREG-003 and
+carrying its sha256 `c86face0b68772e8`, with each registered criterion
+evaluated from the run files:
+
+| Criterion | Result |
+|---|---|
+| `model_criterion` | **FAIL** — `s(r) = 2r-1` held on 0 of 11 out-of-sample predicted cells |
+| `structure_criterion` | **MET** — 2 cells, `t2 4f+1p` and `t3 4f+1p` |
+| `break_criterion` | **not met** — clause 2 holds in 0 cells; no candidate reached the L4 gates |
+
+**The defect this exposed.** PREREG-003 named its criteria but never defined a
+word for the result, the way PREREG-004 defines survives / vanishes / reverses.
+Choosing one now would be the after-the-fact naming the layer exists to
+prevent, so the record's kind is `outcome-unworded` and the absence is visible
+in the chain rather than resolved in a footnote. The first version of the
+outcome machinery hardcoded PREREG-004's four words as if a verdict vocabulary
+belonged to the module; it belongs to the document that fixed it.
+
+**A correction.** Earlier notes and commit messages say the model failed "0 of
+12". The correct figure is **0 of 11**: the twelve counted the cell the model
+was fitted on, which PREREG-003 discloses and excludes. A model tested on the
+data it was fitted to is not tested. The conclusion is unchanged — it held
+nowhere.
+
+Both pre-registrations that were open are now closed in the chain. PREREG-002
+is discharged by its 42 ladder records; PREREG-003 at seq 43; PREREG-004 at
+seq 42.

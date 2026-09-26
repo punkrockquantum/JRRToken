@@ -211,15 +211,26 @@ NEGATIVE_KINDS = (
     # a negative and owes the same blindness statement as any other.
     "outcome-vanishes",
     "outcome-inconclusive",
+    "outcome-unworded",
 )
 
 #: Verdict words an outcome record may carry. A pre-registration fixes the
 #: reading of each before its run; these are the names of those readings.
 OUTCOME_KINDS = (
+    # PREREG-004's three readings, plus the gate that refuses to read at all.
+    # These are *that document's* words: a verdict vocabulary belongs to the
+    # pre-registration that fixed it, not to this module.
     "outcome-survives",
     "outcome-vanishes",
     "outcome-reverses",
     "outcome-inconclusive",
+    # For a document that named its criteria but never fixed a word for the
+    # result. The criteria are still evaluated mechanically and recorded; what
+    # is refused is minting a verdict word at discharge time, which is the
+    # after-the-fact naming the whole layer exists to prevent. PREREG-003 is
+    # such a document, and this kind keeps that visible in the chain rather
+    # than papering over it with a word chosen later.
+    "outcome-unworded",
 )
 
 

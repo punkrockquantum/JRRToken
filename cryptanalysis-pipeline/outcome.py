@@ -269,6 +269,135 @@ def evaluate_prereg_004(runs_dir: str | Path, prereg: PreRegistration) -> Outcom
     )
 
 
+#: The cell PREREG-003's model was fitted on, disclosed in that document's own
+#: first section. It is excluded from the out-of-sample test because a model
+#: tested on the data it was fitted to is not tested.
+FITTED_CELL = ("sbox", 2, 4, 3)  # encoding, width, rounds_full, rounds_partial
+
+
+def _cell_key(record: dict) -> tuple[str, int, int, int]:
+    width = int(record["spec"].split("width=")[1].split()[0])
+    inner = record["spec"].split("rounds=")[1].split()[0].split("(")[1].rstrip(")")
+    first, partial, last = inner.split("+")
+    return (
+        record.get("encoding", "sbox"),
+        width,
+        int(first.rstrip("f")) + int(last.rstrip("f")),
+        int(partial.rstrip("p")),
+    )
+
+
+def evaluate_prereg_003(runs_dir: str | Path, prereg: PreRegistration) -> Outcome:
+    """Apply PREREG-003's registered criteria.
+
+    **PREREG-003 fixed no verdict vocabulary.** It named three criteria and
+    said both outcomes of the model test would be recorded, but it never
+    defined a word for the result the way PREREG-004 defines survives,
+    vanishes and reverses. So the criteria are evaluated mechanically and the
+    record's kind is ``outcome-unworded``: choosing a word now would be the
+    after-the-fact naming this layer exists to prevent, and the absence is a
+    defect in the document that belongs in the chain rather than in a footnote.
+    """
+    import json
+    import os
+
+    runs = Path(runs_dir)
+    newest: dict[tuple, Path] = {}
+    for path in runs.glob("ladder-*.json"):
+        record = json.loads(path.read_text(encoding="utf-8"))
+        if "poseidon" not in record["spec"]:
+            continue
+        if not any(r.get("solving_degree") is not None for r in record["rungs"]):
+            continue
+        key = _cell_key(record)
+        if key not in newest or os.path.getmtime(path) > os.path.getmtime(newest[key]):
+            newest[key] = path
+
+    inputs: dict[str, str] = {}
+    model_held, model_tested, structure_cells, break_cells = [], [], [], []
+    for key, path in sorted(newest.items()):
+        encoding, width, rounds_full, rounds_partial = key
+        if encoding != "sbox":
+            continue  # the model was stated over the S-box encoding
+        record = json.loads(path.read_text(encoding="utf-8"))
+        inputs[path.name] = file_digest(path)
+        rungs = [r for r in record["rungs"] if r["solving_degree"] is not None]
+        label = f"t{width} {rounds_full}f+{rounds_partial}p"
+
+        # model_criterion: s(r) = 2r-1, out-of-sample only. Leading-partial
+        # shapes carry no prediction by design (rounds_full // 2 == 0).
+        if rounds_full // 2 > 0 and key != FITTED_CELL:
+            model_tested.append(label)
+            if all(r["solving_degree"] == 2 * r["rounds"] - 1 for r in rungs):
+                model_held.append(label)
+
+        # structure_criterion: 3+ consecutive equal solving degrees while the
+        # ideal degree triples at each step.
+        degrees = [r["solving_degree"] for r in rungs]
+        vdims = [r["ideal_degree"] for r in rungs]
+        run_start = 0
+        for i in range(1, len(degrees) + 1):
+            if i == len(degrees) or degrees[i] != degrees[run_start]:
+                if i - run_start >= 3 and all(
+                    vdims[j + 1] == 3 * vdims[j] for j in range(run_start, i - 1)
+                ):
+                    structure_cells.append(label)
+                run_start = i
+
+        # break_criterion clause 2: a measured quantity below its prediction.
+        if any(
+            r["ideal_degree"] is not None
+            and r["ideal_degree"] < r["predicted_degree"]
+            for r in record["rungs"]
+        ):
+            break_cells.append(label)
+
+    conditions = (
+        Condition(
+            "model_criterion",
+            False if model_tested and not model_held else bool(model_held),
+            f"s(r) = 2r-1 held on {len(model_held)} of {len(model_tested)} "
+            f"out-of-sample predicted cells (the fitted cell and the "
+            f"leading-partial cells are excluded by the document)",
+        ),
+        Condition(
+            "structure_criterion",
+            bool(structure_cells),
+            f"met in {len(structure_cells)} cells: {sorted(set(structure_cells))}",
+        ),
+        Condition(
+            "break_criterion",
+            False,
+            f"clause 2 (a measured quantity below its prediction) holds in "
+            f"{len(break_cells)} cells, so the criterion is met nowhere and no "
+            "candidate was put to the L4 gates",
+        ),
+    )
+
+    return Outcome(
+        prereg_id=prereg.prereg_id,
+        prereg_sha256=prereg.sha256,
+        verdict="outcome-unworded",
+        conditions=conditions,
+        statistics={
+            "model_held": sorted(model_held),
+            "model_tested": sorted(model_tested),
+            "structure_cells": sorted(set(structure_cells)),
+            "break_cells": sorted(set(break_cells)),
+        },
+        inputs=inputs,
+        blindness=(
+            "PREREG-003 fixed no verdict vocabulary, so this record states each "
+            "criterion's computed value and claims no single word for the "
+            "result; the solving degree is measured by msolve alone, block 0, "
+            "uncorroborated by a second implementation; the structure criterion "
+            "is met over three-rung runs in cells that top out at five rounds, "
+            "so constancy beyond that was never observable; and every instance "
+            "is planted, at a 30-bit prime, under one monomial ordering"
+        ),
+    )
+
+
 def record_outcome(
     outcome: Outcome, log_path: str | Path, solver_versions: tuple[str, ...]
 ) -> None:
@@ -309,7 +438,17 @@ def main(argv: list[str] | None = None) -> int:
 
     prereg = load_prereg(args.prereg)
     prereg.assert_committed()
-    outcome = evaluate_prereg_004(args.runs_dir, prereg)
+    evaluators = {
+        "PREREG-003": evaluate_prereg_003,
+        "PREREG-004": evaluate_prereg_004,
+    }
+    if prereg.prereg_id not in evaluators:
+        raise OutcomeRefused(
+            f"no evaluator for {prereg.prereg_id}; a document is discharged by "
+            "code that applies its own registered criteria, never by a generic "
+            "one that guesses what they meant"
+        )
+    outcome = evaluators[prereg.prereg_id](args.runs_dir, prereg)
     print(outcome.render())
     if args.write:
         from solvers import msolve_version, singular_version

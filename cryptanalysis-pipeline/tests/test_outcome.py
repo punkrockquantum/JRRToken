@@ -157,9 +157,11 @@ def test_a_verdict_word_must_be_one_the_document_defines() -> None:
             conditions=(), statistics={},
         )
     assert "not one of the verdict words" in str(excinfo.value)
+    # PREREG-004's three readings, its inconclusive gate, and the kind used for
+    # a document that fixed no verdict vocabulary at all.
     assert set(OUTCOME_KINDS) == {
         "outcome-survives", "outcome-vanishes", "outcome-reverses",
-        "outcome-inconclusive",
+        "outcome-inconclusive", "outcome-unworded",
     }
 
 
@@ -206,3 +208,57 @@ def test_the_statistics_cover_both_encodings() -> None:
     assert "state/partial" in outcome.statistics
     assert "sbox/partial" in outcome.statistics
     assert outcome.statistics["state/partial"]["min"] >= 2
+
+
+# -- PREREG-003, which fixed no verdict vocabulary ---------------------------
+
+PREREG_003 = (
+    Path(__file__).resolve().parents[1] / "prereg" / "PREREG-003-solving-degree.md"
+)
+
+
+def test_a_document_that_fixed_no_verdict_word_gets_none() -> None:
+    """PREREG-003 named three criteria and never defined a word for the
+    result. Choosing one at discharge time is the after-the-fact naming this
+    layer exists to prevent, so the record says so instead."""
+    from outcome import evaluate_prereg_003
+
+    outcome = evaluate_prereg_003(RUNS, load_prereg(PREREG_003))
+    assert outcome.verdict == "outcome-unworded"
+    assert "fixed no verdict vocabulary" in outcome.blindness
+
+
+def test_prereg_003_criteria_are_evaluated_not_asserted() -> None:
+    """Each criterion carries the value that decided it, computed from the run
+    files rather than read off a printout."""
+    from outcome import evaluate_prereg_003
+
+    outcome = evaluate_prereg_003(RUNS, load_prereg(PREREG_003))
+    by_name = {c.name: c for c in outcome.conditions}
+    assert not by_name["model_criterion"].holds
+    assert "0 of 11" in by_name["model_criterion"].detail
+    assert by_name["structure_criterion"].holds
+    assert not by_name["break_criterion"].holds
+    assert outcome.statistics["break_cells"] == []
+
+
+def test_the_fitted_cell_is_excluded_from_the_out_of_sample_test() -> None:
+    """A model tested on the data it was fitted to is not tested. PREREG-003
+    discloses which cell that was; the evaluator honours the exclusion."""
+    from outcome import FITTED_CELL, evaluate_prereg_003
+
+    outcome = evaluate_prereg_003(RUNS, load_prereg(PREREG_003))
+    assert FITTED_CELL == ("sbox", 2, 4, 3)
+    assert "t2 4f+3p" not in outcome.statistics["model_tested"]
+    assert len(outcome.statistics["model_tested"]) == 11
+
+
+def test_the_unworded_kind_still_owes_blindness() -> None:
+    from outcome import Outcome
+
+    bare = Outcome(
+        prereg_id="PREREG-003", prereg_sha256="a" * 64, verdict="outcome-unworded",
+        conditions=(), statistics={},
+    )
+    with pytest.raises(ProvenanceRefused):
+        bare.to_record(("msolve/0.6.5",))
