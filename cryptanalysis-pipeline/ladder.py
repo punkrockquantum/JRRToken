@@ -80,8 +80,11 @@ class Rung:
     peak_memory_mb: float
     #: Solutions over the algebraic closure, with multiplicity (Singular vdim).
     ideal_degree: int | None
+    #: Top degree of the finished Gröbner basis, from Singular. Not the
+    #: solving degree, though it was labelled as if it were.
     max_degree: int | None
     basis_size: int | None
+    #: Largest matrix the declared-order F4 computation reduced, in cells.
     matrix_cells: int | None
     #: The Bezout-style prediction, derived from the round structure by
     #: ``reference.predicted_ideal_degree``. Equal to ``d ** rounds`` whenever
@@ -92,6 +95,16 @@ class Rung:
     rational_solutions: int | None
     solvers_agree: bool
     detail: str = ""
+    #: The highest degree F4 reduced at, from msolve's round table. This is the
+    #: observable an AO degree-of-regularity conjecture is a claim about.
+    solving_degree: int | None = None
+    #: ``((degree, count), ...)`` -- where the algorithm met syzygies it did not
+    #: predict. The lowest such degree is the operational proxy for the first
+    #: fall degree.
+    zero_reductions: tuple[tuple[int, int], ...] = ()
+    #: How many F4 computations msolve ran. Above 1 means it permuted the
+    #: variable order; every observable above comes from the first.
+    f4_blocks: int = 0
 
     @property
     def tier_label(self) -> Tier | None:
@@ -110,6 +123,20 @@ class Rung:
         """The label as it is printed: ``E``, or ``-`` for no measurement."""
         label = self.tier_label
         return "-" if label is None else str(label)
+
+    @property
+    def first_zero_reduction_degree(self) -> int | None:
+        """The lowest degree at which F4 met a syzygy it did not predict.
+
+        Reported rather than interpreted. For a semi-regular system the degree
+        where zero reductions begin is the degree of regularity; for a system
+        with hidden structure they begin earlier, and that gap is what an
+        algebraic attack on an AO primitive is built out of. Whether *this*
+        system's value means either thing is not decided here -- see PREREG-003.
+        """
+        if not self.zero_reductions:
+            return None
+        return min(degree for degree, _ in self.zero_reductions)
 
     @property
     def degree_deficit(self) -> int | None:
@@ -143,6 +170,8 @@ class Rung:
             f"predicted={self.predicted_degree}",
             f"deficit={self.degree_deficit}",
             f"max_degree={self.max_degree}",
+            f"solving_degree={self.solving_degree}",
+            f"first_zero_reduction_at={self.first_zero_reduction_degree}",
             f"basis={self.basis_size}",
             f"seconds={self.seconds:.3f}",
             f"peak_mb={self.peak_memory_mb:.1f}",
@@ -527,6 +556,9 @@ def run_ladder(
             max_degree=secondary.max_degree,
             basis_size=secondary.basis_size,
             matrix_cells=primary.matrix_cells,
+            solving_degree=primary.solving_degree,
+            zero_reductions=primary.zero_reductions,
+            f4_blocks=primary.f4_blocks,
             predicted_degree=predicted_ideal_degree(problem, rounds),
             rational_solutions=rational,
             solvers_agree=corroboration.agree,

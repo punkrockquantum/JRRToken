@@ -444,3 +444,119 @@ def test_the_round_trip_runs_at_every_width_the_sweep_uses() -> None:
         assert report.passed, f"width={width}: {report.render()}"
         assert report.forward_checked > 0
         assert report.reverse_checked > 0
+
+
+# -- the F4 round table, which was being printed and discarded ----------------
+
+TWO_BLOCK_OUTPUT = """
+Legend for f4 information
+deg     sel   pairs        mat          density         new data      time(rd)
+  3       5       5      32 x 65         10.96%        5 new       0 zero    0.00 | 0.00
+  4       3       3      48 x 105        15.12%        3 new       0 zero    0.00 | 0.00
+  9       8       8     205 x 278        12.90%        0 new       8 zero    0.00 | 0.00
+reduce final basis       32 x 115        44.95%       32 new       0 zero    0.00 | 0.00
+Changing variable order for possibly more generic staircase:
+Legend for f4 information
+deg     sel   pairs        mat          density         new data      time(rd)
+  3       5       5      40 x 70          9.00%        5 new       0 zero    0.00 | 0.00
+ 11      12      12     565 x 740        15.73%        1 new      10 zero    0.00 | 0.00
+reduce final basis       85 x 328        57.09%       85 new       0 zero    0.00 | 0.00
+"""
+
+
+def test_the_f4_blocks_are_kept_separate() -> None:
+    """msolve runs F4 more than once -- eight permuted variable orders plus a
+    final larger computation on the first system checked. Read as one table
+    they give a number belonging to no single computation."""
+    from solvers import parse_f4_blocks
+
+    blocks = parse_f4_blocks(TWO_BLOCK_OUTPUT)
+    assert len(blocks) == 2
+    assert blocks[0].solving_degree == 9
+    assert blocks[1].solving_degree == 11
+    assert [r.degree for r in blocks[0].rounds] == [3, 4, 9]
+
+
+def test_the_observables_come_from_the_declared_order_computation() -> None:
+    """A degree-of-regularity claim is about the Gröbner computation in a
+    stated order, so block 0 is the one that answers it. The flattened max
+    would report 11 and the last block's 565x740 matrix."""
+    from solvers import parse_f4_blocks, parse_f4_rounds
+
+    blocks = parse_f4_blocks(TWO_BLOCK_OUTPUT)
+    flattened = parse_f4_rounds(TWO_BLOCK_OUTPUT)
+    assert max(r.degree for r in flattened) == 11
+    assert blocks[0].solving_degree == 9
+    assert blocks[0].matrix_cells == 205 * 278
+    assert max(r.rows * r.columns for r in flattened) == 565 * 740
+
+
+def test_the_final_basis_reduction_is_not_a_round() -> None:
+    """It has no degree column, so a parser that matched it would take the
+    leading matrix width as a degree."""
+    from solvers import parse_f4_blocks
+
+    degrees = [r.degree for r in parse_f4_blocks(TWO_BLOCK_OUTPUT)[0].rounds]
+    assert 32 not in degrees and 115 not in degrees
+
+
+def test_the_zero_reduction_profile_is_recorded_per_degree() -> None:
+    """Where zero reductions first appear is the operational proxy for the
+    first fall degree, and it is the signature of a system that is not
+    semi-regular. A single total would lose the degree it happened at."""
+    from solvers import parse_f4_blocks
+
+    assert parse_f4_blocks(TWO_BLOCK_OUTPUT)[0].zero_reductions == ((9, 8),)
+
+
+def test_output_without_a_verbose_table_yields_no_solving_degree() -> None:
+    """None, never zero: a solver build that prints no table has not reported
+    a solving degree of nothing."""
+    from solvers import parse_f4_blocks
+
+    assert parse_f4_blocks("no table here") == ()
+
+
+def test_msolve_reports_the_solving_degree_for_a_nontrivial_system() -> None:
+    """The measurement this whole change exists for, taken live.
+
+    Singular's max_degree is the top degree of the finished basis; the solving
+    degree is the highest degree F4 actually reduced at. For this system the
+    solving degree is the larger of the two -- but that is a fact about this
+    system and **not** an invariant, which the test below establishes. An
+    earlier version of this test asserted it as one.
+    """
+    from compile_polysys import compile_cico
+    from solvers import solve_with_msolve, solve_with_singular
+
+    spec = S.poseidon_like(prime=1073741831, width=2, rounds_full=4, rounds_partial=3)
+    system = compile_cico(CicoProblem.planted(spec, rounds=5))
+    fast = solve_with_msolve(system, timeout=300)
+    slow = solve_with_singular(system, timeout=300)
+    assert fast.solving_degree is not None
+    assert fast.f4_blocks > 1, "msolve is expected to retry under permuted orders"
+    assert fast.solving_degree >= slow.max_degree, (
+        f"solving degree {fast.solving_degree} below basis degree {slow.max_degree}"
+    )
+
+
+def test_the_solving_degree_may_legitimately_sit_below_the_basis_degree() -> None:
+    """A one-round system has a cubic among its *input* generators, and an
+    input generator that is already in the basis is never reduced. So F4 runs a
+    single degree-1 round and the solving degree is 1 while the basis reaches
+    degree 3.
+
+    Recorded as a test because the opposite was briefly asserted as an
+    invariant. "The solving degree is at least the basis degree" is false, and
+    a pipeline that enforced it would reject a correct measurement.
+    """
+    from compile_polysys import compile_cico
+    from solvers import solve_with_msolve, solve_with_singular
+
+    spec = S.poseidon_like(prime=1073741831, width=2, rounds_full=4, rounds_partial=3)
+    system = compile_cico(CicoProblem.planted(spec, rounds=1))
+    fast = solve_with_msolve(system, timeout=120)
+    slow = solve_with_singular(system, timeout=120)
+    assert fast.solving_degree == 1
+    assert slow.max_degree == 3
+    assert fast.solving_degree < slow.max_degree

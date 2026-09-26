@@ -60,10 +60,34 @@ class SolverOutcome:
     seconds: float
     peak_memory_mb: float
     #: Gröbner observables. ``None`` where the solver did not report them.
+    #:
+    #: ``max_degree`` is the top degree of the **computed basis**, which is not
+    #: the solving degree and was labelled as though it were. See
+    #: ``solving_degree`` below.
     max_degree: int | None = None
     basis_size: int | None = None
     #: Largest matrix the solver reported, in cells -- the memory proxy.
     matrix_cells: int | None = None
+    #: The highest degree at which F4 actually reduced a matrix. *This* is the
+    #: quantity an AO security argument's degree-of-regularity conjecture is a
+    #: claim about, and it is strictly the one that governs complexity. msolve
+    #: prints it per round under -v 2; the pipeline printed that table and kept
+    #: only the matrix sizes.
+    solving_degree: int | None = None
+    #: Zero reductions per degree, as ``((degree, count), ...)``. The signature
+    #: of a system that is *not* semi-regular shows up here before it shows up
+    #: anywhere else: a zero reduction is a syzygy the algorithm did not
+    #: predict, and where they first appear is the operational proxy for the
+    #: first fall degree.
+    zero_reductions: tuple[tuple[int, int], ...] = ()
+    #: Degrees at which F4 ran a round, in order, with duplicates -- the shape
+    #: of the computation rather than a summary of it.
+    round_degrees: tuple[int, ...] = ()
+    #: How many separate F4 computations the solver ran. msolve retries under
+    #: permuted variable orders, so this is routinely far above 1, and every
+    #: observable above is taken from the first -- the computation in the order
+    #: the model declared.
+    f4_blocks: int = 0
     #: Variable assignments, when the solver found a point.
     assignments: tuple[dict[str, int], ...] = ()
     #: Number of solutions over the algebraic closure, when reported.
@@ -157,6 +181,97 @@ def _run(command: list[str], stdin: str | None, timeout: float) -> tuple[int, st
 
 
 # -- msolve ------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class F4Round:
+    """One round of F4, as msolve reports it under ``-v 2``."""
+
+    degree: int
+    selected: int
+    pairs: int
+    rows: int
+    columns: int
+    new_elements: int
+    zero_reductions: int
+
+
+#: A round line: degree, selected, pairs, "R x C", density%, "N new", "Z zero".
+_F4_ROUND = re.compile(
+    r"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*x\s*(\d+)\s+"
+    r"[\d.]+%\s+(\d+)\s+new\s+(\d+)\s+zero",
+    re.MULTILINE,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class F4Block:
+    """One complete F4 computation."""
+
+    rounds: tuple[F4Round, ...]
+
+    @property
+    def solving_degree(self) -> int | None:
+        """The highest degree at which this computation reduced a matrix."""
+        return max((r.degree for r in self.rounds), default=None)
+
+    @property
+    def zero_reductions(self) -> tuple[tuple[int, int], ...]:
+        return tuple((r.degree, r.zero_reductions) for r in self.rounds if r.zero_reductions)
+
+    @property
+    def matrix_cells(self) -> int | None:
+        return max((r.rows * r.columns for r in self.rounds), default=None)
+
+
+def parse_f4_blocks(text: str) -> tuple[F4Block, ...]:
+    """Every F4 computation in msolve's verbose output, kept separate.
+
+    **msolve runs F4 more than once.** On the first system checked it ran nine
+    times: eight under successively permuted variable orders ("changing
+    variable order for possibly more generic staircase") and a ninth, larger
+    computation afterwards. Their round tables are printed one after another
+    with no separator but the legend banner.
+
+    Reading them as one table is what a naive parse does, and it gives a number
+    belonging to no single computation: max degree 11 across all nine where the
+    declared-order computation reached 9. Worse, the pre-existing
+    ``matrix_cells`` took ``max`` over the whole output and so reported the
+    largest matrix of the *last* computation -- 565 x 740 = 418100 cells -- as
+    though it were the Gröbner step's, which reduced at most 213 x 276 = 58788.
+    That is a 7.1x overstatement of the figure the design document asks for,
+    and it is in every rung of every run committed so far.
+
+    A degree-of-regularity claim is about the Gröbner computation in a stated
+    order, so ``block 0`` is the one that answers it. The rest are kept because
+    the count itself is informative: a solver that needed eight reorderings is
+    telling you something about the staircase.
+    """
+    blocks: list[F4Block] = []
+    segments = re.split(r"Legend for f4 information", text)
+    for segment in segments[1:]:
+        rounds = tuple(
+            F4Round(
+                degree=int(m.group(1)),
+                selected=int(m.group(2)),
+                pairs=int(m.group(3)),
+                rows=int(m.group(4)),
+                columns=int(m.group(5)),
+                new_elements=int(m.group(6)),
+                zero_reductions=int(m.group(7)),
+            )
+            for m in _F4_ROUND.finditer(segment)
+        )
+        if rounds:
+            blocks.append(F4Block(rounds=rounds))
+    return tuple(blocks)
+
+
+def parse_f4_rounds(text: str) -> tuple[F4Round, ...]:
+    """Every round across every block, flattened. Kept for inspection only --
+    the observables come from ``parse_f4_blocks``, which does not conflate
+    computations."""
+    return tuple(r for block in parse_f4_blocks(text) for r in block.rounds)
 
 
 def _package_version(package: str) -> str | None:
@@ -258,8 +373,25 @@ def solve_with_msolve(
             "msolve", version, ERROR, seconds, peak, detail=(err or out)[:400]
         )
 
-    matrices = [int(a) * int(b) for a, b in re.findall(r"(\d+)\s*x\s*(\d+)", out + err)]
-    largest = max(matrices) if matrices else None
+    blocks = parse_f4_blocks(out + err)
+    groebner = blocks[0] if blocks else None
+    if groebner is not None:
+        # The Gröbner computation in the declared order, not a max over every
+        # computation msolve ran. See parse_f4_blocks.
+        largest = groebner.matrix_cells
+        solving_degree = groebner.solving_degree
+        zero_reductions = groebner.zero_reductions
+        round_degrees = tuple(r.degree for r in groebner.rounds)
+    else:
+        # No verbose table -- fall back to the old scan so a solver build that
+        # prints nothing still yields the memory proxy rather than silently
+        # yielding None.
+        matrices = [int(a) * int(b) for a, b in re.findall(r"(\d+)\s*x\s*(\d+)", out + err)]
+        largest = max(matrices) if matrices else None
+        solving_degree = None
+        zero_reductions = ()
+        round_degrees = ()
+    f4_blocks = len(blocks)
 
     stripped = text.strip()
     if stripped.startswith("[-1"):
@@ -267,6 +399,8 @@ def solve_with_msolve(
         return SolverOutcome(
             "msolve", version, NO_SOLUTION, seconds, peak,
             solution_count=0, matrix_cells=largest,
+            solving_degree=solving_degree, zero_reductions=zero_reductions,
+            round_degrees=round_degrees, f4_blocks=f4_blocks,
             detail="msolve: no solution in the algebraic closure",
         )
     if stripped.startswith("[1"):
@@ -274,6 +408,8 @@ def solve_with_msolve(
         return SolverOutcome(
             "msolve", version, POSITIVE_DIM, seconds, peak,
             matrix_cells=largest,
+            solving_degree=solving_degree, zero_reductions=zero_reductions,
+            round_degrees=round_degrees, f4_blocks=f4_blocks,
             detail="msolve: infinitely many solutions in the algebraic closure",
         )
     if not stripped.startswith("[0"):
@@ -293,6 +429,8 @@ def solve_with_msolve(
     return SolverOutcome(
         "msolve", version, SOLVED, seconds, peak,
         matrix_cells=largest,
+        solving_degree=solving_degree, zero_reductions=zero_reductions,
+        round_degrees=round_degrees, f4_blocks=f4_blocks,
         detail="zero-dimensional; rational parametrisation returned",
     )
 
