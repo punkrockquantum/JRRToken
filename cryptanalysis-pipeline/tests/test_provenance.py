@@ -541,3 +541,53 @@ def test_the_banner_is_still_used_where_there_is_no_package(monkeypatch) -> None
         L2, "_run", lambda *a, **k: (0, "SomeSolver version 9.8.7 built today", "", 0.0, 0.0)
     )
     assert L2._solver_version("msolve", "msolve", ["msolve", "-h"]) == "9.8.7"
+
+
+PREREG_003 = (
+    Path(__file__).resolve().parents[1] / "prereg" / "PREREG-003-solving-degree.md"
+)
+
+
+def test_the_third_prereg_discloses_that_its_prediction_was_fitted() -> None:
+    """s(r) = 2r - 1 was read off five points measured while fixing the parser.
+    A prediction fitted on data and then presented as though it preceded the
+    data is invisible unless the person who did the fitting writes it down."""
+    raw = PREREG_003.read_text(encoding="utf-8")
+    # Normalised, because the phrases that matter wrap across lines and a test
+    # that only matches unwrapped text passes or fails on the line width.
+    text = " ".join(raw.split())
+    assert "Disclosure, before anything else" in text
+    assert "already been seen" in text
+    assert "fitted to diagnostic data, not a prior" in text
+    assert "out-of-sample" in text
+
+
+def test_the_third_prereg_refuses_the_easy_result() -> None:
+    """Below the Macaulay bound is true of every structured system. Registering
+    it as a finding would be registering that an iterated cipher is iterated."""
+    criterion = load_prereg(PREREG_003).fields["structure_criterion"]
+    assert "is expected and is not a finding" in criterion
+    assert "constant or bounded in `r`" in criterion
+
+
+def test_the_third_prereg_leaves_the_break_criterion_alone() -> None:
+    """A solving degree is never a break on its own."""
+    criterion = load_prereg(PREREG_003).fields["break_criterion"]
+    assert "unchanged from PREREG-002" in criterion
+    assert "L4 gates" in criterion
+
+
+def test_a_walled_rung_reports_no_solving_degree() -> None:
+    """PREREG-003 states it, so the code must do it: msolve killed mid-run has
+    printed the rounds it completed, and the highest of those is the degree it
+    got to, not the degree it needed."""
+    from compile_polysys import compile_cico
+    from reference import CicoProblem
+    from solvers import WALL, solve_with_msolve
+    import spec as S2
+
+    spec = S2.poseidon_like(prime=1073741831, width=2, rounds_full=4, rounds_partial=3)
+    outcome = solve_with_msolve(compile_cico(CicoProblem.planted(spec, rounds=7)), timeout=2.0)
+    assert outcome.status == WALL
+    assert outcome.solving_degree is None
+    assert outcome.zero_reductions == ()
