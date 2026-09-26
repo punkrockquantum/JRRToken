@@ -268,3 +268,39 @@ which is why its step counts are 26p/26f against 24p/26f rather than identical.
   the conclusion and `vdim`; its protocol output is not parsed.
 - Rounds 1–7, a 30-bit prime, planted instances, degrevlex only. Deployed
   parameter sets are an order of magnitude away in both prime size and rounds.
+
+### PREREG-004 discharged in the chain, and the stamping defect behind it
+
+`runs/log.jsonl` seq 42 is an `outcome-survives` record naming PREREG-004 and
+carrying its sha256 `f43b1e6be52945c3`. It holds the three registered
+conditions with the values that decided them, the per-encoding statistics, a
+blindness statement, and the content hashes of the 28 run artefacts it was
+computed from. Reproduce with `python3 outcome.py`.
+
+**The defect that made this necessary.** The first 42 chain records all name
+**PREREG-002**, because `sweep.py` stamps the document it reads its grid from
+and that is PREREG-002 for every sweep. So the runs discharging PREREG-003 and
+PREREG-004 were chained as PREREG-002 runs, and neither of those documents was
+referenced anywhere in the evidence chain. Their outcomes existed only in this
+file's prose and in a terminal.
+
+That is the failure the layer exists to prevent. A pre-registration fixes the
+reading in advance so that applying it can be mechanical; if applying it is not
+mechanical, fixing it in advance bought nothing. The verdict `outcome_survives`
+rested, until seq 42, on my reading of a script's printout.
+
+Two consequences, both recorded rather than corrected in place:
+
+1. **The run records keep their PREREG-002 stamp.** They are append-only. The
+   outcome record names the files it read by content hash instead, which is
+   what ties the verdict to the exact runs.
+2. **Those records carry no solving degree.** `to_record` now includes
+   `solving_degrees` and `first_zero_reduction_degrees`, but the 42 records
+   written before that change do not, so the chain alone cannot support a
+   solving-degree claim over them — only the outcome record's cited files can.
+   Runs from here on carry it in the chain.
+
+PREREG-003 is **still not discharged in the chain.** Its `model_criterion`
+(failed 0 of 12) and `structure_criterion` (met in 2 cells) are recorded in
+this file and evaluated in code, but no outcome record names PREREG-003. That
+is open work, not a closed loop.
