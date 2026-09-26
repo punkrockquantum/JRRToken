@@ -214,8 +214,16 @@ NEGATIVE_KINDS = (
     "outcome-unworded",
 )
 
-#: Verdict words an outcome record may carry. A pre-registration fixes the
-#: reading of each before its run; these are the names of those readings.
+#: Outcome kinds the tool itself owns. Neither is a verdict: ``unworded`` says
+#: the document fixed no word for its result, ``inconclusive`` says the run did
+#: not reach the coverage the document required before it would be read. Every
+#: other outcome kind belongs to the document that fixed it -- see
+#: ``outcome_vocabulary``.
+NON_VERDICT_OUTCOME_KINDS = ("outcome-unworded", "outcome-inconclusive")
+
+#: The verdict words the first outcome module carried, kept so records already
+#: in the chain can be read. New documents fix their own words and the module
+#: does not grow this tuple for them; that was defect #9 in the record.
 OUTCOME_KINDS = (
     # PREREG-004's three readings, plus the gate that refuses to read at all.
     # These are *that document's* words: a verdict vocabulary belongs to the
@@ -524,6 +532,52 @@ class PreRegistration:
             "sha256": self.sha256,
             "fields": dict(self.fields),
         }
+
+
+_WORD = re.compile(r"outcome_[a-z][a-z0-9_]*")
+
+
+def _outcome_kind(word: str) -> str:
+    """``outcome_survives`` in the document is ``outcome-survives`` in the chain."""
+    return word.replace("_", "-")
+
+
+def outcome_vocabulary(prereg: PreRegistration) -> tuple[str, ...]:
+    """The verdict words a document fixed, as record kinds.
+
+    A document states them in an ``outcomes`` field, or -- for documents
+    written before that field existed -- as ``outcome_*`` fields each carrying
+    the reading it names (PREREG-004). A document with neither fixed no word
+    for its result and is discharged as ``outcome-unworded``. The tool never
+    supplies a word; the first outcome module did, and that put PREREG-004's
+    vocabulary on every document.
+    """
+    listed = prereg.fields.get("outcomes", "")
+    if listed:
+        words = _WORD.findall(listed)
+    else:
+        words = [key for key in prereg.fields if key.startswith("outcome_")]
+    kinds = tuple(_outcome_kind(w) for w in words)
+    return tuple(k for k in kinds if k not in NON_VERDICT_OUTCOME_KINDS)
+
+
+def outcome_negatives(prereg: PreRegistration) -> tuple[str, ...]:
+    """Which of a document's verdict words claim an absence.
+
+    Declared in a ``negatives`` field. A word so declared owes a blindness
+    statement at record time like any other negative. For a document without
+    the field, the tool's ``NEGATIVE_KINDS`` applies -- which is how
+    PREREG-004's ``outcome-vanishes`` is handled.
+    """
+    declared = prereg.fields.get("negatives", "")
+    kinds = tuple(_outcome_kind(w) for w in _WORD.findall(declared))
+    unknown = [k for k in kinds if k not in outcome_vocabulary(prereg)]
+    if unknown:
+        raise ProvenanceRefused(
+            f"{prereg.prereg_id} declares negatives {unknown} that are not among "
+            f"its verdict words {list(outcome_vocabulary(prereg))}"
+        )
+    return kinds
 
 
 def load_prereg(path: str | Path) -> PreRegistration:

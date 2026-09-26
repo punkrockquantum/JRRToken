@@ -47,6 +47,18 @@ class Shape:
     width: int
     rounds_full: int
     rounds_partial: int
+    #: Set when the document states the split itself (``1f+1p+4f``). ``None``
+    #: means ``poseidon_like``'s even split, which is how PREREG-002's grid is
+    #: stated and how every record before PREREG-005 was made.
+    rounds_full_first: int | None = None
+
+    @property
+    def first(self) -> int:
+        return self.rounds_full // 2 if self.rounds_full_first is None else self.rounds_full_first
+
+    @property
+    def last(self) -> int:
+        return self.rounds_full - self.first
 
     @property
     def leading_partial(self) -> bool:
@@ -58,19 +70,34 @@ class Shape:
         prediction got wrong, which is why PREREG-002 names it explicitly
         rather than letting it appear as an accident of the grid.
         """
-        return self.rounds_full // 2 == 0
+        return self.first == 0
 
     def label(self) -> str:
-        return f"t{self.width}-f{self.rounds_full}-p{self.rounds_partial}"
+        if self.rounds_full_first is None:
+            return f"t{self.width}-f{self.rounds_full}-p{self.rounds_partial}"
+        return f"t{self.width}-{self.first}f{self.rounds_partial}p{self.last}f"
 
 
 def spec_for(shape: Shape, prime: int) -> Spec:
-    return poseidon_like(
+    if shape.rounds_full_first is None:
+        return poseidon_like(
+            prime=prime,
+            width=shape.width,
+            rounds_full=shape.rounds_full,
+            rounds_partial=shape.rounds_partial,
+        )
+    return Spec.create(
+        name=f"poseidon-like-t{shape.width}",
         prime=prime,
         width=shape.width,
-        rounds_full=shape.rounds_full,
+        rounds_full_first=shape.first,
         rounds_partial=shape.rounds_partial,
+        rounds_full_last=shape.last,
+        capacity=1,
     )
+
+
+_SPLIT = re.compile(r"`(\d+)f\+(\d+)p\+(\d+)f`")
 
 
 class SweepRefused(Exception):
@@ -92,12 +119,24 @@ def shapes_from_prereg(prereg: PreRegistration) -> tuple[Shape, ...]:
         )
 
     shapes_text = prereg.fields.get("shapes", "")
+    splits = [(int(a), int(b), int(c)) for a, b, c in _SPLIT.findall(shapes_text)]
+    if splits:
+        # PREREG-005 states each split outright, because its shapes are not
+        # the even split poseidon_like produces and a crossed grid cannot say so.
+        grid = [
+            Shape(width, first + last, partial, rounds_full_first=first)
+            for width in widths
+            for first, partial, last in splits
+        ]
+        return tuple(grid)
+
     full_set = re.search(r"`rounds_full`\s+in\s+\{([^}]*)\}", shapes_text)
     partial_set = re.search(r"`rounds_partial`\s+in\s+\{([^}]*)\}", shapes_text)
     if not full_set or not partial_set:
         raise SweepRefused(
             "the `shapes` field does not state a crossed grid in the form "
-            "'`rounds_full` in {..} crossed with `rounds_partial` in {..}': "
+            "'`rounds_full` in {..} crossed with `rounds_partial` in {..}', "
+            "nor any explicit split in the form '`1f+1p+4f`': "
             f"{shapes_text!r}"
         )
     fulls = [int(n) for n in re.findall(r"\d+", full_set.group(1))]
@@ -371,6 +410,7 @@ def preview(prereg_path: str | Path = PREREG_PATH) -> str:
     for shape in grid:
         lines.append(
             f"    {shape.label()} rounds={shape.rounds_full + shape.rounds_partial} "
+            f"split={shape.first}f+{shape.rounds_partial}p+{shape.last}f "
             f"leading_partial={shape.leading_partial}"
         )
     return "\n".join(lines)
@@ -380,6 +420,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--preview", action="store_true",
                         help="print the grid and exit, building nothing")
+    parser.add_argument("--prereg", default=str(PREREG_PATH),
+                        help="the pre-registration whose grid to run; every "
+                             "record written is stamped with this document's "
+                             "sha256, so it must be the document the runs are for")
     parser.add_argument("--prime", type=int, default=None,
                         help="field size; required unless --preview")
     parser.add_argument("--budget-seconds", type=float, default=3600.0)
@@ -394,12 +438,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.preview:
-        print(preview())
+        print(preview(args.prereg))
         return 0
     if args.prime is None:
         parser.error("--prime is required unless --preview")
     report = run_sweep(
         prime=args.prime,
+        prereg_path=args.prereg,
         budget_seconds=args.budget_seconds,
         timeout=args.timeout,
         max_rounds=args.max_rounds,

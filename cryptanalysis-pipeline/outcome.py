@@ -40,6 +40,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from provenance import (
+    NON_VERDICT_OUTCOME_KINDS,
     OUTCOME_KINDS,
     PreRegistration,
     ProvenanceRefused,
@@ -47,6 +48,8 @@ from provenance import (
     file_digest,
     load_prereg,
     mint_record,
+    outcome_negatives,
+    outcome_vocabulary,
 )
 
 #: PREREG-004 fixes this in its ``minimum_steps`` field: below it the means are
@@ -85,14 +88,27 @@ class Outcome:
     #: ``{relative path: sha256}`` for every run artefact read.
     inputs: dict[str, str] = field(default_factory=dict)
     blindness: str = ""
+    #: The verdict words the document fixed (``outcome_vocabulary``). ``None``
+    #: means the caller did not consult the document and the historical
+    #: ``OUTCOME_KINDS`` applies; an evaluator always passes the document's.
+    vocabulary: tuple[str, ...] | None = None
+    #: Which of those words the document declared as claims of absence.
+    negatives: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if self.verdict not in OUTCOME_KINDS:
+        allowed = (
+            OUTCOME_KINDS if self.vocabulary is None
+            else tuple(self.vocabulary) + NON_VERDICT_OUTCOME_KINDS
+        )
+        if self.verdict not in allowed:
             raise OutcomeRefused(
-                f"{self.verdict!r} is not one of the verdict words a "
-                f"pre-registration defines: {list(OUTCOME_KINDS)}. A verdict "
+                f"{self.verdict!r} is not one of the verdict words "
+                f"{self.prereg_id} defines: {list(allowed)}. A verdict "
                 "chosen at writing time is not a pre-registered reading."
             )
+        unknown = [n for n in self.negatives if n not in allowed]
+        if unknown:
+            raise OutcomeRefused(f"negatives {unknown} are not verdict words of {self.prereg_id}")
 
     def render(self) -> str:
         lines = [
@@ -106,6 +122,11 @@ class Outcome:
         return "\n".join(lines)
 
     def to_record(self, solver_versions: tuple[str, ...]) -> dict:
+        if self.verdict in self.negatives and not self.blindness.strip():
+            raise ProvenanceRefused(
+                f"{self.prereg_id} declares {self.verdict} a negative and this "
+                "record states no blindness. Say what the run could not have seen."
+            )
         return mint_record(
             kind=self.verdict,
             spec_digest="grid",  # an outcome spans a grid, not one spec
@@ -127,18 +148,38 @@ class Outcome:
 # -- the round-kind statistic PREREG-004 is read from ------------------------
 
 
-def _shape_spec(record: dict):
-    """Rebuild the spec a ladder record came from, to recover its round kinds."""
-    import spec as S
+def _split(record: dict) -> tuple[int, int, int]:
+    """``(full first, partial, full last)`` as the spec string renders them.
 
-    width = int(record["spec"].split("width=")[1].split()[0])
+    Read from the rendered split, not rebuilt through ``poseidon_like``: that
+    helper divides ``rounds_full`` evenly, and PREREG-005's shapes are not
+    even. Rebuilding ``1f+1p+4f`` as ``rounds_full=5`` would put two full
+    rounds in front and attribute the wrong kind to every step.
+    """
     inner = record["spec"].split("rounds=")[1].split()[0].split("(")[1].rstrip(")")
     first, partial, last = inner.split("+")
-    return S.poseidon_like(
+    return int(first.rstrip("f")), int(partial.rstrip("p")), int(last.rstrip("f"))
+
+
+def _round_kinds(record: dict) -> list[str]:
+    first, partial, last = _split(record)
+    return ["full"] * first + ["partial"] * partial + ["full"] * last
+
+
+def _shape_spec(record: dict):
+    """Rebuild the spec a ladder record came from, with its exact split."""
+    import spec as S
+
+    first, partial, last = _split(record)
+    width = int(record["spec"].split("width=")[1].split()[0])
+    return S.Spec.create(
+        name=f"poseidon-like-t{width}",
         prime=int(record["spec"].split("p=")[1].split()[0]),
         width=width,
-        rounds_full=int(first.rstrip("f")) + int(last.rstrip("f")),
-        rounds_partial=int(partial.rstrip("p")),
+        rounds_full_first=first,
+        rounds_partial=partial,
+        rounds_full_last=last,
+        capacity=1,
     )
 
 
@@ -168,7 +209,7 @@ def round_kind_changes(runs_dir: str | Path) -> tuple[dict, dict[str, str]]:
     for (encoding, _), path in newest.items():
         record = json.loads(path.read_text(encoding="utf-8"))
         inputs[path.name] = file_digest(path)
-        kinds = list(_shape_spec(record).round_kinds())
+        kinds = _round_kinds(record)
         rungs = [r for r in record["rungs"] if r["solving_degree"] is not None]
         for before, after in zip(rungs, rungs[1:]):
             added = kinds[after["rounds"] - 1]
@@ -266,6 +307,8 @@ def evaluate_prereg_004(runs_dir: str | Path, prereg: PreRegistration) -> Outcom
         statistics=statistics,
         inputs=inputs,
         blindness=blindness,
+        vocabulary=outcome_vocabulary(prereg),
+        negatives=outcome_negatives(prereg),
     )
 
 
@@ -395,6 +438,181 @@ def evaluate_prereg_003(runs_dir: str | Path, prereg: PreRegistration) -> Outcom
             "so constancy beyond that was never observable; and every instance "
             "is planted, at a 30-bit prime, under one monomial ordering"
         ),
+        vocabulary=outcome_vocabulary(prereg),
+        negatives=outcome_negatives(prereg),
+    )
+
+
+# -- PREREG-005: the constant run ---------------------------------------------
+
+
+def _registered_cells(prereg: PreRegistration) -> set[tuple[int, int, int, int]]:
+    """``(width, first, partial, last)`` for every cell the document names.
+
+    Read through the sweep's own parser so the evaluator and the driver cannot
+    disagree about what the document said.
+    """
+    from sweep import shapes_from_prereg
+
+    return {
+        (s.width, s.first, s.rounds_partial, s.last) for s in shapes_from_prereg(prereg)
+    }
+
+
+def trailing_runs(runs_dir: str | Path, prereg: PreRegistration) -> tuple[list[dict], dict[str, str]]:
+    """Per registered cell, the solving degrees from the last partial round on.
+
+    Only cells the document names, under the encoding it names, are read; a
+    PREREG-002 ladder that happens to be in the same directory is not evidence
+    for PREREG-005. The newest ladder per cell is taken. A rung with no solving
+    degree (a wall) ends the trailing run, because the question is about
+    consecutive closed rungs.
+    """
+    import os
+
+    registered = _registered_cells(prereg)
+    encoding = prereg.fields.get("encoding", "sbox").strip()
+    runs = Path(runs_dir)
+    newest: dict[tuple[int, int, int, int], Path] = {}
+    for path in runs.glob("ladder-*.json"):
+        record = json.loads(path.read_text(encoding="utf-8"))
+        if "poseidon" not in record["spec"] or record.get("encoding", "sbox") != encoding:
+            continue
+        width = int(record["spec"].split("width=")[1].split()[0])
+        key = (width, *_split(record))
+        if key not in registered:
+            continue
+        if key not in newest or os.path.getmtime(path) > os.path.getmtime(newest[key]):
+            newest[key] = path
+
+    cells: list[dict] = []
+    inputs: dict[str, str] = {}
+    for key, path in sorted(newest.items()):
+        width, first, partial, last = key
+        record = json.loads(path.read_text(encoding="utf-8"))
+        inputs[path.name] = file_digest(path)
+        by_round = {r["rounds"]: r for r in record["rungs"]}
+        anchor = first + partial  # the rung whose last round is the last partial one
+        degrees: list[int] = []
+        rounds = anchor
+        while rounds in by_round and by_round[rounds].get("solving_degree") is not None:
+            degrees.append(by_round[rounds]["solving_degree"])
+            rounds += 1
+        steps = [b - a for a, b in zip(degrees, degrees[1:])]
+        cells.append({
+            "cell": f"t{width} {first}f+{partial}p+{last}f",
+            "width": width,
+            "anchor_round": anchor,
+            "trailing_degrees": degrees,
+            "trailing_steps": steps,
+            "drift": (degrees[-1] - degrees[0]) if degrees else None,
+            "below_prediction": any(
+                r.get("ideal_degree") is not None
+                and r.get("predicted_degree") is not None
+                and r["ideal_degree"] < r["predicted_degree"]
+                for r in record["rungs"]
+            ),
+        })
+    return cells, inputs
+
+
+def evaluate_prereg_005(runs_dir: str | Path, prereg: PreRegistration) -> Outcome:
+    """Apply PREREG-005's registered conditions and return the verdict.
+
+    Every number the reading turns on is read out of the committed document:
+    the coverage gate (``minimum_trailing_steps_per_cell``,
+    ``minimum_covered_cells``, ``minimum_pooled_steps``) and the three
+    thresholds (``drift_tolerance``, ``constant_mean_tolerance``,
+    ``growth_mean_minimum``). The words are the document's too.
+    """
+    cells, inputs = trailing_runs(runs_dir, prereg)
+    if not cells:
+        raise OutcomeRefused(
+            f"no ladder in {runs_dir} is a cell {prereg.prereg_id} registered, under "
+            f"the {prereg.fields.get('encoding', 'sbox')!r} encoding; there is nothing to read"
+        )
+
+    min_steps = prereg.field_int("minimum_trailing_steps_per_cell")
+    min_cells = prereg.field_int("minimum_covered_cells")
+    min_pooled = prereg.field_int("minimum_pooled_steps")
+    drift_tol = prereg.field_float("drift_tolerance")
+    mean_tol = prereg.field_float("constant_mean_tolerance")
+    growth_min = prereg.field_float("growth_mean_minimum")
+
+    covered = [c for c in cells if len(c["trailing_steps"]) >= min_steps]
+    widths = sorted({c["width"] for c in covered})
+    pooled = [s for c in covered for s in c["trailing_steps"]]
+    mean_step = sum(pooled) / len(pooled) if pooled else float("nan")
+    max_drift = max((abs(c["drift"]) for c in covered), default=None)
+
+    coverage = Condition(
+        "minimum_coverage",
+        len(covered) >= min_cells and len(widths) >= 2 and len(pooled) >= min_pooled,
+        f"{len(covered)} covered cells of {len(cells)} read (registered minimum "
+        f"{min_cells}, both widths required; widths covered {widths}); "
+        f"{len(pooled)} pooled trailing steps against a registered minimum of {min_pooled}",
+    )
+    drift_ok = bool(covered) and all(abs(c["drift"]) <= drift_tol for c in covered)
+    constant = Condition(
+        "constant_condition",
+        drift_ok and bool(pooled) and abs(mean_step) <= mean_tol,
+        (f"largest |drift| across covered cells {max_drift} against a tolerance of "
+         f"{drift_tol:g}; pooled mean trailing step {mean_step:+.3f} against a tolerance "
+         f"of ±{mean_tol:g}") if covered else "no covered cell",
+    )
+    growth = Condition(
+        "growth_condition",
+        bool(pooled) and mean_step >= growth_min,
+        (f"pooled mean trailing step {mean_step:+.3f} against a registered minimum of "
+         f"{growth_min:+g}") if pooled else "no trailing steps",
+    )
+    breaks = [c["cell"] for c in cells if c["below_prediction"]]
+    break_criterion = Condition(
+        "break_criterion",
+        False,
+        f"clause 2 (a measured quantity below its prediction) holds in {len(breaks)} "
+        "cells, so the criterion is met nowhere and no candidate was put to the L4 gates"
+        + (f": {breaks}" if breaks else ""),
+    )
+
+    if not coverage.holds:
+        verdict = "outcome-inconclusive"
+    elif growth.holds:
+        verdict = "outcome-grows"
+    elif constant.holds:
+        verdict = "outcome-constant"
+    else:
+        verdict = "outcome-drifts"
+
+    deepest = max((c["anchor_round"] + len(c["trailing_steps"]) for c in covered), default=0)
+    blindness = (
+        f"the S-box encoding only, so PREREG-004's agreement between encodings is "
+        f"assumed to extend and was not measured here; the solving degree is msolve's, "
+        f"block 0, degrevlex, uncorroborated by a second implementation; "
+        f"{len(cells) - len(covered)} of {len(cells)} registered cells read did not "
+        f"reach {min_steps} trailing steps and say nothing; the deepest covered rung is "
+        f"round {deepest}, and constancy or growth beyond it was never observable; "
+        f"every instance is planted at a 30-bit prime; and a verdict over pooled steps "
+        f"says nothing about why"
+    )
+
+    return Outcome(
+        prereg_id=prereg.prereg_id,
+        prereg_sha256=prereg.sha256,
+        verdict=verdict,
+        conditions=(coverage, constant, growth, break_criterion),
+        statistics={
+            "cells": cells,
+            "covered": [c["cell"] for c in covered],
+            "pooled_steps": len(pooled),
+            "pooled_mean_step": round(mean_step, 4) if pooled else None,
+            "max_abs_drift": max_drift,
+            "deepest_covered_round": deepest,
+        },
+        inputs=inputs,
+        blindness=blindness,
+        vocabulary=outcome_vocabulary(prereg),
+        negatives=outcome_negatives(prereg),
     )
 
 
@@ -412,7 +630,7 @@ def record_outcome(
         payload = existing.payload
         if (
             payload.get("prereg_id") == outcome.prereg_id
-            and payload.get("kind") in OUTCOME_KINDS
+            and str(payload.get("kind", "")).startswith("outcome-")
             and payload.get("inputs") == outcome.inputs
         ):
             raise ProvenanceRefused(
@@ -441,6 +659,7 @@ def main(argv: list[str] | None = None) -> int:
     evaluators = {
         "PREREG-003": evaluate_prereg_003,
         "PREREG-004": evaluate_prereg_004,
+        "PREREG-005": evaluate_prereg_005,
     }
     if prereg.prereg_id not in evaluators:
         raise OutcomeRefused(
