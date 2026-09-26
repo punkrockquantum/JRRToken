@@ -44,22 +44,24 @@ sys.path.insert(0, str(ROOT))
 import spec as S  # noqa: E402
 
 
-def newest_per_spec(runs: Path) -> dict[str, Path]:
+def newest_per_spec(runs: Path) -> dict[tuple[str, str], Path]:
     """The most recent run for each spec digest that carries solving degrees.
 
     Earlier runs of the same spec predate the solving-degree instrument and
     carry ``None``; they are skipped rather than counted as zero.
     """
-    newest: dict[str, Path] = {}
+    newest: dict[tuple[str, str], Path] = {}
     for path in runs.glob("ladder-*.json"):
         record = json.loads(path.read_text(encoding="utf-8"))
         if "poseidon" not in record["spec"]:
             continue
         if not any(r.get("solving_degree") is not None for r in record["rungs"]):
             continue
-        digest = record["spec_digest"]
-        if digest not in newest or os.path.getmtime(path) > os.path.getmtime(newest[digest]):
-            newest[digest] = path
+        # Keyed by (encoding, spec) so the two encodings do not overwrite each
+        # other -- comparing them is the whole point of PREREG-004.
+        key = (record.get("encoding", "sbox"), record["spec_digest"])
+        if key not in newest or os.path.getmtime(path) > os.path.getmtime(newest[key]):
+            newest[key] = path
     return newest
 
 
@@ -79,9 +81,9 @@ def main() -> int:
         print("no runs carrying solving degrees; run the sweep first")
         return 1
 
-    changes: dict[str, list[int]] = defaultdict(list)
+    changes: dict[tuple[str, str], list[int]] = defaultdict(list)
     print("effect on solving degree of the round added at each step\n")
-    for path in sorted(records.values()):
+    for (enc, _), path in sorted(records.items()):
         record = json.loads(path.read_text(encoding="utf-8"))
         width, first, partial, last = shape_of(record["spec"])
         spec = S.poseidon_like(
@@ -96,35 +98,39 @@ def main() -> int:
         for before, after in zip(rungs, rungs[1:]):
             added = kinds[after["rounds"] - 1]
             change = after["solving_degree"] - before["solving_degree"]
-            changes[added].append(change)
+            changes[(enc, added)].append(change)
             steps.append(f"+{added[0]}:{change:+d}")
-        label = f"t{width} {first}f+{partial}p+{last}f"
-        print(f"  {label:16} " + " ".join(steps))
+        label = f"[{enc}] t{width} {first}f+{partial}p+{last}f"
+        print(f"  {label:26} " + " ".join(steps))
 
     print()
-    for kind, values in sorted(changes.items()):
+    for (enc, kind), values in sorted(changes.items()):
         mean = sum(values) / len(values)
         print(
-            f"adding a {kind:8} round: n={len(values):2}  "
+            f"[{enc:5}] adding a {kind:8} round: n={len(values):2}  "
             f"range=[{min(values):+d}, {max(values):+d}]  mean={mean:+.2f}"
         )
 
-    partial = changes.get("partial", [])
-    full = changes.get("full", [])
-    if partial and full:
-        print()
+    # PREREG-004's outcome test, evaluated per encoding rather than asserted.
+    print()
+    for enc in sorted({e for e, _ in changes}):
+        partial = changes.get((enc, "partial"), [])
+        full = changes.get((enc, "full"), [])
+        if not (partial and full):
+            continue
+        gap = sum(partial) / len(partial) - sum(full) / len(full)
+        separated = gap >= 1.0 and min(partial) > sum(full) / len(full)
+        enough = len(partial) >= 15 and len(full) >= 15
         print(
-            f"  every partial round raised it (min {min(partial):+d}); "
-            f"full rounds range [{min(full):+d}, {max(full):+d}] about a mean of "
-            f"{sum(full) / len(full):+.2f}"
+            f"[{enc:5}] partial-minus-full mean gap = {gap:+.2f}; "
+            f"separated={separated}; steps={len(partial)}p/{len(full)}f; "
+            f"enough_for_PREREG_004={enough}"
         )
-        print(
-            "  POST-HOC. Not pre-registered, and possibly a property of the "
-            "one-variable-per-S-box encoding rather than of the primitive: a "
-            "full round adds `width` variables and equations where a partial "
-            "round adds one, and more generators can lower a degree of "
-            "regularity. A second independent encoding would settle it."
-        )
+    print(
+        "\n  PREREG-004 reads these: survives / vanishes / reverses, with the "
+        "reading of each fixed before the run. The sbox-encoding numbers are "
+        "post-hoc and are the claim under test, not a prior."
+    )
     return 0
 
 

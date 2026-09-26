@@ -36,6 +36,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from compile_polysys import compile_cico
+from compile_state import compile_cico_state
 from provenance import (
     MODEL,
     PreRegistration,
@@ -195,6 +196,8 @@ class Ladder:
     roundtrip_passed: bool
     wall_at: int | None
     planted: bool = True
+    #: Which model compiler produced the systems measured here.
+    encoding: str = "sbox"
     #: Any rung measured while another solver was running. Timings from a
     #: contended window measure scheduling, not mathematics, so the cost gate
     #: must not rest on them.
@@ -302,6 +305,7 @@ class Ladder:
         lines = [
             f"ladder {self.spec_render}",
             f"  {self.problem_render}",
+            f"  encoding={self.encoding}",
             f"  validation_passed={self.validation_passed} "
             f"roundtrip_passed={self.roundtrip_passed} planted={self.planted}",
             f"  solvers={list(self.solver_versions)}",
@@ -353,6 +357,7 @@ class Ladder:
             "spec": self.spec_render,
             "spec_digest": self.spec_digest,
             "problem": self.problem_render,
+            "encoding": self.encoding,
             "planted": self.planted,
             "contended_rounds": list(self.contended_rounds),
             "validation_passed": self.validation_passed,
@@ -429,6 +434,7 @@ class Ladder:
                 "prereg_id": prereg.prereg_id,
                 "spec": self.spec_render,
                 "problem": self.problem_render,
+                "encoding": self.encoding,
                 "planted": self.planted,
                 "contended_rounds": list(self.contended_rounds),
                 "wall_at": self.wall_at,
@@ -453,12 +459,20 @@ class LadderRefused(Exception):
     """The ladder cannot be run as stated."""
 
 
+#: The model compilers a ladder may run against, by encoding name. A ladder
+#: names which one it used, because two encodings of one cipher produce
+#: different systems and a record that does not say which was measured cannot
+#: be compared with anything.
+COMPILERS = {"sbox": compile_cico, "state": compile_cico_state}
+
+
 def run_ladder(
     spec: Spec,
     max_rounds: int | None = None,
     timeout: float = 300.0,
     brute_force_limit: int = BRUTE_FORCE_LIMIT,
     planted: bool = True,
+    encoding: str = "sbox",
 ) -> Ladder:
     """Run the ladder, stopping at the first wall.
 
@@ -466,6 +480,12 @@ def run_ladder(
     ladder built on an unvalidated implementation or an unchecked model measures
     a different cipher, and there is no point spending solver time on that.
     """
+    if encoding not in COMPILERS:
+        raise LadderRefused(
+            f"unknown encoding {encoding!r}; known: {sorted(COMPILERS)}"
+        )
+    compile_for = COMPILERS[encoding]
+
     report = validate(spec)
     if not report.passed:
         raise LadderRefused(
@@ -503,7 +523,7 @@ def run_ladder(
 
     for rounds in range(1, limit + 1):
         problem = problem_at(rounds)
-        system = compile_cico(problem)
+        system = compile_for(problem)
 
         trip = round_trip(system)
         if not trip.passed:
@@ -571,6 +591,7 @@ def run_ladder(
             break
 
     return Ladder(
+        encoding=encoding,
         spec_render=spec.render(),
         spec_digest=spec.digest(),
         problem_render=problem_at(1).render(),

@@ -163,6 +163,10 @@ class SweepReport:
     cells: tuple[Cell, ...]
     budget_seconds: float
     seconds_used: float
+    #: Which model compiler the cells were measured under. Two encodings of one
+    #: cipher produce different systems, so a record that does not say which was
+    #: measured cannot be compared with anything.
+    encoding: str = "sbox"
     #: The per-rung and round limits actually used, and the pre-registered ones
     #: beside them. Carried because the docstring on ``run_sweep`` claimed a
     #: departure from the document was "recorded" while nothing recorded it --
@@ -202,7 +206,7 @@ class SweepReport:
     def render(self) -> str:
         lines = [
             f"sweep prereg={self.prereg_id} sha256={self.prereg_sha256[:16]} "
-            f"prime={self.prime}",
+            f"prime={self.prime} encoding={self.encoding}",
             f"  budget={self.budget_seconds:.0f}s used={self.seconds_used:.0f}s "
             f"attempted={len(self.attempted)}/{len(self.cells)}",
             f"  per_rung_timeout={self.timeout_seconds:.0f}s "
@@ -246,6 +250,7 @@ def run_sweep(
     max_rounds: int | None = None,
     only: str = "",
     runs_dir: str | Path | None = None,
+    encoding: str = "sbox",
 ) -> SweepReport:
     """Run as many pre-registered cells as the budget allows, in order.
 
@@ -294,6 +299,7 @@ def run_sweep(
                 spec,
                 max_rounds=min(rounds_cap, spec.rounds),
                 timeout=per_rung,
+                encoding=encoding,
             )
         except LadderRefused as exc:
             cells.append(
@@ -335,6 +341,7 @@ def run_sweep(
         prereg_id=prereg.prereg_id,
         prereg_sha256=prereg.sha256,
         prime=prime,
+        encoding=encoding,
         cells=tuple(cells),
         budget_seconds=budget_seconds,
         seconds_used=time.perf_counter() - started,
@@ -380,6 +387,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="per-rung budget; defaults to the pre-registered value")
     parser.add_argument("--max-rounds", type=int, default=None)
     parser.add_argument("--only", default="", help="comma-separated cell labels")
+    parser.add_argument("--encoding", default="sbox",
+                        help="model compiler: sbox or state")
     parser.add_argument("--runs-dir", default=None,
                         help="write ladders and append to the hash chain here")
     args = parser.parse_args(argv)
@@ -396,6 +405,7 @@ def main(argv: list[str] | None = None) -> int:
         max_rounds=args.max_rounds,
         only=args.only,
         runs_dir=args.runs_dir,
+        encoding=args.encoding,
     )
     print(report.render())
     return 0
