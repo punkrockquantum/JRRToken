@@ -132,3 +132,77 @@ with that argument and does not test it anywhere near deployed parameters.
   but the run that produced them died on the first width-3 cell before printing
   a report, and the report was not reconstructed afterwards. Coverage of all 14
   cells rests on the 14 chain records, not on a single report artefact.
+
+## PREREG-003 — the solving degree, measured
+
+The full fourteen-cell grid re-run with the solving-degree instrument, at
+PREREG-002's budget, `as_pre_registered=True`, 1052s of 3300s, 14/14 attempted.
+The `vdim` results are unchanged: no deviations anywhere.
+
+### model_criterion: the fitted model failed, 0 of 12
+
+`s(r) = 2r - 1` was fitted on one cell during instrument diagnosis, disclosed
+as fitted in PREREG-003's first section, and predicted out-of-sample. It is
+wrong on **every** cell it was tested on. The two leading-partial cells carried
+no prediction by design.
+
+This is the outcome the disclosure was written to make recordable. A model that
+fails out-of-sample, written down first, is worth more than the same model
+quietly dropped.
+
+### structure_criterion: met in two cells
+
+`2f+1p+2f` at width 2 **and** width 3, identically: solving degree
+`1, 3, 5, 5, 5`, holding at 5 across rounds 3, 4 and 5 while `ideal_degree`
+goes 27, 81, 243. Three consecutive rungs at constant solving degree with vdim
+tripling at each — the registered wording, checked in code against the field
+parsed out of the committed document.
+
+Under PREREG-003 this is **structure, not a break.** The break criterion is
+unchanged and requires the L4 gates including the cost gate. Nothing is
+promoted.
+
+### Two explanations ruled out, not argued away
+
+An earlier note on these results offered instability as a possible explanation
+for the flat run. **That explanation is wrong and is retracted here.**
+
+- *Block selection.* Every F4 block msolve runs under a permuted variable order
+  reports the **same** solving degree; only the final, different computation is
+  higher (6,6,6,6,6,6,6,6,6,8 on one cell; 5×10 then 7 on another). Block 0 is
+  representative of the Gröbner computation, not an arbitrary pick.
+- *Nondeterminism.* Six independent repeat measurements of the hit cell, three
+  at each width, returned `1, 3, 5, 5, 5` every time.
+
+So the flat run is a deterministic, reproducible property of the system,
+replicated across two widths.
+
+### The post-hoc observation, labelled as post-hoc
+
+Attributing each rung's change in solving degree to the kind of round it added,
+across all fourteen cells — 50 steps — gives a clean separation:
+
+| round added | n | range | mean |
+|---|---|---|---|
+| partial | 24 | +2 to +3 | +2.17 |
+| full | 26 | −3 to +2 | +0.08 |
+
+**Every partial round raised the solving degree. Full rounds did not, on
+average.** That is the reverse of the intuition the family's design rests on,
+where full rounds are the strong ones and partial rounds are the cheap ones
+that still buy security.
+
+Reproduce with `python3 analysis/round_kind_effect.py`.
+
+**This was not pre-registered** — PREREG-003 registered a fitted model and a
+constancy criterion, not this question — so it is hypothesis-generating and
+nothing follows from it yet.
+
+**And it may not be about the cipher at all.** A full round introduces `width`
+new variables and equations where a partial round introduces one, and adding
+generators can lower a system's degree of regularity. The effect may therefore
+be a property of the one-variable-per-S-box **encoding** rather than of the
+primitive. The decisive test is the same measurement under a second,
+independent encoding of the same cipher: if it survives a change of encoding it
+is about the primitive, and if it does not it is about the model. That test has
+not been run, and until it is, this is a statement about a model of a cipher.
