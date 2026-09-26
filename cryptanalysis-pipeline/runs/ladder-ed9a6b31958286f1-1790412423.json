@@ -1,0 +1,212 @@
+{
+  "contended_rounds": [],
+  "deviations": [],
+  "disagreements": [],
+  "encoding": "state",
+  "growth_model_tier": "MODEL-not-a-measurement",
+  "growth_models": {
+    "exponential": {
+      "intercept": -8.881784197001252e-16,
+      "log2_degree_per_round": 1.5849625007211563,
+      "rms_residual_bits": 5.347542221830668e-16
+    },
+    "polynomial": {
+      "intercept": 1.07991221054312,
+      "log2_degree_per_log2_round": 2.6603688307709263,
+      "rms_residual_bits": 0.5144439458272752
+    }
+  },
+  "models_diverge_beyond_round": 6,
+  "planted": true,
+  "problem": "cico spec=poseidon-like-t3 rounds=1 capacity=1 rate=2 free=1 constraints=1 zero_dimensional=True planted=True generic_cost_log2=30.00",
+  "roundtrip_passed": true,
+  "rung_tiers": {
+    "1": "E",
+    "2": "E",
+    "3": "E",
+    "4": "E",
+    "5": "E"
+  },
+  "rungs": [
+    {
+      "basis_size": 7,
+      "detail": "zero-dimensional; rational parametrisation returned | dim=0",
+      "f4_blocks": 2,
+      "ideal_degree": 3,
+      "matrix_cells": 42,
+      "max_degree": 3,
+      "n_equations": 7,
+      "n_variables": 7,
+      "peak_memory_mb": 0.0,
+      "predicted_degree": 3,
+      "rational_solutions": null,
+      "rounds": 1,
+      "seconds": 0.010830037999994602,
+      "solvers_agree": true,
+      "solving_degree": 1,
+      "status": "solved",
+      "zero_reductions": []
+    },
+    {
+      "basis_size": 14,
+      "detail": "zero-dimensional; rational parametrisation returned | dim=0",
+      "f4_blocks": 14,
+      "ideal_degree": 9,
+      "matrix_cells": 418,
+      "max_degree": 3,
+      "n_equations": 13,
+      "n_variables": 13,
+      "peak_memory_mb": 0.0,
+      "predicted_degree": 9,
+      "rational_solutions": null,
+      "rounds": 2,
+      "seconds": 0.022176410999918517,
+      "solvers_agree": true,
+      "solving_degree": 3,
+      "status": "solved",
+      "zero_reductions": [
+        [
+          3,
+          1
+        ]
+      ]
+    },
+    {
+      "basis_size": 22,
+      "detail": "zero-dimensional; rational parametrisation returned | dim=0",
+      "f4_blocks": 20,
+      "ideal_degree": 27,
+      "matrix_cells": 546,
+      "max_degree": 4,
+      "n_equations": 19,
+      "n_variables": 19,
+      "peak_memory_mb": 0.0,
+      "predicted_degree": 27,
+      "rational_solutions": null,
+      "rounds": 3,
+      "seconds": 0.036064375000023574,
+      "solvers_agree": true,
+      "solving_degree": 5,
+      "status": "solved",
+      "zero_reductions": [
+        [
+          3,
+          1
+        ],
+        [
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "basis_size": 62,
+      "detail": "zero-dimensional; rational parametrisation returned | dim=0",
+      "f4_blocks": 26,
+      "ideal_degree": 81,
+      "matrix_cells": 22379,
+      "max_degree": 4,
+      "n_equations": 25,
+      "n_variables": 25,
+      "peak_memory_mb": 0.0,
+      "predicted_degree": 81,
+      "rational_solutions": null,
+      "rounds": 4,
+      "seconds": 0.13546976899999663,
+      "solvers_agree": true,
+      "solving_degree": 5,
+      "status": "solved",
+      "zero_reductions": [
+        [
+          3,
+          1
+        ],
+        [
+          4,
+          35
+        ],
+        [
+          4,
+          50
+        ],
+        [
+          4,
+          39
+        ],
+        [
+          5,
+          10
+        ]
+      ]
+    },
+    {
+      "basis_size": 165,
+      "detail": "zero-dimensional; rational parametrisation returned | dim=0",
+      "f4_blocks": 32,
+      "ideal_degree": 243,
+      "matrix_cells": 429240,
+      "max_degree": 4,
+      "n_equations": 31,
+      "n_variables": 31,
+      "peak_memory_mb": 0.0,
+      "predicted_degree": 243,
+      "rational_solutions": null,
+      "rounds": 5,
+      "seconds": 1.997420070999965,
+      "solvers_agree": true,
+      "solving_degree": 5,
+      "status": "solved",
+      "zero_reductions": [
+        [
+          3,
+          1
+        ],
+        [
+          4,
+          35
+        ],
+        [
+          4,
+          33
+        ],
+        [
+          4,
+          16
+        ],
+        [
+          5,
+          71
+        ],
+        [
+          4,
+          187
+        ],
+        [
+          4,
+          90
+        ],
+        [
+          4,
+          195
+        ],
+        [
+          4,
+          31
+        ],
+        [
+          5,
+          232
+        ]
+      ]
+    }
+  ],
+  "sanity_failures": [],
+  "solver_versions": [
+    "msolve/0.6.5-1build2",
+    "singular/1:4.3.2-p10+ds-1.1build1"
+  ],
+  "spec": "spec=poseidon-like-t3 digest=ed9a6b31958286f1 p=1073741831 width=3 d=3 rounds=5(2f+1p+2f) capacity=1 sboxes=13 degree_unreduced=3^5",
+  "spec_digest": "ed9a6b31958286f1",
+  "validation_passed": true,
+  "wall_at": null
+}
