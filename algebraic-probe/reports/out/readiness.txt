@@ -1,0 +1,130 @@
+commit=744715cdc8c1a760a40894447e1142017f23f5f2
+decision_rule=GO iff every blocking gate passes; any failing blocking gate yields NO-GO. Fixed before evaluation, no weighting, no partial credit.
+modules=6 go=[] partial=['M1'] no_go=['M2', 'M3', 'M4', 'M5', 'M6']
+authorised_runs=['M1:linear-map-gf2', 'M1:power-map-gf2n', 'M1:inverse-map-gf2n', 'M1:random-function-sha256-prf']
+
+module=M1 decision=PARTIAL gates_passed=11/11 blocking_failures=0 targets_go=4/7 block_classes=[] depends_on=[]
+  title=Algebraic degree growth versus round count
+  quantity=algebraic degree over GF(2) of output bits in the input variables
+  declared_tiers=P,E,S
+  gate=G02 name=prereg-committed passed=True blocking=True block_class=none detail=prereg_id=PREREG-M1 sha256=33f742cbdeae86fd
+  gate=G03 name=prereg-matches-derivation passed=True blocking=True block_class=none detail=derived block is byte-equal to its derivation script
+  gate=G04 name=runner-precedes-prereg passed=True blocking=True block_class=none detail=runner=84ca87e77da6 precedes prereg=d84c0968324d
+  gate=G05 name=calibration-suite-defined passed=True blocking=True block_class=none detail=n_cases=11 kinds=['blindness', 'intermediate-control', 'negative-control', 'positive-control', 'published-ground-truth']
+  gate=G06 name=published-anchor-named passed=True blocking=True block_class=none detail=anchor=a permutation with published per-round degree values
+  gate=G08 name=controls-recompute passed=True blocking=True block_class=none detail=5 controls recompute to their stated values by exhaustive ANF
+  gate=G09 name=blindness-test-passes passed=True blocking=True block_class=none detail=x -> x^(2^n - 2) over GF(2^n), the multiplicative inverse with 0 -> 0 at n=9 -> algebraic_degree=8 saturated_maximum=8
+  gate=G10 name=independent-verify-path passed=True blocking=True block_class=none detail=verify.anf:algebraic_degree is present and shares no code with modules/
+  gate=G11 name=measurement-registered passed=True blocking=True block_class=none detail=a measurement path is registered
+  gate=G12 name=promotion-gate-instantiated passed=True blocking=True block_class=none detail=all four criteria of section 7 are instantiated with numbers
+  gate=G13 name=dependencies-are-go passed=True blocking=True block_class=none detail=no module dependencies
+  path_to_go=[]
+  target=sha256-compression-parametrised decision=NO-GO blocking=['T01:target-available', 'T03:measurement-path-supports-target']
+      gate=T01 name=target-available passed=False blocking=True block_class=operator detail=core/sha256.py raises NotAuthorised: the parametrised SHA-256 target is not present in this repository. Required before it may be used: vendor the parametris
+      gate=T03 name=measurement-path-supports-target passed=False blocking=True block_class=build detail=the target is absent, so no path can be exercised
+  target=keccak-f[25] decision=NO-GO blocking=['T02:target-ground-truth-verified']
+      gate=T02 name=target-ground-truth-verified passed=False blocking=True block_class=operator detail=this target's ground truth rests on CITE-BCD11, whose claimed value has not been checked against the primary source
+  target=mimc-gf2n[9] decision=NO-GO blocking=['T02:target-ground-truth-verified']
+      gate=T02 name=target-ground-truth-verified passed=False blocking=True block_class=operator detail=this target's ground truth rests on CITE-EGLORSW20, whose claimed value has not been checked against the primary source
+  target=linear-map-gf2 decision=GO blocking=[]
+  target=power-map-gf2n decision=GO blocking=[]
+  target=inverse-map-gf2n decision=GO blocking=[]
+  target=random-function-sha256-prf decision=GO blocking=[]
+
+module=M2 decision=NO-GO gates_passed=1/11 blocking_failures=10 targets_go=0/0 block_classes=['build', 'operator'] depends_on=[]
+  title=Dependency-graph reachability and free-round budget
+  quantity=input bits reachable to each output bit at round r; degrees of freedom
+  declared_tiers=P
+  gate=G02 name=prereg-committed passed=False blocking=True block_class=build detail=no module package exists; a pre-registration has not been written
+  gate=G03 name=prereg-matches-derivation passed=False blocking=True block_class=build detail=no module package exists; a threshold derivation has not been written
+  gate=G04 name=runner-precedes-prereg passed=False blocking=True block_class=build detail=no module package exists; an ordering claim has not been written
+  gate=G05 name=calibration-suite-defined passed=False blocking=True block_class=build detail=no module package exists; a calibration suite has not been written
+  gate=G06 name=published-anchor-named passed=False blocking=True block_class=operator detail=section 5 names no published result for this module, and section 5 requires one before the module is trusted
+  gate=G08 name=controls-recompute passed=False blocking=True block_class=build detail=no module package exists; controls has not been written
+  gate=G09 name=blindness-test-passes passed=False blocking=True block_class=build detail=no module package exists; a blindness class has not been written
+  gate=G10 name=independent-verify-path passed=False blocking=True block_class=build detail=no independent verification path exists in verify/ for this quantity; section 7.2 makes one a precondition of promotion
+  gate=G11 name=measurement-registered passed=False blocking=True block_class=build detail=no module package exists; a measurement path has not been written
+  gate=G12 name=promotion-gate-instantiated passed=False blocking=True block_class=build detail=no module package exists; a promotion gate has not been written
+  gate=G13 name=dependencies-are-go passed=True blocking=True block_class=none detail=no module dependencies
+  path_to_go=['G02:prereg-committed', 'G03:prereg-matches-derivation', 'G04:runner-precedes-prereg', 'G05:calibration-suite-defined', 'G06:published-anchor-named', 'G08:controls-recompute', 'G09:blindness-test-passes', 'G10:independent-verify-path', 'G11:measurement-registered', 'G12:promotion-gate-instantiated']
+
+module=M3 decision=NO-GO gates_passed=2/11 blocking_failures=9 targets_go=0/0 block_classes=['build'] depends_on=[]
+  title=Differential characteristic search
+  quantity=characteristic probability and step count
+  declared_tiers=E,S
+  gate=G02 name=prereg-committed passed=False blocking=True block_class=build detail=no module package exists; a pre-registration has not been written
+  gate=G03 name=prereg-matches-derivation passed=False blocking=True block_class=build detail=no module package exists; a threshold derivation has not been written
+  gate=G04 name=runner-precedes-prereg passed=False blocking=True block_class=build detail=no module package exists; an ordering claim has not been written
+  gate=G05 name=calibration-suite-defined passed=False blocking=True block_class=build detail=no module package exists; a calibration suite has not been written
+  gate=G06 name=published-anchor-named passed=True blocking=True block_class=none detail=anchor=reduced-round SHA-256 collision and semi-free-start results
+  gate=G08 name=controls-recompute passed=False blocking=True block_class=build detail=no module package exists; controls has not been written
+  gate=G09 name=blindness-test-passes passed=False blocking=True block_class=build detail=no module package exists; a blindness class has not been written
+  gate=G10 name=independent-verify-path passed=False blocking=True block_class=build detail=no independent verification path exists in verify/ for this quantity; section 7.2 makes one a precondition of promotion
+  gate=G11 name=measurement-registered passed=False blocking=True block_class=build detail=no module package exists; a measurement path has not been written
+  gate=G12 name=promotion-gate-instantiated passed=False blocking=True block_class=build detail=no module package exists; a promotion gate has not been written
+  gate=G13 name=dependencies-are-go passed=True blocking=True block_class=none detail=no module dependencies
+  path_to_go=['G02:prereg-committed', 'G03:prereg-matches-derivation', 'G04:runner-precedes-prereg', 'G05:calibration-suite-defined', 'G08:controls-recompute', 'G09:blindness-test-passes', 'G10:independent-verify-path', 'G11:measurement-registered', 'G12:promotion-gate-instantiated']
+
+module=M4 decision=NO-GO gates_passed=0/11 blocking_failures=11 targets_go=0/0 block_classes=['build', 'dependency', 'operator'] depends_on=['M1']
+  title=Higher-order differentials and integral distinguishers
+  quantity=order of a vanishing higher-order differential
+  declared_tiers=P,E
+  gate=G02 name=prereg-committed passed=False blocking=True block_class=build detail=no module package exists; a pre-registration has not been written
+  gate=G03 name=prereg-matches-derivation passed=False blocking=True block_class=build detail=no module package exists; a threshold derivation has not been written
+  gate=G04 name=runner-precedes-prereg passed=False blocking=True block_class=build detail=no module package exists; an ordering claim has not been written
+  gate=G05 name=calibration-suite-defined passed=False blocking=True block_class=build detail=no module package exists; a calibration suite has not been written
+  gate=G06 name=published-anchor-named passed=False blocking=True block_class=operator detail=section 5 names no published result for this module, and section 5 requires one before the module is trusted
+  gate=G08 name=controls-recompute passed=False blocking=True block_class=build detail=no module package exists; controls has not been written
+  gate=G09 name=blindness-test-passes passed=False blocking=True block_class=build detail=no module package exists; a blindness class has not been written
+  gate=G10 name=independent-verify-path passed=False blocking=True block_class=build detail=no independent verification path exists in verify/ for this quantity; section 7.2 makes one a precondition of promotion
+  gate=G11 name=measurement-registered passed=False blocking=True block_class=build detail=no module package exists; a measurement path has not been written
+  gate=G12 name=promotion-gate-instantiated passed=False blocking=True block_class=build detail=no module package exists; a promotion gate has not been written
+  gate=G13 name=dependencies-are-go passed=False blocking=True block_class=dependency detail=depends on ['M1'], which have not reached GO
+  path_to_go=['G02:prereg-committed', 'G03:prereg-matches-derivation', 'G04:runner-precedes-prereg', 'G05:calibration-suite-defined', 'G06:published-anchor-named', 'G08:controls-recompute', 'G09:blindness-test-passes', 'G10:independent-verify-path', 'G11:measurement-registered', 'G12:promotion-gate-instantiated', 'G13:dependencies-are-go']
+
+module=M5 decision=NO-GO gates_passed=2/11 blocking_failures=9 targets_go=0/0 block_classes=['build'] depends_on=[]
+  title=Meet-in-the-middle and biclique structure
+  quantity=splitting points, independent chunks, matching degrees of freedom
+  declared_tiers=P,E
+  gate=G02 name=prereg-committed passed=False blocking=True block_class=build detail=no module package exists; a pre-registration has not been written
+  gate=G03 name=prereg-matches-derivation passed=False blocking=True block_class=build detail=no module package exists; a threshold derivation has not been written
+  gate=G04 name=runner-precedes-prereg passed=False blocking=True block_class=build detail=no module package exists; an ordering claim has not been written
+  gate=G05 name=calibration-suite-defined passed=False blocking=True block_class=build detail=no module package exists; a calibration suite has not been written
+  gate=G06 name=published-anchor-named passed=True blocking=True block_class=none detail=anchor=published preimage attacks on reduced-round SHA-256
+  gate=G08 name=controls-recompute passed=False blocking=True block_class=build detail=no module package exists; controls has not been written
+  gate=G09 name=blindness-test-passes passed=False blocking=True block_class=build detail=no module package exists; a blindness class has not been written
+  gate=G10 name=independent-verify-path passed=False blocking=True block_class=build detail=no independent verification path exists in verify/ for this quantity; section 7.2 makes one a precondition of promotion
+  gate=G11 name=measurement-registered passed=False blocking=True block_class=build detail=no module package exists; a measurement path has not been written
+  gate=G12 name=promotion-gate-instantiated passed=False blocking=True block_class=build detail=no module package exists; a promotion gate has not been written
+  gate=G13 name=dependencies-are-go passed=True blocking=True block_class=none detail=no module dependencies
+  path_to_go=['G02:prereg-committed', 'G03:prereg-matches-derivation', 'G04:runner-precedes-prereg', 'G05:calibration-suite-defined', 'G08:controls-recompute', 'G09:blindness-test-passes', 'G10:independent-verify-path', 'G11:measurement-registered', 'G12:promotion-gate-instantiated']
+
+module=M6 decision=NO-GO gates_passed=1/11 blocking_failures=10 targets_go=0/0 block_classes=['build', 'operator'] depends_on=[]
+  title=Rotational-XOR propagation
+  quantity=rotational-pair propagation probability
+  declared_tiers=P,S
+  gate=G02 name=prereg-committed passed=False blocking=True block_class=build detail=no module package exists; a pre-registration has not been written
+  gate=G03 name=prereg-matches-derivation passed=False blocking=True block_class=build detail=no module package exists; a threshold derivation has not been written
+  gate=G04 name=runner-precedes-prereg passed=False blocking=True block_class=build detail=no module package exists; an ordering claim has not been written
+  gate=G05 name=calibration-suite-defined passed=False blocking=True block_class=build detail=no module package exists; a calibration suite has not been written
+  gate=G06 name=published-anchor-named passed=False blocking=True block_class=operator detail=section 5 names no published result for this module, and section 5 requires one before the module is trusted
+  gate=G08 name=controls-recompute passed=False blocking=True block_class=build detail=no module package exists; controls has not been written
+  gate=G09 name=blindness-test-passes passed=False blocking=True block_class=build detail=no module package exists; a blindness class has not been written
+  gate=G10 name=independent-verify-path passed=False blocking=True block_class=build detail=no independent verification path exists in verify/ for this quantity; section 7.2 makes one a precondition of promotion
+  gate=G11 name=measurement-registered passed=False blocking=True block_class=build detail=no module package exists; a measurement path has not been written
+  gate=G12 name=promotion-gate-instantiated passed=False blocking=True block_class=build detail=no module package exists; a promotion gate has not been written
+  gate=G13 name=dependencies-are-go passed=True blocking=True block_class=none detail=no module dependencies
+  path_to_go=['G02:prereg-committed', 'G03:prereg-matches-derivation', 'G04:runner-precedes-prereg', 'G05:calibration-suite-defined', 'G06:published-anchor-named', 'G08:controls-recompute', 'G09:blindness-test-passes', 'G10:independent-verify-path', 'G11:measurement-registered', 'G12:promotion-gate-instantiated']
+
+root_causes_by_modules_blocked:
+  gate=G02:prereg-committed modules_blocked=5/6
+  gate=G03:prereg-matches-derivation modules_blocked=5/6
+  gate=G04:runner-precedes-prereg modules_blocked=5/6
+  gate=G05:calibration-suite-defined modules_blocked=5/6
+  gate=G08:controls-recompute modules_blocked=5/6
+  gate=G09:blindness-test-passes modules_blocked=5/6
+  gate=G10:independent-verify-path modules_blocked=5/6
+  gate=G11:measurement-registered modules_blocked=5/6
+  gate=G12:promotion-gate-instantiated modules_blocked=5/6
+  gate=G06:published-anchor-named modules_blocked=3/6
+  gate=G13:dependencies-are-go modules_blocked=1/6
