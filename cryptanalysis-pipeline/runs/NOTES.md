@@ -334,3 +334,44 @@ nowhere.
 Both pre-registrations that were open are now closed in the chain. PREREG-002
 is discharged by its 42 ladder records; PREREG-003 at seq 43; PREREG-004 at
 seq 42.
+
+---
+
+## Annotations, 7 Oct 2026
+
+Appended, not edited. Three statements above are withdrawn or corrected. The
+earlier text stands as written, because a note that is rewritten to match a
+later reading is no longer evidence of what was believed when.
+
+**"Under two independent models" is withdrawn.** The state encoding was built
+to hold generator count fixed, and it also holds the per-round S-box count and
+the positions of the S-boxes fixed — by construction, as `compile_state.py`
+says in its own docstring. The two models therefore share the nonlinearity
+pattern that the full-versus-partial question is about. Their agreement bounds
+one artefact; it is not independent confirmation. The correct description is
+**encoding-invariance**: the measurement is robust to a controlled change in
+the algebraic model. PREREG-004's verdict is unaffected — the document
+registered exactly the controlled comparison it ran, and its three conditions
+hold as recorded at seq 42.
+
+**"Variable counts differ by up to 2.6×" is corrected to a factor of 1.67 to
+4.33.** Recomputed from the committed ladder runs in this directory: across
+the 66 cell-and-rung pairs measured under both encodings the ratio of
+state-encoding to S-box-encoding variable count runs from 1.67 to 4.33, mean
+2.38. 2.6 is the ratio at the deepest measured rung of one of the fourteen
+cells. Stated as "up to", it understated the spread by a factor of 1.7.
+
+**The exponential growth model is not a benchmark.** `growth_models.exponential`
+reports `log2_degree_per_round` ≈ 1.5849625 with an RMS residual at
+floating-point noise. For these shapes the ideal degree is exactly `3^r`, so
+fitting a log₂ slope to it recovers log₂3 by construction and the residual
+measures arithmetic, not the cipher. The records keep the field — it is what
+the tier label `MODEL-not-a-measurement` is for — but it should not have been
+quoted as a measurement fidelity result, and the record that quoted it has
+withdrawn the row.
+
+The canonical record for this work is `docs/record.md` in
+`punkrockquantum/algo-tools`; see `RECORD.md` at the root of this repository.
+Nothing in `runs/log.jsonl` is altered by any of the above: the chain is
+append-only and its 44 records are unchanged, as their sha256 in
+`casestudy/manifest.json` over there still shows.
