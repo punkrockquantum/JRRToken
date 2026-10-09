@@ -1,0 +1,28 @@
+# The Dockerfile copies only index.html, css/, js/, assets/, server/, scripts/serve.mjs and the
+# entrypoint. This list keeps everything else, above all data/ (names + emails), out of the build context.
+.git
+.gitignore
+.github
+.shots
+.DS_Store
+**/.DS_Store
+node_modules
+data
+dist
+tests
+*.xlsx
+*.jsonl
+*.env
+.env*
+*.md
+start-token-quest.command
+scripts/*
+!scripts/serve.mjs
+deploy/*
+!deploy/docker-entrypoint.sh
+Dockerfile
+.dockerignore
+render.yaml
+fly.toml
+netlify.toml
+vercel.json

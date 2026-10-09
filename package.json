@@ -2,9 +2,20 @@
   "name": "the-hall",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "start": "python3 -m http.server 8080",
+    "start": "node scripts/serve.mjs",
+    "serve:lan": "node scripts/serve.mjs --lan",
+    "export": "node scripts/serve.mjs --export",
     "test": "node --test",
-    "balance": "node scripts/balance.mjs"
+    "test:server": "node --test tests/server.test.js tests/xlsx.test.js",
+    "balance": "node scripts/balance.mjs",
+    "build:static": "node scripts/build-static.mjs",
+    "serve:static": "node scripts/build-static.mjs --serve",
+    "deploy:gh-pages": "sh scripts/deploy-gh-pages.sh",
+    "docker:build": "docker build -t token-quest .",
+    "docker:run": "docker run --rm --name token-quest -p 8080:8080 -e STAFF_PIN -v token-quest-data:/data token-quest"
   }
 }

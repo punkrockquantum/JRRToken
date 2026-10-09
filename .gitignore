@@ -1,3 +1,10 @@
 .DS_Store
 node_modules/
 .shots/
+
+# Local kiosk data (names + emails) and Excel exports
+data/
+*.xlsx
+
+# Static demo build output (npm run build:static)
+dist/

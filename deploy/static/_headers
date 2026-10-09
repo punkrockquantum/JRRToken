@@ -1,0 +1,25 @@
+# Copied into dist/ by scripts/build-static.mjs. Read by Cloudflare Pages and Netlify (both serve the
+# site at the root). Vercel uses vercel.json instead; GitHub Pages ignores this file.
+# Rules do not overlap on Cache-Control, so the merge order between hosts does not matter.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+
+/
+  Cache-Control: no-store
+
+/index.html
+  Cache-Control: no-store
+
+/404.html
+  Cache-Control: no-store
+
+/js/*
+  Cache-Control: no-store
+
+/css/*
+  Cache-Control: no-store
+
+/assets/fonts/*
+  Cache-Control: public, max-age=31536000, immutable

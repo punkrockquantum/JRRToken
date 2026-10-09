@@ -1,0 +1,26 @@
+# Render Blueprint: the booth server (shared league + Excel workbook) with a persistent disk at /data.
+# Deploy: Render dashboard -> New -> Blueprint -> pick this repo (deploys the default branch unless
+# `branch:` is set below). Render then asks for the STAFF_PIN value; it is never stored in this file.
+# Persistent disks need a paid instance type (Starter or above); the free tier has no disk.
+# PORT is injected by Render; scripts/serve.mjs reads it. Only one instance can mount the disk.
+services:
+  - type: web
+    name: token-quest
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: false
+    disk:
+      name: token-quest-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: STAFF_PIN
+        sync: false
+      - key: DATA_DIR
+        value: /data
+      - key: EXPORT_PATH
+        value: /data/Token Quest Leaderboard.xlsx

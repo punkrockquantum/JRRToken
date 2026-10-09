@@ -1,0 +1,51 @@
+# Netlify: static demo of Token Quest (no server, no /api, the league stays in each browser).
+#   npx netlify-cli login
+#   npx netlify-cli deploy --prod --build          # runs the build below, publishes dist/
+# Or connect the GitHub repo in the Netlify UI; this file supplies the build settings.
+
+[build]
+  command = "npm run build:static"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Same cache rules as the kiosk server (server/static.mjs): HTML/CSS/JS are always fetched fresh so a
+# redeploy shows up on the next load; the fonts never change and can be cached for a year.
+# The rules below do not overlap on Cache-Control, so merge order does not matter.
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-store"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-store"
+
+[[headers]]
+  for = "/404.html"
+  [headers.values]
+    Cache-Control = "no-store"
+
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cache-Control = "no-store"
+
+[[headers]]
+  for = "/css/*"
+  [headers.values]
+    Cache-Control = "no-store"
+
+[[headers]]
+  for = "/assets/fonts/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
