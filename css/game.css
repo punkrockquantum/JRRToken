@@ -517,7 +517,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .screen.game.nerd .choices { gap: 4px; }
 .screen.game.nerd .feel { grid-column: 3; }
 .screen.game.nerd .choice-row { grid-template-columns: 120px minmax(0, 1fr); }
-.screen.game.nerd .tile-art { display: none; }
+/* Nerd tiles are narrow, so their icons show at half size: an exact 2:1 of the scale-2 art, still crisp. */
+.screen.game.nerd .tile-art img { zoom: 0.5; }
 .mcp-toggle {
   position: absolute;
   z-index: 1;

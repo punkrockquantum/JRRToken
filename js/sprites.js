@@ -21,7 +21,7 @@ export const PALETTE = {
   m: "#e848a8",
 }
 
-const ART = {
+export const ART = {
   prof: [
     "......kk........",
     ".....kPPk.......",
@@ -381,23 +381,46 @@ const ART = {
   ],
 }
 
+/** Drawn for any name that is not in ART: a loud magenta "?" so a typo shows up on screen instead of as a blank tile. */
+export const MISSING_ART = [
+  "mmmmmmmm",
+  "mmkkkkmm",
+  "mkkmmkkm",
+  "mmmmmkkm",
+  "mmmmkkmm",
+  "mmmkkmmm",
+  "mmmkkmmm",
+  "mmmmmmmm",
+  "mmmkkmmm",
+  "mmmkkmmm",
+]
+
 const cache = new Map()
+const warned = new Set()
 
 function normalise(rows) {
   const width = Math.max(...rows.map((row) => row.length))
   return rows.map((row) => row.padEnd(width, ".").slice(0, width))
 }
 
+function artFor(name) {
+  if (ART[name]) return ART[name]
+  if (!warned.has(name)) {
+    warned.add(name)
+    console.warn(`sprites: no art named "${name}", drawing the placeholder instead`)
+  }
+  return MISSING_ART
+}
+
 export function spriteSize(name) {
-  const rows = ART[name]
-  if (!rows) return { w: 0, h: 0 }
+  const rows = ART[name] || MISSING_ART
   return { w: Math.max(...rows.map((row) => row.length)), h: rows.length }
 }
 
 export function spriteCanvas(name, scale = 1) {
   const key = `${name}@${scale}`
   if (cache.has(key)) return cache.get(key)
-  const rows = normalise(ART[name] || ["k"])
+  const rows = normalise(artFor(name))
   const canvas = document.createElement("canvas")
   canvas.width = rows[0].length * scale
   canvas.height = rows.length * scale
