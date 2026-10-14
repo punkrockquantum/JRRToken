@@ -1,4 +1,4 @@
-import { DATA_TIERS, FTE_HOURS, HALLS, HORIZON_WEEKS, HUMAN_WORK, KV_TIER, MISSION_SITES, NETWORKS, ORCA, PLATFORMS, SCENARIOS, SITES, USER_BASES, USE_CASES, byId } from "./data.js"
+import { DATA_TIERS, EDGE_LATE, FTE_HOURS, HALLS, HORIZON_WEEKS, HUMAN_WORK, KV_TIER, MISSION_SITES, NETWORKS, ORCA, PLATFORMS, SCENARIOS, SITES, TRAIN_BONUS_CAP, USER_BASES, USE_CASES, byId } from "./data.js"
 import { HOURS_PER_MONTH, blankFabric, destinationsNeeded, liveShare, networkBill } from "./network.js"
 import { defaultRoutes, evaluateRoutes } from "./routes.js"
 
@@ -171,7 +171,7 @@ export function siteIdsFor(useCaseId, build) {
   const rules = MISSION_SITES[useCaseId] || { max: 1, defaults: ["lon"] }
   const picked = (build?.sites || []).filter((id) => byId(SITES, id))
   const ids = picked.length ? [...new Set(picked)] : [rules.defaults[0]]
-  return ids.slice(0, rules.max)
+  return ids.slice(0, 3)
 }
 
 /** Users go to their nearest site. Returns share-weighted distance and RTT per site. */
@@ -210,6 +210,82 @@ export function siteReach(useCaseId, siteIds) {
 
 export function splitRacks(racks, count) {
   return Array.from({ length: count }, (_, i) => Math.floor(racks / count) + (i < racks % count ? 1 : 0))
+}
+
+/** Even inference split that reproduces a simple multi-site build. */
+export function defaultSitePlans(platform, racks, sites) {
+  const counts = splitRacks(Math.max(0, racks), Math.max(1, sites.length))
+  return sites.map((site, index) => ({
+    id: site.id || site,
+    role: "inference",
+    powerMW: (counts[index] * (platform?.rackKW || 1)) / 1000,
+  }))
+}
+
+/**
+ * Per-site power and workload. Absent plans leave the simple rack split untouched.
+ * Racks follow the dedicated IT power and the GPU's rack kW.
+ */
+export function resolveSitePlans(build, platform, sites, hall, scenario) {
+  const plans = build?.sitePlans
+  if (!plans?.length || sites.length < 2 || !platform) return null
+  const capMW = scenario?.powerMW || hall?.itMW || 1
+  const hallMW = hall?.itMW || capMW
+  let totalMW = 0
+  const rows = sites.map((site) => {
+    const picked = plans.find((plan) => plan.id === site.id) || { role: "inference", powerMW: 0 }
+    const role = ["inference", "training", "edge"].includes(picked.role) ? picked.role : "inference"
+    const powerMW = Math.max(0, Number(picked.powerMW) || 0)
+    totalMW += powerMW
+    const rackMW = platform.rackKW / 1000
+    let racks = role === "inference" ? Math.floor(powerMW / rackMW) : 0
+    const trainRacks = role === "training" ? powerMW / rackMW : 0
+    return { id: site.id, metro: site.metro, role, powerMW, racks, trainRacks, overHall: powerMW > hallMW + 1e-6 }
+  })
+  const warnings = []
+  let throttle = 1
+  if (totalMW > capMW + 1e-6) {
+    throttle = capMW / totalMW
+    warnings.push("Too much power for this hall, so the racks slow down.")
+  }
+  if (rows.some((row) => row.overHall)) {
+    throttle = Math.min(throttle, 0.5)
+    warnings.push("A site is over the hall's power, so that equipment throttles.")
+  }
+  const trainRacks = rows.reduce((sum, row) => sum + (row.trainRacks || 0), 0)
+  const trainBonus = trainRacks >= 0.2 ? Math.min(TRAIN_BONUS_CAP, trainRacks * 0.06) : 0
+  return { rows, racks: rows.reduce((sum, row) => sum + row.racks, 0), trainRacks, throttle, trainBonus, warnings }
+}
+
+/** One row per user city: distance to the nearest site, and whether that trip misses. */
+export function userCohorts(useCaseId, sites, link, { prefillS = 0, queue = 1, retrieval = 0, trips = 1, jitterS = 0, ttftLimit = 1, plans = null } = {}) {
+  const places = USER_BASES[useCaseId]?.places || []
+  const rules = MISSION_SITES[useCaseId] || {}
+  const roleOf = (id) => plans?.find((plan) => plan.id === id)?.role || "inference"
+  return places.map((place) => {
+    let best = 0
+    let bestKm = Infinity
+    sites.forEach((site, index) => {
+      const km = kmBetween(place, site)
+      if (km < bestKm) {
+        bestKm = km
+        best = index
+      }
+    })
+    const site = sites[best]
+    const role = site ? roleOf(site.id) : "inference"
+    let extra = 0
+    if (role === "edge") {
+      const home = sites.find((item) => roleOf(item.id) === "inference") || sites.find((item) => item.id !== site?.id)
+      extra = home ? fiberRttS(kmBetween(site, home)) : fiberRttS(bestKm)
+    }
+    const far = Boolean(rules.spread) && role !== "edge" && bestKm > (rules.closeKm || 300)
+    const access = far ? 0.018 : 0
+    const rttS = (link ? linkProfile(link, Math.max(0, bestKm)).rttS : fiberRttS(bestKm)) + extra + access
+    const ttft = prefillS * queue + retrieval + rttS * Math.max(0, trips)
+    const miss = far || ttft + jitterS > ttftLimit
+    return { city: place.city, share: place.share, km: bestKm, siteId: site?.id || null, role, rttS, ttft, miss, edge: role === "edge" }
+  })
 }
 
 export function weightScale(platform) {
@@ -286,6 +362,18 @@ export function linkProfile(link, km = 0) {
       gbps: link.gbps,
       inflatedKm,
     }
+  }
+  if (id === "peer") {
+    const inflatedKm = distance * 1.25
+    const one = fiberOneWayS(inflatedKm)
+    const rttS = 2 * one + 0.008
+    return { oneWayS: one + 0.004, rttS, jitterS: rttS * 0.12, loss: 0.002, gbps: link.gbps, inflatedKm }
+  }
+  if (id === "eye") {
+    const inflatedKm = distance
+    const one = fiberOneWayS(inflatedKm)
+    const rttS = 2 * one + 0.003
+    return { oneWayS: one + 0.0015, rttS, jitterS: rttS * 0.05, loss: 0, gbps: link.gbps, inflatedKm }
   }
   return { oneWayS: CROSS_RTT_S / 2, rttS: CROSS_RTT_S, jitterS: 0, loss: 0, gbps: link?.gbps || 100, inflatedKm: 0 }
 }
@@ -396,7 +484,8 @@ function hardwareCapex(useCase, platform, racks, data, build, siteCount = 1) {
   const store = data?.capex || 0
   const kv = build?.kv ? KV_TIER.capex : 0
   const orca = build?.orca && useCase?.orca ? ORCA.capex : 0
-  return gpu + orca + (store + kv) * siteCount
+  const host = build?.hosts === "grace" ? 450_000 : build?.hosts === "dpu" ? 700_000 : 0
+  return gpu + orca + (store + kv + host) * siteCount
 }
 
 function emptyResult(useCase, hall, platform, data, link, racks, build) {
@@ -539,7 +628,21 @@ export function evaluateBuild(useCaseId, build = {}) {
   out.combos = routed?.combos || []
   out.synergy = routed?.synergy || null
   out.legResults = routed?.legs || null
+
+  const planned = siteCount > 1 ? resolveSitePlans(build, platform, reach.sites, hall, scenarioFor(useCase)) : null
+  if (planned) {
+    racks = planned.racks
+    out.racks = racks
+    out.sitePlans = planned.rows
+    out.powerThrottle = planned.throttle
+    out.trainBonus = planned.trainBonus
+    warnings.push(...planned.warnings)
+  }
   out.hardwareCapex = hardwareCapex(useCase, platform, racks, data, build, siteCount)
+  if (planned?.rows.some((row) => row.role === "edge")) {
+    out.hardwareCapex = Math.max(0, out.hardwareCapex - Math.min(120_000, platform.capex * 0.12))
+  }
+  if (planned?.trainRacks > 0) out.hardwareCapex += planned.trainRacks * platform.capex
   out.orcaCapex = orcaOn ? ORCA.capex : 0
   out.capex = out.hardwareCapex + bill.nrc
   out.netCost = bill.mrc / HOURS_PER_MONTH
@@ -555,15 +658,18 @@ export function evaluateBuild(useCaseId, build = {}) {
     warnings.push(`${platform.name} runs too hot for the ${hall.name}, so it overheats and throttles.`)
   }
   let deliver = 1
-  if (racks < siteCount) {
+  if (!planned && racks < siteCount) {
     deliver = racks / siteCount
     warnings.push("Not enough racks for every site. Extra sites were not built.")
   }
 
+  const hostKW = build?.hosts === "grace" ? 12 : build?.hosts === "dpu" ? 8 : 0
   const storageKW = data.kw + (kvOn ? KV_TIER.kw : 0) + (orcaOn ? ORCA.kw : 0)
-  const perSiteRacks = splitRacks(racks, siteCount)
+  const perSiteRacks = planned ? planned.rows.map((row) => row.racks) : splitRacks(racks, siteCount)
+  const edgeKW = planned ? planned.rows.filter((row) => row.role !== "inference").reduce((sum, row) => sum + row.powerMW * 1000, 0) : 0
   out.siteRacks = perSiteRacks
-  out.itKW = racks * platform.rackKW + storageKW * siteCount
+  out.hosts = build?.hosts || "standard"
+  out.itKW = racks * platform.rackKW + (storageKW + hostKW) * siteCount + edgeKW
   out.facilityKW = out.itKW * hall.pue
   out.siteKW = Math.max(...perSiteRacks) * platform.rackKW + storageKW
   out.spaceUsed = Math.max(...perSiteRacks) + storageSpace(build, useCase)
@@ -584,9 +690,11 @@ export function evaluateBuild(useCaseId, build = {}) {
   out.hitMult = orcaHitMult(useCase, { ...build, platform: platform.id, orca: orcaOn }, wire)
 
   const group = groupSize(useCase, platform)
-  const loaded = Math.min(...perSiteRacks) * platform.gpusPerRack >= group
+  const roles = planned ? planned.rows.map((row) => row.role) : perSiteRacks.map(() => "inference")
+  const inferRacks = perSiteRacks.filter((_, index) => roles[index] === "inference")
+  const loaded = inferRacks.length > 0 && Math.min(...inferRacks) * platform.gpusPerRack >= group
   out.fits = group <= platform.domain
-  const instances = perSiteRacks.reduce((sum, r) => sum + Math.floor((r * platform.gpusPerRack) / group), 0)
+  const instances = inferRacks.reduce((sum, count) => sum + Math.floor((count * platform.gpusPerRack) / group), 0)
   out.warnings = warnings
   if (!loaded || instances < 1) {
     warnings.push(
@@ -618,7 +726,8 @@ export function evaluateBuild(useCaseId, build = {}) {
   const prefillTotal = instances * prefillRate * fitMult
   out.prefillShare = decodeRate > 0 ? (prefillPerOutput / prefillTotal) / (1 / decodeRate + prefillPerOutput / prefillTotal) : 0
 
-  out.quality = data.feed[useCase.data]
+  out.quality = data.feed[useCase.data] * (1 + (planned?.trainBonus || 0))
+  out.trainBonus = planned?.trainBonus || 0
   const blended = decodeRate > 0 ? 1 / (1 / decodeRate + prefillPerOutput / prefillTotal) : 0
   let throughput = blended
   const delay = routed
@@ -631,13 +740,14 @@ export function evaluateBuild(useCaseId, build = {}) {
   out.publicTrips = delay.publicTrips
   out.loss = delay.loss
   out.reachMult = Math.max(0.4, 1 - (MISSION_SITES[useCase.id]?.sense || 0) * delay.meanS)
-  const interactive = useCase.ttft <= 2 || (useCase.toolCalls || 0) > 0
+  const batch = (useCase.legs || []).some((leg) => leg.slaExempt)
+  const interactive = !batch && (useCase.ttft <= 2 || (useCase.toolCalls || 0) > 0)
   if (delay.publicTrips > 0 && interactive) {
     const share = delay.publicTrips / delay.trips
     const stall = 1 / (1 + (delay.rttS * share) / 0.008)
     const drop = Math.max(0.05, (1 - INTERNET_LOSS) ** delay.publicTrips)
     throughput *= stall * drop
-  } else if (delay.publicTrips > 0) {
+  } else if (delay.publicTrips > 0 && !batch) {
     throughput *= 1 - INTERNET_LOSS
   }
   if (throughput > delay.capTok) {
@@ -646,6 +756,7 @@ export function evaluateBuild(useCaseId, build = {}) {
   }
   out.capTok = delay.capTok
   throughput *= thermal * deliver
+  if (planned?.throttle < 1) throughput *= planned.throttle
   out.throughput = throughput
   out.served = Math.min(out.throughput, out.demand)
   const util = out.throughput > 0 ? Math.min(1, out.demand / out.throughput) : 1
@@ -656,17 +767,51 @@ export function evaluateBuild(useCaseId, build = {}) {
   const promptBytes = useCase.ctx * (useCase.bytesPerToken || 64)
   const ingestS = delay.bytesPerSec > 0 ? promptBytes / delay.bytesPerSec : 0
   let ttft = prefillS * queue + data.retrieval[useCase.data] + delay.meanS + ingestS
+  if (build?.hosts === "grace" && kvOn) ttft *= 0.9
   if (orcaOn && !wire.orcaLocal) ttft += delay.rttS * (out.graphs === "large" ? 4 : 2)
+  out.prefillS = prefillS
+  out.netDelayS = delay.meanS
   const ttftHi = ttft + delay.jitterS
   const ttftLo = Math.max(0, ttft - delay.jitterS)
   let pMiss = 0
   if (ttftHi > useCase.ttft) {
     pMiss = ttftLo >= useCase.ttft ? 1 : (ttftHi - useCase.ttft) / Math.max(1e-9, ttftHi - ttftLo)
   }
+  const ingress = useCase.legs.find((leg) => leg.role === "ingress" || leg.role === "lab")
+  const cohorts = userCohorts(useCase.id, reach.sites, wire, {
+    prefillS,
+    queue,
+    retrieval: data.retrieval[useCase.data],
+    trips: ingress?.trips || 1,
+    jitterS: delay.jitterS,
+    ttftLimit: useCase.ttft,
+    plans: planned?.rows || null,
+  })
+  out.cohorts = cohorts
+  const farShare = MISSION_SITES[useCase.id]?.spread
+    ? cohorts.filter((row) => row.miss && !row.edge).reduce((sum, row) => sum + row.share, 0)
+    : 0
+  const edgeShare = cohorts.filter((row) => row.edge).reduce((sum, row) => sum + row.share, 0)
+  if (farShare >= 0.2) {
+    const reachable = out.demand * (1 - farShare)
+    out.served = Math.min(out.served, reachable)
+    pMiss = Math.max(pMiss, farShare * 0.25)
+    warnings.push("People far from your sites wait too long, so the crowd is unhappy.")
+  }
+  if (edgeShare > 0) {
+    pMiss = Math.max(pMiss, edgeShare * EDGE_LATE)
+    if (farShare < 0.2) {
+      const cacheBoost = Math.min(0.045, 0.02 + edgeShare * 0.04)
+      out.served *= 1 + cacheBoost
+      out.throughput *= 1 + cacheBoost
+    }
+  }
+  out.farShare = farShare
   out.ttft = ttft
   out.pMiss = pMiss
   out.slaMet = pMiss < 0.5
   out.goodput = out.served * out.quality * (1 - pMiss * (1 - LATE_GOODPUT))
+  if (build?.hosts === "dpu") out.goodput *= 1.03
   if (routed?.synergy?.goodputMult && routed.synergy.goodputMult !== 1) out.goodput *= routed.synergy.goodputMult
   out.bottleneck = bottleneck(out, useCase, data, delay)
   out.ok = true

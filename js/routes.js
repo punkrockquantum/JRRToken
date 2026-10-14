@@ -29,6 +29,12 @@ export const CLOUD_REGION_KM = 800
 export const SHARED_PIPE_S = 0.004
 /** ServiceFabric at or above this rate counts as a high-bandwidth science pipe. Game. */
 export const FAT_GBPS = 10
+/**
+ * A batch lab feed fills the port and is not jitter-killed. Public transit is lossier than
+ * peering, so it screens fewer candidates per hour. Game assumption, tuned so drug discovery
+ * on the internet lands near 1,000 and peering a little higher, both under a private pipe.
+ */
+const BATCH_FILL = { public: 1.9, peer: 2.02 }
 /** Combo goodput bonuses cannot multiply score by more than this. */
 export const SYNERGY_CAP = 1.25
 const STREAM_BONUS = new Set(["chat", "rag", "code", "research"])
@@ -115,7 +121,7 @@ export function legEligibility(leg, kind, reach) {
       ? { ok: true, reason: "" }
       : { ok: false, reason: "This leg needs a path." }
   }
-  if (kind === "fabric" || kind === "mcp" || kind === "public") return { ok: true, reason: "" }
+  if (kind === "fabric" || kind === "mcp" || kind === "public" || kind === "peer" || kind === "eye") return { ok: true, reason: "" }
   const km = legKm(leg, reach, kind)
   if (kind === "cross") {
     if (leg.role === "inter") return { ok: false, reason: "Cross Connect stays in one building. These sites are in different metros." }
@@ -137,6 +143,8 @@ function leadOf(kind) {
   if (kind === "cross") return LEAD_DAYS.cross
   if (kind === "fiber") return LEAD_DAYS.fiber
   if (kind === "public") return LEAD_DAYS.public
+  if (kind === "peer") return 10
+  if (kind === "eye") return 21
   return 0
 }
 
@@ -303,7 +311,7 @@ export function evaluateRoutes(ctx) {
     const addedS = weight * profile.rttS + extra
     if (row.leg.role !== "control") {
       meanS += addedS
-      jitterS += weight * profile.jitterS * (row.leg.jitter || 0)
+      if (!row.leg.slaExempt) jitterS += weight * profile.jitterS * (row.leg.jitter || 0)
       trips += weight
       if (row.kind === "public" && !row.leg.slaExempt) publicTrips += weight
       maxRtt = Math.max(maxRtt, profile.rttS)
@@ -315,7 +323,8 @@ export function evaluateRoutes(ctx) {
     let gbps = row.kind === "fabric" || row.kind === "mcp" ? row.fabric.vc * (row.leg.role === "ingress" ? siteCount : 1) : link.gbps
     if (row.leg.role === "inter" && comboIds.has("backbone")) gbps = Infinity
     if ((row.leg.bw || 0) > 0 && Number.isFinite(gbps)) {
-      const legCap = (gbps * 1e9) / 8 / (bytes * row.leg.bw)
+      const fill = row.leg.slaExempt ? BATCH_FILL[row.kind] || 1 : 1
+      const legCap = (gbps * 1e9) / 8 / (bytes * (row.leg.bw / fill))
       capTok = Math.min(capTok, legCap)
     }
     if (row.kind === "cross" || row.backup === "cross") {
@@ -335,11 +344,13 @@ export function evaluateRoutes(ctx) {
       row.nrc = (row.nrc || 0) + nrc
       row.mrc = (row.mrc || 0) + mrc
     }
-    if (row.kind === "public") {
+    if (row.kind === "public" || row.kind === "peer" || row.kind === "eye") {
       const scale = row.leg.role === "ingress" ? siteCount : 1
+      const premium = row.kind === "eye" ? 1.35 : row.kind === "peer" ? 1.15 : 1
       const nrc = NET_PRICES.transitNrc * scale
-      const mrc = NET_PRICES.transitCommitGbps * 1000 * NET_PRICES.transitPerMbps * scale
-      items.push({ label: `${row.leg.name} transit`, nrc, mrc })
+      const mrc = NET_PRICES.transitCommitGbps * 1000 * NET_PRICES.transitPerMbps * scale * premium
+      const label = row.kind === "eye" ? "eyeball" : row.kind === "peer" ? "peering" : "transit"
+      items.push({ label: `${row.leg.name} ${label}`, nrc, mrc })
       row.nrc = nrc
       row.mrc = mrc
     }

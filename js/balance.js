@@ -7,8 +7,9 @@ const RACKS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16]
 
 /** Site sets the search tries. Multi-site use cases get one-, two-, and three-metro options. */
 export const SITE_SETS = {
-  chat: [["lon"], ["iad"], ["lon", "fra"], ["lon", "iad"], ["lon", "iad", "sjc"]],
+  chat: [["lon"], ["fra"], ["lon", "fra"], ["lon", "fra", "ams"]],
   code: [["iad"], ["sjc"], ["iad", "chi"], ["iad", "sjc"], ["iad", "chi", "sjc"]],
+  robot: [["fra"], ["ams"], ["fra", "ams"]],
 }
 
 function assignRoutes(useCase, build, assign) {

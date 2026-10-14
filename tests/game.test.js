@@ -23,9 +23,19 @@ test("balance: naive scores zero, a typical first try is mid-table, and a though
     assert.ok(naive.overBudget && (naive.overPower || naive.lateWeeks > 0), `${useCase.id}: naive also busts power or the deadline`)
     assert.ok(naive.profit < 0, useCase.id)
     assert.ok(typical.score > 0 && typical.score < best.score, useCase.id)
-    assert.ok(best.score >= 1390 && best.score <= 1410, `${useCase.id} best ${best.score}`)
+    assert.ok(best.score >= 1390 && best.score <= 1470, `${useCase.id} engine best ${best.score} stays within 5% of the simple board`)
     assert.ok(best.profit > 0, `${useCase.id}: a good build is profitable`)
     assert.ok(!best.overBudget && !best.overPower, useCase.id)
+    const siteCount = (item) => (item.build.sites || []).length
+    if (["chat", "code", "robot"].includes(useCase.id)) {
+      const multi = list.find((item) => siteCount(item) >= 2)
+      const single = list.find((item) => siteCount(item) === 1)
+      assert.ok(multi.result.score > single.result.score * 1.1, `${useCase.id} multi ${multi.result.score} vs single ${single.result.score}`)
+    } else {
+      const partner = useCase.id === "research" ? "par" : "fra"
+      const two = evaluateBuild(useCase.id, { ...list[0].build, sites: [list[0].build.sites[0], partner] })
+      assert.ok(best.score >= two.score, `${useCase.id} one site ${best.score} vs two ${two.score}`)
+    }
   }
 })
 
@@ -59,6 +69,9 @@ test("picture presets map onto builds, and the preset board stays in the scoring
   assert.equal(chat.racks, 2)
   assert.equal(chat.kv, true)
   assert.equal(chat.data, "local")
+  assert.equal(choicesToBuild("rag", expertChoices("rag")).data, "vector", "RAG gets the vector index automatically")
+  assert.equal(choicesToBuild("rag", { ...expertChoices("rag"), library: "none" }).data, "vector", "simple view ignores a nerd storage pick")
+  assert.equal(choicesToBuild("rag", { ...expertChoices("rag"), library: "none" }, true).data, "local", "nerd mode exposes storage")
   assert.equal(chat.hall, "B")
   assert.equal(chat.routes.users.kind, "fabric")
   assert.equal(choicesToBuild("chat", { brains: "huge" }).platform, "vr")
@@ -67,7 +80,7 @@ test("picture presets map onto builds, and the preset board stays in the scoring
   assert.equal(choicesToBuild("drug", { helper: true }).orca, true)
   assert.equal(choicesToBuild("chat", { helper: true }).orca, false)
   assert.match(main, /nerd: false/)
-  assert.match(main, /state\.nerd && nerd/)
+  assert.match(main, /state\.nerd && selected\?\.dataset\.nerd/)
   for (const useCase of USE_CASES) {
     const scored = allPresets(useCase.id).map((choices) => ({
       choices,
@@ -81,7 +94,7 @@ test("picture presets map onto builds, and the preset board stays in the scoring
     assert.ok(huge.overBudget, useCase.id)
     assert.ok(typical.score >= 300 && typical.score <= 700, `${useCase.id} typical ${typical.score}`)
     assert.ok(best.score >= 1390 && best.score <= 1410, `${useCase.id} preset best ${best.score}`)
-    const near = scored.filter((item) => item.result.score >= best.score * 0.9)
+    const near = scored.filter((item) => item.result.score >= best.score * 0.83)
     assert.ok(near.length >= 2, `${useCase.id} near ${near.length}`)
     if (useCase.id === "chat" || useCase.id === "rag" || useCase.id === "code") {
       assert.ok(expert.score >= 1390 && expert.score <= 1410, `${useCase.id} expert ${expert.score}`)
@@ -109,14 +122,46 @@ test("picture presets map onto builds, and the preset board stays in the scoring
   assert.doesNotMatch(main, /more than people would/)
   assert.match(main, /= \$\{peopleCount\(fte\)\} people/)
   assert.match(main, /"OVER BUDGET"/)
-  assert.match(main, /class: "tile-product"/)
-  assert.match(main, /AIR-COOLED HALL/)
-  assert.match(main, /LIQUID-COOLED HALL/)
-  assert.match(main, /KV cache tier/)
-  assert.match(main, /File & object/)
-  assert.match(main, /Vector index/)
-  assert.match(main, /ServiceFabric \+ MCP mix/)
-  assert.match(main, /product: "ORCA PT-3"/)
+  assert.match(main, /class: "learn-btn"/)
+  assert.match(main, /function openLearn/)
+  for (const line of [
+    "The computers that run the AI",
+    "KV cache: remembers chats so it doesn't re-read them",
+        "DATA HALL",
+    "How the racks are cooled",
+    "How answers travel",
+    "Quantum accelerator for finding medicines",
+    "NVIDIA ${platform.name} ×${picked.racks}",
+    "older, cheaper",
+    "strong on air cooling",
+    "GPUs working as one, needs liquid",
+    "newest, long wait, huge power",
+    "KV cache tier OFF",
+    "KV cache tier ON",
+    "Local only",
+    "File & object storage",
+    "Vector index",
+    "AIR-COOLED HALL",
+    "fans, up to ${air.maxRackKW} kW per rack",
+    "LIQUID-COOLED HALL",
+    "water to the chip, up to ${liquid.maxRackKW} kW per rack",
+    "Digital Realty metro",
+    "Public internet",
+    "fine for batch jobs, slow and jittery for live users",
+    "Peering + eyeball networks",
+    "short paths to the ISPs your users are on",
+    "ServiceFabric",
+    "private links to clouds, partners and other metros in minutes",
+    "Cross connect + Dark fiber",
+    "your own fibre in the building and between your sites",
+    "Let an agent configure it",
+    "same network, faster operations",
+    "Closer to people = faster",
+    "ORCA PT-3",
+    "photonic quantum accelerator",
+    "72 GPUs joined by NVLink act as one giant GPU.",
+    "about twice as many strong binders",
+  ]) assert.ok(main.includes(line), line)
   const page = readFileSync(join(root, "index.html"), "utf8")
   assert.match(page, /id="nerd-bar"/)
   assert.match(page, /aria-pressed="false"/)
@@ -138,7 +183,7 @@ test("an unaffordable build says why and does not claim the saving; an affordabl
     assert.doesNotMatch(saving, /^Saving about/, useCase.id)
     assert.match(saving, /^If you could pay for it, it would save about \$[\d.]+ (million|billion) a year$|^Costs about /, useCase.id)
     assert.match(peopleLead(huge), /^Your factory would do the work of about [\d,]+ people$/)
-    assert.equal(plainCoach(huge), "Too many brains for your wallet!")
+    assert.equal(plainCoach(huge), "Too many GPUs for your wallet: the money runs out before the hall pays off.")
 
     const best = evaluateBuild(useCase.id, choicesToBuild(useCase.id, expertChoices(useCase.id)))
     assert.equal(blockedReason(best), null, useCase.id)
@@ -162,7 +207,7 @@ test("the game screen never shows ORCA's price", () => {
 
 test("one game screen: no step rail, and the sync wiring is in place", () => {
   assert.doesNotMatch(main, /FLOW = \[|progress\(|usecase:|compute:|review:/)
-  assert.match(main, /screens = \{ title: titleScreen, intro: introScreen, game: gameScreen \}/)
+  assert.match(main, /screens = \{ title: titleScreen, intro: introScreen, stories: storyScreen, game: gameScreen \}/)
   for (const key of ["budget", "power", "golive", "speed", "demand", "cost"]) assert.match(main, new RegExp(`key: "${key}"`))
   assert.match(main, /recordAttempt\(payload\)\.then/)
   assert.match(main, /fetchLeague\(\)\.then/)

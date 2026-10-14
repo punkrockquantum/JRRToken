@@ -6,6 +6,7 @@
     "node": ">=18"
   },
   "scripts": {
+    "prestart": "node scripts/stamp.mjs",
     "start": "node scripts/serve.mjs",
     "serve:lan": "node scripts/serve.mjs --lan",
     "export": "node scripts/serve.mjs --export",

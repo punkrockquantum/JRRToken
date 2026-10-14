@@ -17,6 +17,10 @@ function splitRacks(racks, count) {
   return Array.from({ length: count }, (_, i) => Math.floor(racks / count) + (i < racks % count ? 1 : 0))
 }
 
+function sitePlan(build, id) {
+  return (build.sitePlans || []).find((item) => item.id === id) || null
+}
+
 /** One hall per metro, side by side above the network wire. */
 export function layout(plan) {
   const build = plan?.build || {}
@@ -28,7 +32,10 @@ export function layout(plan) {
   const racks = splitRacks(Math.max(0, Number(build.racks) || 0), count)
   return (sites.length ? sites : [null]).map((site, index) => {
     const rect = { x: 4 + index * (w + gap), y: 14, w, h: WIRE_Y - 22 }
-    return { id: plan?.useCase, site, hall, rect, x: rect.x + 6, y: rect.y + 14, racks: racks[index], build }
+    const planRow = site ? sitePlan(build, site.id) : null
+    const role = planRow?.role || "inference"
+    const countRacks = planRow ? (role === "edge" ? 0 : planRow.racks) : racks[index]
+    return { id: plan?.useCase, site, hall, rect, x: rect.x + 6, y: rect.y + 14, racks: countRacks, role, build }
   })
 }
 
@@ -67,9 +74,21 @@ function drawSite(ctx, row, result, t, running) {
     label(ctx, "EMPTY", row.x, row.y + 18, PALETTE.d)
     return null
   }
+  const role = row.role || "inference"
+  if (role === "training") {
+    ctx.fillStyle = "rgba(255, 196, 64, 0.28)"
+    ctx.fillRect(row.rect.x, row.rect.y, row.rect.w, row.rect.h)
+    label(ctx, "TRAIN", row.x, row.y + 2, PALETTE.y)
+  }
+  if (role === "edge") label(ctx, "EDGE", row.x, row.y + 2, PALETTE.c)
+  if (role === "inference" && row.build.sitePlans) label(ctx, "SERVE", row.x, row.y + 2, PALETTE.g)
   const perRow = Math.max(1, Math.floor((row.rect.w - 12) / 14))
   const drawn = Math.min(row.racks, MAX_DRAWN, perRow * 2)
   const spots = []
+  if (role === "edge") {
+    drawSprite(ctx, "chest", row.x, row.y + 12, 1)
+    spots.push({ x: row.x + 6, y: row.y + 20 })
+  }
   for (let i = 0; i < drawn; i += 1) {
     const x = row.x + (i % perRow) * 14
     const y = row.y + 4 + Math.floor(i / perRow) * 16
@@ -96,10 +115,10 @@ function drawSite(ctx, row, result, t, running) {
   }
   const orcaAt = useCase.orca && row.build.orca ? { x: sx + 8, y: sy + 8 } : null
   if (orcaAt) drawSprite(ctx, "orca", sx, sy, 1)
-  if (result?.ok && running && (!result.slaMet || result.coverage < 0.5)) drawSprite(ctx, "gremlin", row.rect.x + row.rect.w - 20, row.y + 4, 1)
+  if (result?.ok && running && (!result.slaMet || result.coverage < 0.5 || (result.farShare || 0) >= 0.2)) drawSprite(ctx, "gremlin", row.rect.x + row.rect.w - 20, row.y + 4, 1)
   if (result?.overSpace) label(ctx, "FULL", row.rect.x + row.rect.w - 36, row.rect.y + row.rect.h - 10, PALETTE.r)
   const door = { x: row.rect.x + row.rect.w / 2, y: row.rect.y + row.rect.h }
-  if (!running || !spots.length) return door
+  if (!running || !spots.length || role === "training") return door
   const gpu = spots[0]
   const mid = storage[0] || gpu
   const path = [door, mid, gpu]

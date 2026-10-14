@@ -76,9 +76,9 @@ test("the roster runs from H100 to Vera Rubin and the halls differ in cooling, s
   assert.equal(ORCA.kw, 6)
   assert.equal(ORCA.space, 2)
   assert.ok(PLATFORMS.filter((p) => p.domain === 72).every((p) => p.cooling === "liquid"))
-  assert.deepEqual(HALLS.map((h) => h.cooling), ["air", "liquid"])
-  assert.deepEqual(HALLS.map((h) => h.rackSpace), [24, 12])
-  assert.deepEqual(HALLS.map((h) => h.fitOutWeeks), [0, 10])
+  assert.deepEqual(HALLS.map((h) => h.cooling), ["air", "air", "air", "liquid"])
+  assert.deepEqual(HALLS.map((h) => h.rackSpace), [24, 18, 20, 12])
+  assert.deepEqual(HALLS.map((h) => h.fitOutWeeks), [0, 6, 4, 10])
   assert.ok(!USE_CASES.some((u) => /train/i.test(u.name)))
 })
 
@@ -441,10 +441,10 @@ test("network latency: cross < fibre ≤ fabric = MCP < public at the same dista
 
 test("more metros bring users closer and duplicate storage and ports", () => {
   const one = evaluateBuild("chat", build({ racks: 2, data: "local", kv: true, sites: ["lon"], fabric: fabric({ vc: 1 }) }))
-  const two = evaluateBuild("chat", build({ racks: 2, data: "local", kv: true, sites: ["lon", "iad"], fabric: fabric({ vc: 0.3, layer: "l3" }) }))
+  const two = evaluateBuild("chat", build({ racks: 2, data: "local", kv: true, sites: ["lon", "fra"], fabric: fabric({ vc: 0.3, layer: "l3" }) }))
   assert.ok(two.userKm < one.userKm)
   assert.ok(two.userRttS < one.userRttS)
-  assert.ok(two.interKm > 5000)
+  assert.ok(two.interKm > 400)
   assert.deepEqual(two.siteRacks, [1, 1])
   assert.ok(two.net.items[0].label.startsWith("4×"))
   const thin = evaluateBuild("chat", build({ racks: 1, data: "local", sites: ["lon", "iad"] }))

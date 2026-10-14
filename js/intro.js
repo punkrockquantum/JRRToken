@@ -12,9 +12,9 @@ const WORD_COLORS = [PALETTE.B, PALETTE.L, PALETTE.O, PALETTE.P, PALETTE.c, PALE
 const ANSWER = ["Up", " to", " 3", " nights", ".", " Book", " in", " the", " portal", "."]
 
 /**
- * One journey: prompt, retrieval, generation, a helper, then the quest.
- * `simple` is one sentence. `nerd` is the deeper dive for a basic technical audience.
- * Windows keep the timings the draw functions were built for; gaps between them are unused.
+ * Five click-through scenes. `simple` is one or two short sentences. `nerd` is at most three.
+ * Windows keep the timings the draw functions were built for; one scene may chain several.
+ * `loop` replays the scene's own animation until the player continues.
  */
 export const SCENES = [
   {
@@ -22,60 +22,119 @@ export const SCENES = [
     stage: 0,
     start: 0,
     end: 14,
-    title: "1 · PROMPT",
-    simple: "You type a prompt, your question, and the AI reads it as tokens, the small word-parts it understands.",
-    nerd: "A tokenizer splits your prompt into tokens, about four characters each in English. Each token becomes a numeric id, then an embedding vector the model computes with.",
+    loop: true,
+    title: "1 · PROMPT → TOKENS",
+    simple: "You type a prompt, your question. The AI reads it as tokens, small word-parts, and gives each one a mathematical value.",
+    nerd: "A tokenizer splits your prompt into tokens, about four characters each in English. Each token becomes a numeric id, then an embedding vector the model computes with. Every later step reads those vectors, not your letters.",
     lesson: "token",
   },
   {
-    id: "retrieval",
+    id: "generation",
     stage: 1,
     start: 14,
-    end: 22,
-    title: "2 · RETRIEVAL",
-    simple: "First the app can look up your own documents and add them to the prompt, and that is retrieval.",
-    nerd: "In private AI with RAG, your documents were embedded and indexed earlier. At question time the application embeds the question, runs a similarity search in the vector index, and adds the top passages to the prompt before the model runs. The model itself does not search.",
-    lesson: "rag",
-  },
-  {
-    id: "generation",
-    stage: 2,
-    start: 22,
     end: 38,
-    title: "3 · GENERATION",
-    simple: "Then big computers read it all, remember it, and write the answer one token at a time, and that is generation.",
-    nerd: "Weights, billions of learned numbers fixed after training, already sit in GPU memory. Prefill processes every prompt token in parallel and writes the KV cache, which sets time to first token. Decode then writes one token per step by re-reading the weights and the KV cache from HBM, and keeping that cache across follow-up turns avoids re-reading the whole chat.",
+    loop: true,
+    title: "2 · RETRIEVAL → GENERATION",
+    simple: "First the app can look up your own documents and add them to the prompt: retrieval. Then GPUs read it all, remember it, and write the answer one token at a time: generation.",
+    nerd: "For retrieval the app embeds your question and runs a similarity search in a vector index built from your documents earlier, then adds the top passages to the prompt; the model never searches. The weights, billions of numbers fixed after training, already sit in GPU HBM, and prefill reads every prompt token at once and writes the KV cache, which sets time to first token. Decode then writes one token per step, re-reading the weights and the KV cache every time, so it is bound by memory bandwidth rather than maths.",
     lesson: "ttft",
   },
   {
-    id: "helpers",
+    id: "factory",
     stage: 2,
-    start: 46,
-    end: 54,
-    title: "4 · HELPERS",
-    simple: "Some jobs aren't about words: a special helper finds medicine matches faster.",
-    nerd: "ORCA PT-3 is a photonic quantum accelerator using photonic boson sampling, single photons in a time-bin interferometer, working beside the GPUs. The GPUs build a molecule-protein binding graph, and the accelerator samples dense clusters so the classical optimizer finds the best binding pose, the max clique, about twice as often. That means more hits per candidate screened, not faster tokens.",
-    lesson: "orca",
+    start: 38,
+    end: 62,
+    loop: true,
+    title: "3 · THE FACTORY",
+    simple: "Four kinds of chips share the work: GPU for the maths, CPU to organise, DPU to move data safely, QPU for special searches. Chips make heat, so halls are cooled by air or by liquid.",
+    nerd: "GPU HBM bandwidth decides decode speed, a Grace or Vera-class CPU host can park the KV cache in its LPDDR, a BlueField-class DPU isolates tenants and offloads networking, and an ORCA PT-3 photonic quantum accelerator uses boson sampling to find molecule matches about 2× more often. Air, in-row coolers or a Rear Door Heat Exchanger handle up to about 70 kW per rack. Direct Liquid cooling to cold plates on the chips carries 100-240 kW per rack with a better PUE.",
+    lesson: "pue",
   },
   {
-    id: "quest",
+    id: "wires",
     stage: 3,
     start: 62,
     end: 70,
+    loop: true,
+    title: "4 · THE WIRES",
+    simple: "Inside the cluster, chips talk over super-fast links. Out to customers, the wire decides speed: public internet is slow and jittery, peering and private links are fast and steady.",
+    nerd: "Inside, an NVLink domain joins 72 GPUs as one; outside, light covers about 200 km per millisecond, so time to first token is prefill plus round trips times distance. Peering and eyeball networks shorten the path to your users' ISPs, a cross connect is a cable inside the building, dark fiber is a cable of your own between your sites, and ServiceFabric sets up private software-defined links in minutes. ServiceFabric MCP is an agent configuring that same fabric through the Model Context Protocol: same latency, faster operations.",
+    lesson: "network",
+  },
+  {
+    id: "quest",
+    stage: 4,
+    start: 70,
+    end: 86,
+    loop: true,
     title: "5 · YOUR QUEST",
-    simple: "Closer computers and good memory mean faster answers, so build the best factory you can afford!",
-    nerd: "Time to first token is prefill plus each round trip times the distance, and light covers about 200 km per millisecond in fibre. Private interconnection, a cross connect, a software-defined fabric, or dark fibre, stays predictable, while the public internet is the slowest and the jitteriest. Putting the computers close to the people and the documents cuts those round trips.",
+    simple: "Every job wants a different factory: chat wants closeness and memory, research wants big clusters, medicine wants a QPU, robots want millisecond answers. Build the best AI factory you can afford!",
+    nerd: "Digital Realty runs 300+ data centers in 50+ metros on PlatformDIGITAL, serving hyperscalers, scaling AI companies, banks and labs. Power, cooling and ServiceFabric connectivity are already in those buildings, so the factory, the wire and the cooling can match the job. Pick the chips, the cooling and the links the job actually needs, inside the budget.",
+    lesson: "profit",
+  },
+]
+
+/**
+ * The booth intro: three click-through scenes, one sentence each, big sprites.
+ * Nerd mode swaps in the five-scene deep dive above. Both sets share one timeline
+ * (absolute seconds), so the draw windows below can be reused.
+ */
+export const SIMPLE_SCENES = [
+  {
+    id: "ask",
+    stage: 0,
+    start: 0,
+    end: 22,
+    loop: true,
+    title: "1 · YOU ASK",
+    simple: "You ask. The AI reads your words as tokens and writes the answer one token at a time.",
+    lesson: "token",
+  },
+  {
+    id: "center",
+    stage: 1,
+    start: 22,
+    end: 38,
+    loop: true,
+    title: "2 · THE DATA CENTER",
+    simple: "That happens in a data center: GPUs do the maths, cooling keeps them running, wires carry the answers.",
+    lesson: "pue",
+  },
+  {
+    id: "build",
+    stage: 2,
+    start: 38,
+    end: 54,
+    loop: true,
+    title: "3 · YOUR QUEST",
+    simple: "Closer, cooler and better connected means faster answers for less money. Build the best AI factory you can afford!",
     lesson: "profit",
   },
 ]
 
 /** Which caption the player sees. Nerd mode is the deeper dive. */
 export function sceneCaption(scene, nerd = false) {
-  return nerd ? scene.nerd : scene.simple
+  return nerd ? scene.nerd || scene.simple : scene.simple
 }
 
-/** The stages shown in the path bar at the top of every scene. */
-export const PATH = ["PROMPT", "RETRIEVAL", "GENERATION"]
+/** The scene set for the current mode: three booth scenes, or the five-scene deep dive. */
+export function scenesFor(nerd = false) {
+  return nerd ? SCENES : SIMPLE_SCENES
+}
+
+/**
+ * Where to land when the player flips nerd mode mid-intro: the scene that covers the
+ * same ground. Booth scene 1 is prompt + generation, 2 is the factory + wires, 3 is the quest.
+ */
+export function matchingScene(index, toNerd) {
+  const i = Math.max(0, Number(index) || 0)
+  if (toNerd) return [0, 2, 4][Math.min(2, i)]
+  return i <= 1 ? 0 : i <= 3 ? 1 : 2
+}
+
+/** The five stages shown in the path bar at the top of every scene, one per scene. */
+export const PATH = ["PROMPT", "GENERATION", "FACTORY", "WIRES", "QUEST"]
+export const SIMPLE_PATH = ["ASK", "DATA CENTER", "BUILD"]
 
 export const DURATION = SCENES[SCENES.length - 1].end
 
@@ -179,7 +238,7 @@ function drawPrompt(ctx, t) {
   text(ctx, "AI FACTORY", 406, FLOOR - 88, { color: PALETTE.L, align: "center" })
   ctx.fillStyle = PALETTE.d
   ctx.fillRect(116, FLOOR - 10, 236, 2)
-  text(ctx, "WIRES", 234, FLOOR + 8, { color: PALETTE.g, align: "center" })
+  text(ctx, "CONNECTION", 234, FLOOR + 8, { color: PALETTE.g, align: "center" })
   const typed = Math.floor(clamp((local - 0.08) / 0.5) * PROMPT.length)
   const cursor = typed < PROMPT.length && blink(t, 3) ? "_" : ""
   if (local > 0.62) {
@@ -465,7 +524,7 @@ const NET_LINKS = [
 ]
 
 function drawNetwork(ctx, t) {
-  const local = (t - 54) / 8
+  const local = (t - 62) / 8
   text(ctx, "TRAINING", 8, 8, { color: PALETTE.d })
   drawSprite(ctx, "rackAir", 8, 22, 1)
   pixelLine(ctx, 6, 20, 26, 42, PALETTE.r)
@@ -495,7 +554,7 @@ function drawNetwork(ctx, t) {
     if (dropped) {
       text(ctx, "DROP", 430, y - 4, { color: PALETTE.r })
     } else {
-      const p = ((t - 54) / (0.6 + i * 0.35)) % 1
+      const p = ((t - 62) / (0.6 + i * 0.35)) % 1
       const wobble = link.drop ? (Math.floor(t * 5) % 3) - 1 : 0
       box(ctx, Math.round(lerp(220, 410, p)), y - 2 + wobble * 3, 6, 6, link.color)
     }
@@ -511,8 +570,20 @@ function drawNetwork(ctx, t) {
   return null
 }
 
+function drawLesson(ctx, t, start, labels, arts) {
+  const span = 8
+  const local = ((t - start) % span + span) % span / span
+  labels.forEach((name, i) => {
+    const x = 48 + i * Math.floor(400 / labels.length)
+    const bob = Math.round(Math.sin((local + i * 0.2) * Math.PI * 2) * 3)
+    drawSprite(ctx, arts[i] || "token", x, FLOOR - 48 + bob, 2)
+    text(ctx, name, x + 16, FLOOR + 10, { color: i === Math.floor(local * labels.length) % labels.length ? PALETTE.y : PALETTE.L, align: "center" })
+  })
+  return null
+}
+
 function drawQuest(ctx, t) {
-  const local = (t - 62) / 8
+  const local = (t - 78) / 8
   drawSprite(ctx, "prof", 48, FLOOR - 48, 3)
   drawSprite(ctx, "rackAir", 272, FLOOR - 48, 2)
   drawSprite(ctx, "rackLiquid", 304, FLOOR - 50, 2)
@@ -527,27 +598,176 @@ function drawQuest(ctx, t) {
   return null
 }
 
-const DRAW = {
-  prompt: (ctx, t) => (t < 7 ? drawPrompt(ctx, t) : drawTokens(ctx, t)),
-  retrieval: drawRetrieval,
-  generation: (ctx, t) => (t < 30 ? drawPrefill(ctx, t) : drawDecode(ctx, t)),
-  helpers: drawOrca,
-  quest: drawQuest,
+/* ---------- Booth scenes: three sentences, big sprites. ---------- */
+
+/** You ask, the words become tokens, the answer comes back one token at a time. */
+function drawAsk(ctx, t) {
+  const heroX = 20
+  drawSprite(ctx, Math.floor(t * 4) % 2 ? "hero" : "hero2", heroX, FLOOR - 64, 4)
+  text(ctx, "YOU", heroX + 32, FLOOR + 8, { align: "center" })
+  building(ctx, 330, FLOOR - 96, 130, 96, t)
+  text(ctx, "AI FACTORY", 395, FLOOR + 8, { color: PALETTE.L, align: "center" })
+  ctx.fillStyle = PALETTE.d
+  ctx.fillRect(92, FLOOR - 10, 238, 3)
+  if (t < 6) {
+    const typed = Math.floor(clamp((t - 0.3) / 3.5) * PROMPT.length)
+    const cursor = typed < PROMPT.length && blink(t, 3) ? "_" : ""
+    text(ctx, "YOU ASK", W / 2, 36, { color: PALETTE.y, align: "center", scale: 2 })
+    if (t > 4.2) {
+      const p = ease((t - 4.2) / 1.6)
+      drawSprite(ctx, "prompt", Math.round(lerp(96, 318, p)), Math.round(FLOOR - 44 - Math.sin(p * Math.PI) * 14), 3)
+      if (p >= 1 && blink(t, 6)) {
+        ctx.fillStyle = PALETTE.Y
+        ctx.fillRect(330, FLOOR - 96, 130, 3)
+      }
+    }
+    return PROMPT.slice(0, typed) + cursor
+  }
+  if (t < 12) {
+    const split = ease((t - 6) / 1.6)
+    text(ctx, "WORDS BECOME TOKENS", W / 2, 24, { color: PALETTE.y, align: "center", scale: 2 })
+    WORDS.forEach((word, i) => {
+      const x = 44 + i * 66
+      const y = Math.round(lerp(52, 60, split))
+      box(ctx, x, y, 58, 18, WORD_COLORS[i])
+      text(ctx, word, x + 29, y + 5, { color: PALETTE.k, align: "center" })
+      if (t > 8) {
+        const bob = Math.round(Math.sin(t * 6 + i) * 2)
+        drawSprite(ctx, (Math.floor(t * 3) + i) % 9 === 0 ? "token2" : "token", x + 13, 90 + bob, 2)
+        if (t > 9.2) text(ctx, String(VALUES[i]), x + 29, 130, { color: PALETTE.Y, align: "center" })
+      }
+    })
+    if (t > 10) text(ctx, "6 TOKENS", W / 2, 150, { color: PALETTE.L, align: "center", scale: 2 })
+    return null
+  }
+  const steps = ((t - 12) / 9.5) * ANSWER.length
+  const k = Math.min(ANSWER.length, Math.floor(steps))
+  const phase = steps % 1
+  text(ctx, "THE ANSWER COMES BACK", W / 2, 24, { color: PALETTE.y, align: "center", scale: 2 })
+  text(ctx, "ONE TOKEN AT A TIME", W / 2, 48, { color: PALETTE.L, align: "center", scale: 2 })
+  if (k < ANSWER.length) {
+    const p = ease(phase)
+    drawSprite(ctx, "token", Math.round(lerp(326, 84, p)), Math.round(FLOOR - 70 - Math.sin(p * Math.PI) * 56), 3)
+    cue(`ask-${k}`, "token")
+  }
+  return ANSWER.slice(0, k).join("")
 }
 
-/** PROMPT ▶ RETRIEVAL ▶ GENERATION across the top, with the current stage lit. */
-function drawPath(ctx, stage) {
+/** Inside the data center: GPUs do the maths, cooling keeps them running, wires carry the answers. */
+function drawCenter(ctx, t) {
+  const local = t - 22
+  const focus = local < 5 ? 0 : local < 10 ? 1 : 2
+  dashedRect(ctx, 8, 30, 318, 196, PALETTE.L)
+  text(ctx, "DATA CENTER", 16, 36, { color: PALETTE.L })
+  const lit = (i) => (focus === i ? PALETTE.y : PALETTE.g)
+
+  for (let i = 0; i < 3; i += 1) drawSprite(ctx, i === 1 ? "rackLiquid" : "rackAir", 30 + i * 44, FLOOR - 70, 3)
+  text(ctx, "GPUS", 94, FLOOR + 8, { color: lit(0), align: "center" })
+  text(ctx, "DO THE MATHS", 94, FLOOR + 20, { color: focus === 0 ? PALETTE.Y : PALETTE.d, align: "center" })
+  if (focus === 0) {
+    const glyphs = ["+", "×", "=", "÷"]
+    for (let i = 0; i < 6; i += 1) {
+      const gx = 36 + ((i * 37 + Math.floor(t * 5) * 11) % 150)
+      const gy = 60 + ((i * 23 + Math.floor(t * 3) * 7) % 44)
+      text(ctx, glyphs[(i + Math.floor(t * 4)) % glyphs.length], gx, gy, { color: PALETTE.Y })
+    }
+  }
+
+  const fanY = FLOOR - 80 - (focus === 1 ? 2 : 0)
+  drawSprite(ctx, "fan", 214, fanY, 3)
+  drawSprite(ctx, "pipe", 262, fanY + 8, 3)
+  text(ctx, "COOLING", 250, FLOOR + 8, { color: lit(1), align: "center" })
+  text(ctx, "KEEPS THEM RUNNING", 250, FLOOR + 20, { color: focus === 1 ? PALETTE.Y : PALETTE.d, align: "center" })
+  for (let i = 0; i < 8; i += 1) {
+    const phase = ((t * 1.4) + i * 0.13) % 1
+    const x = 212 + ((i * 29) % 90)
+    const y = Math.round(lerp(fanY - 6, 56, phase))
+    ctx.fillStyle = focus === 1 ? (phase < 0.5 ? PALETTE.r : PALETTE.B) : PALETTE.d
+    ctx.fillRect(x, y, 3, 3)
+  }
+
+  const heroX = 400
+  drawSprite(ctx, "hero", heroX, FLOOR - 48, 3)
+  text(ctx, "YOU", heroX + 24, FLOOR + 8, { align: "center" })
+  text(ctx, "WIRES", 362, 36, { color: lit(2), align: "center" })
+  text(ctx, "CARRY THE ANSWERS", 362, 48, { color: focus === 2 ? PALETTE.Y : PALETTE.d, align: "center" })
+  ctx.fillStyle = focus === 2 ? PALETTE.c : PALETTE.d
+  ctx.fillRect(326, FLOOR - 24, heroX - 326, 3)
+  if (focus === 2) {
+    for (let i = 0; i < 3; i += 1) {
+      const p = ((local - 10) / 1.2 + i / 3) % 1
+      drawSprite(ctx, "token", Math.round(lerp(322, heroX - 10, p)), FLOOR - 40 - Math.round(Math.sin(p * Math.PI) * 8), 2)
+    }
+    cue("center-wire", "token")
+  }
+  return null
+}
+
+/** Closer, cooler, better connected: the three levers, then GO. */
+function drawBuild(ctx, t) {
+  const local = t - 38
+  const focus = Math.floor(local / 3.5) % 3
+  drawSprite(ctx, "prof", 16, FLOOR - 64, 4)
+  text(ctx, "COACH", 48, FLOOR + 8, { color: PALETTE.P, align: "center" })
+  const lanes = [
+    { x: 130, name: "CLOSER", art: "user", note: "NEAR PEOPLE" },
+    { x: 250, name: "COOLER", art: "fan", note: "LIQUID OR AIR" },
+    { x: 370, name: "CONNECTED", art: "token", note: "PRIVATE WIRES" },
+  ]
+  lanes.forEach((lane, i) => {
+    const hot = focus === i
+    const bob = hot ? Math.round(Math.sin(t * 6) * 3) : 0
+    if (i === 0) {
+      building(ctx, lane.x - 32, FLOOR - 70 + bob, 44, 44, t)
+      drawSprite(ctx, "user", lane.x + 18, FLOOR - 48 + bob, 3)
+    } else if (i === 1) {
+      drawSprite(ctx, "rackLiquid", lane.x - 36, FLOOR - 70 + bob, 3)
+      drawSprite(ctx, "fan", lane.x + 8, FLOOR - 62 + bob, 3)
+    } else {
+      drawSprite(ctx, "token", lane.x - 36, FLOOR - 56 + bob, 3)
+      ctx.fillStyle = hot ? PALETTE.c : PALETTE.d
+      ctx.fillRect(lane.x + 8, FLOOR - 40, 40, 3)
+      drawSprite(ctx, "hero", lane.x + 30, FLOOR - 64 + bob, 3)
+    }
+    text(ctx, lane.name, lane.x + 10, FLOOR + 8, { color: hot ? PALETTE.y : PALETTE.L, align: "center" })
+    text(ctx, lane.note, lane.x + 10, FLOOR + 20, { color: hot ? PALETTE.Y : PALETTE.d, align: "center" })
+  })
+  text(ctx, "FASTER ANSWERS", W / 2 + 40, 30, { color: PALETTE.y, align: "center", scale: 2 })
+  text(ctx, "FOR LESS MONEY", W / 2 + 40, 54, { color: PALETTE.L, align: "center", scale: 2 })
+  if (local > 2 && blink(t, 2)) text(ctx, "GO", W / 2 + 40, 86, { color: PALETTE.y, align: "center", scale: 2 })
+  return null
+}
+
+/* Each scene chains the draw windows it was built from; the windows' absolute times are unchanged. */
+const DRAW = {
+  ask: drawAsk,
+  center: drawCenter,
+  build: drawBuild,
+  prompt: (ctx, t) => (t < 7 ? drawPrompt(ctx, t) : drawTokens(ctx, t)),
+  generation: (ctx, t) => (t < 22 ? drawRetrieval(ctx, t) : t < 30 ? drawPrefill(ctx, t) : drawDecode(ctx, t)),
+  factory: (ctx, t) =>
+    t < 46
+      ? drawLesson(ctx, t, 38, ["GPU", "CPU", "DPU", "QPU"], ["rackLiquid", "rackAir", "token", "orca"])
+      : t < 54
+        ? drawOrca(ctx, t)
+        : drawLesson(ctx, t, 54, ["AIR", "IN ROW", "DOOR", "LIQUID"], ["fan", "rackAir", "rackAir", "rackLiquid"]),
+  wires: drawNetwork,
+  quest: (ctx, t) => (t < 78 ? drawLesson(ctx, t, 70, ["CHAT", "RESEARCH", "MEDICINE", "ROBOTS"], ["iconChat", "iconBook", "iconFlask", "iconCode"]) : drawQuest(ctx, t)),
+}
+
+/** The stage names across the top, with the current stage lit. */
+function drawPath(ctx, stage, path = PATH) {
   ctx.fillStyle = "#0b0b17"
   ctx.fillRect(0, 3, W, 16)
   const gap = 20
-  const widths = PATH.map((name) => name.length * 8)
-  let x = Math.round((W - widths.reduce((a, b) => a + b, 0) - gap * (PATH.length - 1)) / 2)
-  PATH.forEach((name, i) => {
-    const lit = stage >= PATH.length || i === stage
+  const widths = path.map((name) => name.length * 8)
+  let x = Math.round((W - widths.reduce((a, b) => a + b, 0) - gap * (path.length - 1)) / 2)
+  path.forEach((name, i) => {
+    const lit = stage >= path.length || i === stage
     const done = i < stage
     text(ctx, name, x, 7, { color: lit ? PALETTE.y : done ? PALETTE.L : PALETTE.d })
     x += widths[i]
-    if (i < PATH.length - 1) {
+    if (i < path.length - 1) {
       ctx.fillStyle = done || lit ? PALETTE.L : PALETTE.d
       for (let r = 0; r < 4; r += 1) ctx.fillRect(x + 7 + r, 7 + r, 1, 8 - r * 2)
       x += gap
@@ -555,8 +775,8 @@ function drawPath(ctx, stage) {
   })
 }
 
-export function sceneAt(t) {
-  return SCENES.find((scene) => t >= scene.start && t < scene.end) || SCENES[SCENES.length - 1]
+export function sceneAt(t, scenes = SCENES) {
+  return scenes.find((scene) => t >= scene.start && t < scene.end) || scenes[scenes.length - 1]
 }
 
 /**
@@ -564,28 +784,28 @@ export function sceneAt(t) {
  * Story scenes play once and hold the last frame. A looping scene wraps.
  * The returned time stays inside the scene, so the next scene never starts by itself.
  */
-export function sceneTime(index, elapsed, { hold = false } = {}) {
-  const scene = SCENES[Math.max(0, Math.min(SCENES.length - 1, index))]
+export function sceneTime(index, elapsed, { hold = false, scenes = SCENES } = {}) {
+  const scene = scenes[Math.max(0, Math.min(scenes.length - 1, index))]
   const span = Math.max(0.001, scene.end - scene.start)
   const looping = scene.loop && !hold
   const safe = Math.max(0, Number(elapsed) || 0)
   const local = looping ? safe % span : Math.min(safe, span - 0.001)
-  return { scene, t: scene.start + local, index: SCENES.indexOf(scene) }
+  return { scene, t: scene.start + local, index: scenes.indexOf(scene) }
 }
 
 /** Paints one frame and returns the speech-bubble text for the HTML overlay (or null). */
-export function renderIntro(ctx, t) {
+export function renderIntro(ctx, t, scenes = SCENES) {
   ctx.imageSmoothingEnabled = false
   background(ctx, t)
-  const scene = sceneAt(t)
+  const scene = sceneAt(t, scenes)
   const bubble = DRAW[scene.id](ctx, t) ?? null
   const span = Math.max(0.001, scene.end - scene.start)
-  const frac = (SCENES.indexOf(scene) + clamp((t - scene.start) / span)) / SCENES.length
+  const frac = (scenes.indexOf(scene) + clamp((t - scene.start) / span)) / scenes.length
   ctx.fillStyle = PALETTE.d
   ctx.fillRect(0, 0, W, 3)
   ctx.fillStyle = PALETTE.y
   ctx.fillRect(0, 0, Math.round(frac * W), 3)
-  drawPath(ctx, scene.stage ?? 0)
+  drawPath(ctx, scene.stage ?? 0, scenes === SIMPLE_SCENES ? SIMPLE_PATH : PATH)
   return bubble
 }
 
@@ -610,7 +830,7 @@ export function createAdvanceGate({ now = () => performance.now(), holdMs = INPU
   }
 }
 
-export function createIntro(canvas, { onDone, onScene, onBubble } = {}) {
+export function createIntro(canvas, { onDone, onScene, onBubble, scenes = SCENES } = {}) {
   let { ctx } = fitCanvas(canvas, W, H)
   let raf = 0
   let index = 0
@@ -620,7 +840,7 @@ export function createIntro(canvas, { onDone, onScene, onBubble } = {}) {
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
   function paint(t) {
-    const bubble = renderIntro(ctx, t)
+    const bubble = renderIntro(ctx, t, scenes)
     if (bubble !== lastBubble) {
       lastBubble = bubble
       onBubble?.(bubble)
@@ -632,17 +852,17 @@ export function createIntro(canvas, { onDone, onScene, onBubble } = {}) {
   }
 
   function enter(nextIndex, { sound = null } = {}) {
-    index = Math.max(0, Math.min(SCENES.length - 1, nextIndex))
+    index = Math.max(0, Math.min(scenes.length - 1, nextIndex))
     entered = performance.now()
     cues.clear()
-    onScene?.(SCENES[index])
-    paint(sceneTime(index, elapsed(), { hold: reduced }).t)
+    onScene?.(scenes[index])
+    paint(sceneTime(index, elapsed(), { hold: reduced, scenes }).t)
     if (sound) play(sound)
   }
 
   function frame() {
     if (!running) return
-    paint(sceneTime(index, elapsed(), { hold: reduced }).t)
+    paint(sceneTime(index, elapsed(), { hold: reduced, scenes }).t)
     raf = requestAnimationFrame(frame)
   }
 
@@ -653,13 +873,13 @@ export function createIntro(canvas, { onDone, onScene, onBubble } = {}) {
   }
 
   return {
-    /** Begin at the first scene. Animation time starts at zero. */
-    start() {
-      enter(0)
+    /** Begin at a scene (the first by default). Animation time starts at zero. */
+    start(at = 0) {
+      enter(at)
       arm()
     },
     next() {
-      if (index >= SCENES.length - 1) {
+      if (index >= scenes.length - 1) {
         onDone?.()
         return false
       }
@@ -678,11 +898,14 @@ export function createIntro(canvas, { onDone, onScene, onBubble } = {}) {
       return index
     },
     current() {
-      return SCENES[index].id
+      return scenes[index].id
+    },
+    position() {
+      return index
     },
     resize() {
       ctx = fitCanvas(canvas, W, H).ctx
-      paint(sceneTime(index, elapsed(), { hold: reduced }).t)
+      paint(sceneTime(index, elapsed(), { hold: reduced, scenes }).t)
     },
     stop() {
       running = false

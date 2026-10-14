@@ -1,17 +1,19 @@
-import { HALLS, PLATFORMS, SITES, USE_CASES, byId } from "./data.js"
-import { explainResult } from "./explain.js"
+import { HALLS, KV_TIER, MISSION_SITES, ORCA, PLATFORMS, SITES, USE_CASES, byId } from "./data.js"
+import { BUILD } from "./build-info.js"
+import { DR_FOOTER, explainResult, thinkLines } from "./explain.js"
+import { boothCoach } from "./booth.js"
 import { plainCoach } from "./coach.js"
 import { createFloor } from "./floor.js"
-import { SCENES, createAdvanceGate, createIntro, sceneCaption, setIntroDetail } from "./intro.js"
+import { createAdvanceGate, createIntro, matchingScene, sceneCaption, scenesFor, setIntroDetail } from "./intro.js"
 import { leagueCsv, leagueJson, ordinal, rankOf, sortLeague, upsertEntry } from "./league.js"
-import { evaluateBuild, formatMoney, formatScore, formatTokens, stars } from "./model.js"
+import { defaultSitePlans, evaluateBuild, formatMoney, formatScore, formatTokens, stars } from "./model.js"
 import { blockedReason, peopleCount, peopleLead, savingsLine } from "./results.js"
 import { attemptPayload, syncStatusLine } from "./attempt.js"
 import { validateEmail, validateName } from "./names.js"
 import { fetchLeague, recordAttempt } from "./sync.js"
 import { isMuted, loadMute, play, setMuted, unlock } from "./sound.js"
 import { spriteImg } from "./sprites.js"
-import { STORIES, brainPick, choicesToBuild, cityChoices, citySites, defaultChoices } from "./presets.js"
+import { PRESET_IDS, STORIES, autoLibrary, brainPick, choicesToBuild, cityChoices, citySites, defaultChoices, nerdChoices, simpleChoices, simpleDefaults, simplePicks, simpleTiles, simpleToChoices } from "./presets.js"
 
 const LEAGUE_KEY = "token-quest-league-v1"
 const STAFF_PIN = "2510"
@@ -25,6 +27,7 @@ const state = {
   email: "",
   consentAt: "",
   nerd: false,
+  moreStories: false,
   plan: freshPlan(FIRST_SCENARIO),
   league: loadLeague(),
   serverLeague: null,
@@ -53,9 +56,10 @@ let logoTimer = 0
 const stage = document.getElementById("stage")
 const hud = document.getElementById("hud")
 
-function freshPlan(useCaseId) {
-  const choices = defaultChoices(useCaseId)
-  return { useCase: useCaseId, choices, build: choicesToBuild(useCaseId, choices) }
+/** A new plan for a story. The simple board opens on its three defaults; nerd mode on the full defaults. */
+function freshPlan(useCaseId, nerd = false) {
+  const choices = nerd ? defaultChoices(useCaseId) : simpleDefaults(useCaseId)
+  return { useCase: useCaseId, choices, build: choicesToBuild(useCaseId, choices, nerd) }
 }
 
 function el(tag, props = {}, children = []) {
@@ -145,6 +149,10 @@ function toggleNerd() {
     if (slot) slot.replaceChildren(leagueTable(null, 5))
     return
   }
+  if (state.plan) {
+    state.plan.choices = state.nerd ? nerdChoices(state.plan.useCase, state.plan.choices) : simpleChoices(state.plan.useCase, state.plan.choices)
+    syncBuild()
+  }
   render()
   const result = document.getElementById("result")
   if (result && !result.hidden && state.result) showResult()
@@ -164,8 +172,9 @@ function goto(screen) {
 }
 
 function render() {
+  closeLearn()
   const focusKey = document.activeElement?.getAttribute?.("data-key")
-  const screens = { title: titleScreen, intro: introScreen, game: gameScreen }
+  const screens = { title: titleScreen, intro: introScreen, stories: storyScreen, game: gameScreen }
   stage.replaceChildren(screens[state.screen]())
   renderHud()
   stage.scrollTop = 0
@@ -174,10 +183,9 @@ function render() {
 
 function renderHud() {
   const top = sortLeague(state.league)[0]
-  const result = state.screen === "game" ? live() : null
   hud.replaceChildren(
     el("span", { class: "hud-item" }, [el("b", { text: "1UP " }), state.name ? state.name.toUpperCase() : "----"]),
-    el("span", { class: "hud-item" }, [el("b", { text: "SCORE " }), result?.ok ? formatScore(result.score) : "0"]),
+    el("span", { class: "hud-item" }, [el("b", { text: "SCORE " }), state.result?.result?.ok ? formatScore(state.result.result.score) : (state.screen === "game" || state.screen === "stories" ? "—" : "0")]),
     el("span", { class: "hud-item" }, [el("b", { text: "HI " }), top ? formatScore(top.score) : "0"]),
   )
 }
@@ -187,6 +195,7 @@ function resetRun() {
   state.email = ""
   state.consentAt = ""
   state.nerd = false
+  state.moreStories = false
   paintNerd()
   state.plan = freshPlan(FIRST_SCENARIO)
   state.syncLine = ""
@@ -293,28 +302,30 @@ function titleScreen() {
     state.name = nameCheck.name
     state.email = emailCheck.email
     if (!state.consentAt) state.consentAt = new Date().toISOString()
-    state.plan = freshPlan(FIRST_SCENARIO)
+    state.plan = freshPlan(FIRST_SCENARIO, state.nerd)
     state.lessons = new Set()
     goto("intro")
   })
   requestAnimationFrame(() => input.focus())
 
   return el("section", { class: "title-screen" }, [
-    el("div", { class: "title-hero" }, [
-      el("div", { class: "logo-art" }, [spriteImg("hero", 5), spriteImg("token", 5), spriteImg("prof", 5)]),
-      el("h1", { class: "game-logo" }, [el("span", { text: "TOKEN" }), el("span", { text: "QUEST" })]),
-      el("p", { class: "subtitle", text: "A DIGITAL REALTY GAME" }),
-      el("p", {
-        class: "pitch",
-        text: "Build the best factory you can afford. Beat the high score!",
-      }),
-      el("div", { class: "panel scores" }, [
-        el("h2", { text: "HIGH SCORES" }),
-        el("div", { id: "league-slot" }, [leagueTable(null, 5)]),
-        el("div", { class: "prize" }, [spriteImg("trophy", 3), el("span", { text: "TOP SCORE WINS THE PRIZE" })]),
+    el("div", { class: "panel title-card", "data-key": "title-card" }, [
+      el("div", { class: "title-hero" }, [
+        el("div", { class: "logo-art" }, [spriteImg("hero", 4), spriteImg("token", 4), spriteImg("prof", 4)]),
+        el("h1", { class: "game-logo" }, [el("span", { text: "TOKEN" }), el("span", { text: "QUEST" })]),
+        el("p", { class: "subtitle", text: "A DIGITAL REALTY GAME" }),
+        el("p", {
+          class: "pitch",
+          text: "Build the best AI factory you can afford. Beat the high score!",
+        }),
+        el("div", { class: "scores" }, [
+          el("h2", { text: "HIGH SCORES" }),
+          el("div", { id: "league-slot" }, [leagueTable(null, 5)]),
+          el("div", { class: "prize" }, [spriteImg("trophy", 3), el("span", { text: "TOP SCORE WINS THE PRIZE" })]),
+        ]),
       ]),
+      el("div", { class: "title-form" }, [form]),
     ]),
-    el("div", { class: "panel title-form" }, [form]),
   ])
 }
 
@@ -371,9 +382,9 @@ function leagueTable(highlight, limit) {
 function advanceIntro(event) {
   if (state.screen !== "intro" || !state.intro) return
   if (!introGate.allow(event?.timeStamp)) return
-  if (state.intro.current() === SCENES[SCENES.length - 1].id) {
+  if (state.intro.position() >= scenesFor(state.nerd).length - 1) {
     play("blip")
-    goto("game")
+    goto("stories")
     return
   }
   state.intro.next()
@@ -394,14 +405,16 @@ function showIntroCaption(scene, capTitle, capText, capTag, caption) {
 function introScreen() {
   unbindIntro()
   introGate = createAdvanceGate()
+  let scenes = scenesFor(state.nerd)
   const canvas = el("canvas", { class: "intro-canvas", "aria-hidden": "true" })
-  const capTitle = el("b", { text: SCENES[0].title })
+  const capTitle = el("b", { text: scenes[0].title })
   const capTag = el("span", { class: "nerd-tag", text: "NERD", hidden: !state.nerd })
-  const capText = el("p", { text: sceneCaption(SCENES[0], state.nerd) })
+  const capText = el("p", { text: sceneCaption(scenes[0], state.nerd) })
   const capLive = el("p", { class: "caption-live" })
   const caption = el("div", { class: `caption${state.nerd ? " deep" : ""}`, "aria-live": "polite" }, [capTitle, capTag, capText, capLive])
   setIntroDetail(state.nerd)
-  const dots = el("div", { class: "scene-dots" }, SCENES.map((scene, index) =>
+  const dots = el("div", { class: "scene-dots" })
+  const paintDots = () => dots.replaceChildren(...scenes.map((scene, index) =>
     el("button", {
       type: "button",
       class: "dot",
@@ -409,11 +422,37 @@ function introScreen() {
       onclick: () => state.intro?.jump(index),
     }),
   ))
+  paintDots()
   const back = btn("◀ BACK", () => state.intro?.prev(), { kind: "ghost", key: "intro-back", sound: null, disabled: true })
-  const cont = btn("CLICK TO CONTINUE", advanceIntro, { kind: "big", key: "intro-continue", sound: null })
+  const cont = btn("CLICK TO CONTINUE", advanceIntro, { kind: "big pulse", key: "intro-continue", sound: null })
+  const mount = (at = 0) => {
+    state.intro?.stop()
+    state.intro = createIntro(canvas, {
+      scenes,
+      onScene: (scene) => {
+        introGate.shown()
+        showIntroCaption(scene, capTitle, capText, capTag, caption)
+        const index = scenes.indexOf(scene)
+        const last = index === scenes.length - 1
+        cont.textContent = last ? "START THE QUEST" : "CLICK TO CONTINUE"
+        cont.setAttribute("aria-label", last ? "PRESS START" : "CLICK TO CONTINUE")
+        back.disabled = index === 0
+        dots.querySelectorAll(".dot").forEach((dot, i) => dot.setAttribute("aria-current", i === index ? "true" : "false"))
+        if (scene.lesson) state.lessons.add(scene.lesson)
+      },
+      onBubble: (value) => {
+        capLive.textContent = value || ""
+      },
+    })
+    state.intro.start(at)
+  }
+  /** Nerd on or off mid-intro swaps the scene set and lands on the matching scene. */
   refreshIntro = () => {
-    const scene = SCENES.find((item) => item.id === state.intro?.current()) || SCENES[0]
-    showIntroCaption(scene, capTitle, capText, capTag, caption)
+    const at = matchingScene(state.intro?.position() ?? 0, state.nerd)
+    scenes = scenesFor(state.nerd)
+    paintDots()
+    if (state.intro) mount(at)
+    else showIntroCaption(scenes[0], capTitle, capText, capTag, caption)
     const toggle = document.querySelector('[data-key="nerd-toggle"]')
     if (toggle) {
       toggle.textContent = state.nerd ? "NERD ON" : "NERD MODE"
@@ -427,51 +466,29 @@ function introScreen() {
     el("div", { class: "row" }, [
       back,
       btn(state.nerd ? "NERD ON" : "NERD MODE", toggleNerd, { kind: "ghost", key: "nerd-toggle", pressed: state.nerd, sound: "blip" }),
-      btn("SKIP ▶▶", () => goto("game"), { kind: "ghost", key: "intro-skip", sound: "back" }),
+      btn("SKIP ▶▶", () => goto("stories"), { kind: "ghost", key: "intro-skip", sound: "back" }),
       cont,
     ]),
   ])
   const onKey = (event) => {
     if (state.screen !== "intro") return
-    if (event.key !== "Enter" && event.key !== " ") return
+    if (event.key !== "Enter") return
     if (event.repeat) return
     const key = introControl(event)
     if (key || event.target?.closest?.("button, a, input, .scene-dots")) return
     event.preventDefault()
     advanceIntro(event)
   }
-  const onPointer = (event) => {
-    if (state.screen !== "intro") return
-    if (event.target?.closest?.("button, a, input")) return
-    advanceIntro(event)
-  }
   document.addEventListener("keydown", onKey)
-  document.addEventListener("pointerdown", onPointer)
   unbindIntro = () => {
     document.removeEventListener("keydown", onKey)
-    document.removeEventListener("pointerdown", onPointer)
     unbindIntro = () => {}
   }
   requestAnimationFrame(() => {
     if (state.screen !== "intro") return
     const paint = () => {
-      state.intro = createIntro(canvas, {
-        onScene: (scene) => {
-          introGate.shown()
-          showIntroCaption(scene, capTitle, capText, capTag, caption)
-          const index = SCENES.indexOf(scene)
-          const last = index === SCENES.length - 1
-          cont.textContent = last ? "START THE QUEST" : "CLICK TO CONTINUE"
-          cont.setAttribute("aria-label", last ? "PRESS START" : "CLICK TO CONTINUE")
-          back.disabled = index === 0
-          dots.querySelectorAll(".dot").forEach((dot, i) => dot.setAttribute("aria-current", i === index ? "true" : "false"))
-          if (scene.lesson) state.lessons.add(scene.lesson)
-        },
-        onBubble: (value) => {
-          capLive.textContent = value || ""
-        },
-      })
-      state.intro.start()
+      if (state.screen !== "intro") return
+      mount(0)
     }
     document.fonts.load("8px 'Press Start 2P'").then(paint, paint)
   })
@@ -481,25 +498,68 @@ function introScreen() {
 /* ---------- The game screen ---------- */
 
 function syncBuild() {
-  state.plan.build = choicesToBuild(state.plan.useCase, state.plan.choices)
+  state.plan.build = choicesToBuild(state.plan.useCase, state.plan.choices, state.nerd)
 }
 
 function pick(patch) {
   play("select")
-  state.plan.choices = { ...state.plan.choices, ...patch }
+  const next = { ...state.plan.choices, ...patch }
+  if (patch.cities != null) delete next.sitePlans
+  state.plan.choices = next
   syncBuild()
   render()
 }
 
-function nextStory() {
-  const ids = storyIds()
-  const index = ids.indexOf(state.plan.useCase)
-  state.plan = freshPlan(ids[(index + 1) % ids.length])
-  render()
+function openStories() {
+  state.moreStories = false
+  goto("stories")
+}
+
+/** The three stories a booth visitor sees first. MORE reveals the rest; nerd mode shows all six. */
+const FEATURED_STORIES = ["chat", "drug", "robot"]
+
+function storyCard(item, scale) {
+  const story = STORIES[item.id] || { line: item.blurb, sprite: item.icon }
+  return el("button", {
+    type: "button",
+    class: "story-card",
+    "data-key": `usecase-${item.id}`,
+    onclick: () => {
+      play("select")
+      state.plan = freshPlan(item.id, state.nerd)
+      goto("game")
+    },
+  }, [
+    spriteImg(story.sprite, scale),
+    el("strong", { text: item.name }),
+    el("span", { text: story.line }),
+  ])
+}
+
+function storyScreen() {
+  if (state.nerd || state.moreStories) {
+    return el("section", { class: "screen stories" }, [
+      el("h2", { text: "WHO ARE YOU BUILDING FOR?" }),
+      el("p", { class: "fine", text: "Pick a job. The factory should match it." }),
+      el("div", { class: "story-cards" }, USE_CASES.map((item) => storyCard(item, 4))),
+    ])
+  }
+  const featured = FEATURED_STORIES.map((id) => byId(USE_CASES, id)).filter(Boolean)
+  return el("section", { class: "screen stories simple" }, [
+    el("h2", { text: "WHO ARE YOU BUILDING FOR?" }),
+    el("p", { class: "fine", text: "Pick a job. The factory should match it." }),
+    el("div", { class: "story-cards featured" }, featured.map((item) => storyCard(item, 6))),
+    el("div", { class: "row end" }, [
+      btn("MORE JOBS ▶", () => {
+        state.moreStories = true
+        render()
+      }, { kind: "big ghost", key: "more-stories" }),
+    ]),
+  ])
 }
 
 function crowdMood(result) {
-  if (!result?.ok || result.overBudget || !result.slaMet || result.coverage < 0.5) return "sad"
+  if (!result?.ok || result.overBudget || !result.slaMet || result.coverage < 0.5 || (result.farShare || 0) >= 0.2) return "sad"
   return "happy"
 }
 
@@ -534,178 +594,620 @@ function workerSprites(fte) {
   return Math.max(1, Math.min(8, Math.round(Math.log10(fte))))
 }
 
-function picture({ key, art, label, hint, on, product = "", nerd = "" }) {
-  return el("button", {
+let learnPop = null
+
+function closeLearn() {
+  learnPop?.remove()
+  learnPop = null
+}
+
+function openLearn(anchor, { title, lines, nerd }) {
+  closeLearn()
+  const pop = el("div", { class: "learn-pop", role: "dialog", "aria-label": title }, [
+    el("b", { text: title }),
+    ...lines.map((line) => el("p", { text: line })),
+    state.nerd && nerd ? el("p", { class: "nerd", text: nerd }) : null,
+    el("button", { type: "button", class: "btn ghost learn-close", text: "CLOSE" }),
+  ])
+  pop.querySelector(".learn-close").addEventListener("click", closeLearn)
+  document.body.append(pop)
+  learnPop = pop
+  const margin = 8
+  const rect = anchor.getBoundingClientRect()
+  const left = Math.max(margin, Math.min(rect.left, window.innerWidth - pop.offsetWidth - margin))
+  let top = rect.bottom + 6
+  if (top + pop.offsetHeight > window.innerHeight - margin) top = Math.max(margin, rect.top - pop.offsetHeight - 6)
+  pop.style.left = `${Math.round(left)}px`
+  pop.style.top = `${Math.round(top)}px`
+}
+
+function bindTile(tile, onPick, learn) {
+  let timer = 0
+  let held = false
+  const disarm = () => clearTimeout(timer)
+  tile.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 && event.pointerType === "mouse") return
+    held = false
+    disarm()
+    timer = setTimeout(() => {
+      held = true
+      openLearn(tile, learn)
+    }, 500)
+  })
+  tile.addEventListener("pointerup", disarm)
+  tile.addEventListener("pointercancel", disarm)
+  tile.addEventListener("pointerleave", disarm)
+  tile.addEventListener("click", (event) => {
+    if (held) {
+      held = false
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
+    onPick()
+  })
+}
+
+function picture({ key, art, tag = "", label, hint = "", on, lines, nerd = "", onPick, scale = 2 }) {
+  const learn = { title: label, lines, nerd }
+  const tile = el("button", {
     type: "button",
     class: `tile${on ? " on" : ""}`,
     "data-key": key,
+    "data-nerd": nerd || null,
     "aria-pressed": on ? "true" : "false",
   }, [
-    el("span", { class: "tile-art" }, [spriteImg(art, 3)]),
-    el("span", { class: "tile-title", text: label }),
-    hint ? el("span", { class: "tile-hint", text: hint }) : null,
-    product ? el("span", { class: "tile-product", text: product }) : null,
-    state.nerd && nerd ? el("span", { class: "nerd", text: nerd }) : null,
+    el("span", { class: "tile-art" }, [spriteImg(art, scale)]),
+    el("span", { class: "tile-copy" }, [
+      tag ? el("span", { class: "tile-tag", text: tag }) : null,
+      el("span", { class: "tile-title", text: label }),
+      hint ? el("span", { class: "tile-hint", text: hint }) : null,
+    ]),
   ])
+  bindTile(tile, onPick, learn)
+  const ask = el("button", {
+    type: "button",
+    class: "learn-btn",
+    "data-learn": key,
+    "aria-label": `Learn about ${label}`,
+    text: "?",
+  })
+  ask.addEventListener("pointerdown", (event) => event.stopPropagation())
+  ask.addEventListener("click", (event) => {
+    event.stopPropagation()
+    openLearn(ask, learn)
+  })
+  return el("div", { class: "tile-wrap" }, [tile, ask])
 }
 
-function metroLine(useCaseId, cities) {
-  return citySites(useCaseId, cities).map((id) => byId(SITES, id)?.metro).filter(Boolean).join(", ")
-}
-
-function choiceRow(id, title, hint, tiles) {
-  return el("div", { class: "choice-row", "data-row": id }, [
+function choiceRow(id, title, hint, wraps) {
+  const selected = wraps.map((wrap) => wrap.querySelector(".tile")).find((tile) => tile?.getAttribute("aria-pressed") === "true")
+  const nerd = state.nerd && selected?.dataset.nerd ? selected.dataset.nerd : ""
+  return el("div", { class: `choice-row${nerd ? " has-nerd" : ""}`, "data-row": id }, [
     el("div", { class: "row-name" }, [
       el("b", { text: title }),
       el("span", { class: "fine", text: hint }),
     ]),
-    el("div", { class: "tiles" }, tiles),
+    el("div", { class: "tiles" }, wraps),
+    nerd ? el("p", { class: "row-nerd", text: nerd }) : null,
   ])
 }
 
-function nerdBrain(platform) {
-  const spec = `${platform.rackKW} kW, ${platform.hbmTBs} TB/s`
-  if (platform.id !== "vr") return spec
-  return `${spec}. Announced as NVL144. 35 PF dense NVFP4 (50 PF sparse peak)`
+function metroNames(useCaseId, cities) {
+  return citySites(useCaseId, cities).map((id) => byId(SITES, id)?.metro).filter(Boolean)
 }
+
+function siteLabel(count) {
+  return count === 1 ? "1 Digital Realty metro" : `${count} Digital Realty metros`
+}
+
+function siteLearn(useCaseId, count) {
+  const names = metroNames(useCaseId, count)
+  const list = names.join(", ") || "the city"
+  return [
+    `${siteLabel(count)}: ${list}.`,
+    "Closer to people = faster.",
+    "Putting the racks closer to the people shortens the trip the answer has to take.",
+    "Each extra metro also copies the storage and the links, so it costs more.",
+  ]
+}
+
+function nerdBrain(platform) {
+  const spec = `${platform.hbmGB} GB HBM, ${platform.hbmTBs} TB/s, ${platform.rackKW} kW, ${formatMoney(platform.capex)}, lead ${platform.leadWeeks} weeks`
+  if (platform.id !== "vr") return spec
+  return `${spec}. 35 PFLOPS. Announced as NVL144.`
+}
+
+const GPU_HINT = {
+  h100: "older, cheaper",
+  h200: "more memory, still on air",
+  b200: "newer, still on air",
+  b300: "strong on air cooling",
+  gb200: "GPUs working as one, needs liquid",
+  gb300: "GPUs working as one, needs liquid",
+  vr: "newest, long wait, huge power",
+}
+
+const GPU_LEARN = {
+  h100: [
+    "The GPU that kicked off the AI boom in 2022.",
+    "80 GB of memory per GPU is small for today's giant models, so a big model is split across many GPUs.",
+    "Pick it when you want an older, cheaper rack that arrives sooner.",
+  ],
+  h200: [
+    "The same Hopper brain as the H100, with 141 GB of memory per GPU.",
+    "Writing the answer is mostly a memory job, so this one is faster.",
+    "It still fits an air-cooled hall.",
+  ],
+  b200: [
+    "A Blackwell GPU with 180 GB of memory that still fits an air-cooled hall.",
+    "Smaller numbers mean each token needs less memory.",
+    "Pick it when you want a newer GPU without liquid cooling.",
+  ],
+  b300: [
+    "Blackwell Ultra, with 288 GB of memory per GPU.",
+    "It is the strongest rack that still runs on air cooling.",
+    "Pick it when you want a lot of answers without waiting for a liquid hall.",
+  ],
+  gb200: [
+    "72 GPUs joined by NVLink act as one giant GPU.",
+    "Huge models love that shared memory.",
+    "It runs too hot for fans, so pick it only with the liquid-cooled hall.",
+  ],
+  gb300: [
+    "72 Blackwell Ultra GPUs joined by NVLink act as one.",
+    "Built for models that think for a long time.",
+    "It needs the liquid-cooled hall.",
+  ],
+  vr: [
+    "The 2026 Vera Rubin rack has the fastest memory and a long wait for delivery.",
+    "NVIDIA first counted it as 144 GPU dies in 72 packages.",
+    "Pick it only when the deadline is long and the budget can take the highest price.",
+  ],
+}
+
+const SIZE_TAG = { small: "SMALL", medium: "MEDIUM", big: "BIG", rubin: "NEWEST", huge: "HUGE" }
 
 function brainRow(choices) {
-  const tiles = [
-    ["small", "SMALL", "A little", "rackAir"],
-    ["medium", "MEDIUM", "A fair bit", "rackAir"],
-    ["big", "BIG", "A lot", "rackLiquid"],
-    ["huge", "HUGE", "Too much", "rackRubin"],
-  ].map(([id, label, hint, art]) => {
-    const pick = brainPick(state.plan.useCase, id)
-    const platform = byId(PLATFORMS, pick.platform)
-    const selected = choices.brains === id
+  const ids = state.nerd ? PRESET_IDS.nerdBrains : PRESET_IDS.brains
+  const artFor = { h100: "rackAir", h200: "rackAir", b200: "rackAir", b300: "rackAir", gb200: "rackLiquid", gb300: "rackLiquid", vr: "rackRubin" }
+  const tiles = ids.map((id) => {
+    const picked = brainPick(state.plan.useCase, id)
+    const platform = byId(PLATFORMS, picked.platform)
     return picture({
       key: `brains-${id}`,
-      art,
-      label,
-      hint,
-      on: selected,
-      product: platform ? `${platform.name} ×${pick.racks}` : "",
-      nerd: selected && platform ? nerdBrain(platform, pick.racks) : "",
+      art: artFor[picked.platform] || "rackAir",
+      tag: SIZE_TAG[id],
+      label: platform ? `NVIDIA ${platform.name} ×${picked.racks}` : id,
+      hint: GPU_HINT[picked.platform] || "",
+      on: choices.brains === id,
+      lines: GPU_LEARN[picked.platform] || ["A rack of GPUs."],
+      nerd: platform ? nerdBrain(platform) : "",
+      onPick: () => pick({ brains: id }),
     })
   })
-  tiles.forEach((node, index) => {
-    const id = ["small", "medium", "big", "huge"][index]
-    node.addEventListener("click", () => pick({ brains: id }))
-  })
-  return choiceRow("brains", "BRAINS", "How big should the computers be?", tiles)
+  return choiceRow("brains", "GPU", "The computers that run the AI", tiles)
 }
 
-function memoryRow(uc, choices) {
+function hostRow(choices) {
   const tiles = [
-    picture({ key: "memory-off", art: "token", label: "OFF", hint: "Starts fresh", on: !choices.memory, nerd: "No saved chats" }),
-    picture({ key: "memory-on", art: "chest", label: "ON", hint: "Remembers", on: choices.memory, product: "KV cache tier", nerd: "Saves the chat so it is not read again" }),
+    picture({
+      key: "hosts-standard",
+      art: "rackAir",
+      label: "Standard hosts",
+      hint: "orchestration only",
+      on: (choices.hosts || "standard") === "standard",
+      lines: [
+        "Ordinary CPU hosts run the app around the GPUs.",
+        "They do not park the KV cache, and they do not isolate tenants.",
+        "This is the baseline, with no extra cost in this game.",
+      ],
+      nerd: "Game value: no host premium.",
+      onPick: () => pick({ hosts: "standard" }),
+    }),
+    picture({
+      key: "hosts-grace",
+      art: "rackAir",
+      label: "Grace/Vera CPU hosts",
+      hint: "big memory pool for KV",
+      on: choices.hosts === "grace",
+      lines: [
+        "Grace or Vera class hosts keep a big memory pool beside the GPUs.",
+        "That pool can park the KV cache, so a follow-up spends less time on prefill.",
+        "They cost more and draw a little more power than a standard host.",
+      ],
+      nerd: "Game value: $450k and 12 kW per site. KV parking cuts follow-up prefill.",
+      onPick: () => pick({ hosts: "grace" }),
+    }),
+    picture({
+      key: "hosts-dpu",
+      art: "token",
+      label: "+ BlueField DPUs",
+      hint: "secure multi-tenant",
+      on: choices.hosts === "dpu",
+      lines: [
+        "BlueField-class DPUs move data and keep tenants apart.",
+        "The GPUs are interrupted less, which matters when many customers share a hall.",
+        "They add cost and a little power, and they take the security work off the GPUs.",
+      ],
+      nerd: "Game value: $700k and 8 kW per site. A small tenancy haircut comes off.",
+      onPick: () => pick({ hosts: "dpu" }),
+    }),
   ]
-  tiles[0].addEventListener("click", () => pick({ memory: false }))
-  tiles[1].addEventListener("click", () => pick({ memory: true }))
-  if (uc.orca) {
-    const helper = picture({
-      key: "helper",
-      art: "orca",
-      label: "LAB HELPER",
-      hint: "Finds medicines",
-      on: choices.helper,
-      product: "ORCA PT-3",
-      nerd: "Photonic boson sampling. London Innovation Lab, LHR19",
-    })
-    helper.addEventListener("click", () => pick({ helper: !choices.helper }))
-    tiles.push(helper)
-  }
-  return choiceRow("memory", "MEMORY", "Remembers chats so it doesn't re-read them.", tiles)
+  return choiceRow("hosts", "CPU / DPU", "Hosts beside the GPUs", tiles)
+}
+
+function memoryRow(choices) {
+  const tiles = [
+    picture({
+      key: "memory-off",
+      art: "token",
+      label: "KV cache tier OFF",
+      hint: "re-reads every chat",
+      on: !choices.memory,
+      lines: [
+        "With the KV cache off, the GPU throws away its notes at the end of each chat.",
+        "The next question makes it re-read the whole conversation.",
+        "Leave it off only for one-off questions.",
+      ],
+      nerd: "No saved chats. Prefill runs again on every turn.",
+      onPick: () => pick({ memory: false }),
+    }),
+    picture({
+      key: "memory-on",
+      art: "chest",
+      label: "KV cache tier ON",
+      hint: "remembers the chat",
+      on: choices.memory,
+      lines: [
+        "The KV cache is the GPU's notes on what it already read.",
+        "A KV cache tier parks those notes and reloads them, so a follow-up skips the re-read.",
+        "Turn it on when people keep the conversation going.",
+      ],
+      nerd: `Lead ${KV_TIER.leadWeeks} weeks. Parks the KV cache instead of prefill.`,
+      onPick: () => pick({ memory: true }),
+    }),
+  ]
+  return choiceRow("memory", "MEMORY", "KV cache: remembers chats so it doesn't re-read them", tiles)
 }
 
 function libraryRow(choices) {
-  const products = { none: "", basic: "File & object", smart: "Vector index" }
   const tiles = [
-    ["none", "NONE", "Nothing", "scroll"],
-    ["basic", "BASIC", "A shelf", "vault"],
-    ["smart", "SMART", "Fast find", "gem"],
-  ].map(([id, label, hint, art]) => picture({
+    ["none", "Local only", "scroll", "each server's own drives", [
+      "Each server keeps its own small drives.",
+      "Fine for a chatbot that only needs what it already knows.",
+      "It does not hold a shared search, so looking up company documents is slow.",
+    ]],
+    ["basic", "File & object storage", "vault", "shared documents", [
+      "File and object storage holds the documents and the model files.",
+      "The app can read a document before the model writes the answer.",
+      "The model itself does not search.",
+    ]],
+    ["smart", "Vector index", "gem", "finds the right passages", [
+      "A vector index finds the right passages for retrieval.",
+      "The app turns the question into numbers, searches the index, and pastes the best passages into the prompt.",
+      "The model never searches mid-thought.",
+    ]],
+  ].map(([id, label, art, hint, lines]) => picture({
     key: `library-${id}`,
     art,
     label,
     hint,
     on: choices.library === id,
-    product: products[id],
+    lines,
+    onPick: () => pick({ library: id }),
   }))
-  tiles.forEach((node, index) => {
-    const id = ["none", "basic", "smart"][index]
-    node.addEventListener("click", () => pick({ library: id }))
-  })
-  return choiceRow("library", "LIBRARY", "Finds the right documents fast.", tiles)
+  return choiceRow("library", "STORAGE", "Where documents live", tiles)
 }
 
 function homeRow(choices) {
   const air = byId(HALLS, "A")
+  const rear = byId(HALLS, "R")
+  const row = byId(HALLS, "I")
   const liquid = byId(HALLS, "B")
-  const tiles = [
-    picture({
-      key: "home-cool",
-      art: "fan",
-      label: "AIR-COOLED HALL",
-      hint: "Ready now. Hot computers slow down.",
-      on: choices.home === "cool",
-      nerd: `${air.maxRackKW} kW per rack. PUE ${air.pue}`,
-    }),
-    picture({
-      key: "home-super",
-      art: "rackLiquid",
-      label: "LIQUID-COOLED HALL",
-      hint: "Fits big computers. Weeks to prepare.",
-      on: choices.home === "super",
-      nerd: `${liquid.maxRackKW} kW per rack. PUE ${liquid.pue}`,
-    }),
+  const airLines = [
+    "Air cooling is the fans, in-row coolers and rear door heat exchangers family. The servers breathe air.",
+    `This hall handles up to ${air.maxRackKW} kW per rack and is ready now.`,
+    "Air-cooled GPUs fit. A liquid-cooled GPU overheats and slows down.",
   ]
-  tiles[0].addEventListener("click", () => pick({ home: "cool" }))
-  tiles[1].addEventListener("click", () => pick({ home: "super" }))
-  if (cityChoices(state.plan.useCase)) {
-    for (const count of [1, 2, 3]) {
-      const tile = picture({
-        key: `city-${count}`,
-        art: "user",
-        label: String(count),
-        hint: count === 1 ? "One city" : `${count} cities`,
-        on: choices.cities === count,
-        product: metroLine(state.plan.useCase, count),
-      })
-      tile.addEventListener("click", () => pick({ cities: count }))
-      tiles.push(tile)
-    }
-  }
-  const hint = cityChoices(state.plan.useCase) ? "Closer to people = faster." : "A colder hall holds bigger brains."
-  return choiceRow("home", "HOME", hint, tiles)
+  const liquidLines = [
+    "Coolant goes straight to cold plates on the chips. This is the LIQUID-COOLED HALL.",
+    `Up to ${liquid.maxRackKW} kW per rack, and less power is spent on cooling.`,
+    "Required for NVIDIA GB200 NVL72 and Vera Rubin.",
+  ]
+  const cool = picture({
+    key: "home-cool",
+    art: "fan",
+    label: "AIR-COOLED HALL",
+    hint: `fans, up to ${air.maxRackKW} kW per rack`,
+    on: choices.home === "cool",
+    lines: airLines,
+    nerd: `PUE ${air.pue}. Fit-out ${air.fitOutWeeks} weeks. About 10–40 kW.`,
+    onPick: () => pick({ home: "cool" }),
+  })
+  const wet = picture({
+    key: "home-super",
+    art: "rackLiquid",
+    label: state.nerd ? "Direct Liquid Cooling" : "LIQUID-COOLED HALL",
+    hint: `water to the chip, up to ${liquid.maxRackKW} kW per rack`,
+    on: choices.home === "super",
+    lines: liquidLines,
+    nerd: `PUE ${liquid.pue}. Fit-out ${liquid.fitOutWeeks} weeks. About 100–240 kW.`,
+    onPick: () => pick({ home: "super" }),
+  })
+  if (!state.nerd) return choiceRow("home", "DATA HALL", "How the racks are cooled", [cool, wet])
+  const tiles = [
+    cool,
+    picture({
+      key: "home-row",
+      art: "rackAir",
+      label: "In-row cooling",
+      hint: `${row.maxRackKW} kW · PUE ${row.pue} · ${row.fitOutWeeks} wk`,
+      on: choices.home === "row",
+      lines: [
+        "Coolers sit between the racks, so heat does not cross the whole room.",
+        `Up to ${row.maxRackKW} kW per rack. PUE ${row.pue}. Lead time ${row.fitOutWeeks} weeks.`,
+        "Air-cooled GPUs fit. NVL72 and Vera Rubin still need direct liquid cooling.",
+      ],
+      nerd: `PUE ${row.pue} is a game assumption. Fit-out ${row.fitOutWeeks} weeks.`,
+      onPick: () => pick({ home: "row" }),
+    }),
+    picture({
+      key: "home-rear",
+      art: "rackAir",
+      label: "Rear Door Heat Exchanger",
+      hint: `${rear.maxRackKW} kW · PUE ${rear.pue} · ${rear.fitOutWeeks} wk`,
+      on: choices.home === "rear",
+      lines: [
+        "A water-cooled door captures the hot exhaust. The servers stay air-cooled.",
+        `About 40 to ${rear.maxRackKW} kW per rack. PUE ${rear.pue}. Lead time ${rear.fitOutWeeks} weeks.`,
+        "Strong air-cooled GPUs fit. NVL72 and Vera Rubin still need direct liquid cooling.",
+      ],
+      nerd: `PUE ${rear.pue} is a game assumption. Fit-out ${rear.fitOutWeeks} weeks.`,
+      onPick: () => pick({ home: "rear" }),
+    }),
+    wet,
+  ]
+  return choiceRow("home", "DATA HALL COOLING", "How the racks are cooled", tiles)
 }
 
-function wireRow(choices) {
-  const products = {
-    cheap: "Public internet",
-    fast: "ServiceFabric",
-    private: "Cross connect + ServiceFabric + Dark fiber",
-    mix: "ServiceFabric + MCP mix",
+function siteRow(choices) {
+  const cityMax = MISSION_SITES[state.plan.useCase]?.max || 1
+  const tiles = []
+  for (let count = 1; count <= cityMax; count += 1) {
+    tiles.push(picture({
+      key: `city-${count}`,
+      art: "user",
+      label: siteLabel(count),
+      hint: metroNames(state.plan.useCase, count).join(", "),
+      on: choices.cities === count,
+      lines: siteLearn(state.plan.useCase, count),
+      onPick: () => pick({ cities: count }),
+    }))
   }
+  return choiceRow("sites", "SITES", "Closer to people = faster", tiles)
+}
+
+const LINK_NAMES = {
+  fabric: "ServiceFabric",
+  mcp: "ServiceFabric MCP",
+  cross: "Cross connect",
+  fiber: "Dark fiber",
+  public: "Public internet",
+}
+
+function legWords(name = "") {
+  const plain = String(name).toLowerCase().replace(/\s*→\s*/, " to ")
+  return plain.charAt(0).toUpperCase() + plain.slice(1)
+}
+
+function nerdLegs(result) {
+  return (result?.legResults || [])
+    .filter((leg) => leg.kind && leg.kind !== "off")
+    .map((leg) => {
+      const ms = Number.isFinite(leg.rttS) ? `${Math.round(leg.rttS * 1000)} ms` : ""
+      const speed = Number.isFinite(leg.gbps) ? `${leg.gbps} Gbps` : ""
+      return [legWords(leg.name), LINK_NAMES[leg.kind] || leg.kind, ms, speed].filter(Boolean).join(" ")
+    })
+    .join(". ")
+}
+
+function wireRow(choices, result) {
+  const legs = nerdLegs(result)
   const tiles = [
-    ["cheap", "CHEAP", "Slow road", "gremlin"],
-    ["fast", "FAST", "Quick road", "token"],
-    ["private", "PRIVATE", "Secret road", "chest"],
-    ["mix", "MIX", "Best mix", "gem"],
-  ].map(([id, label, hint, art]) => picture({
-    key: `wires-${id}`,
-    art,
-    label,
-    hint,
-    on: choices.wires === id,
-    product: products[id],
-  }))
-  tiles.forEach((node, index) => {
-    const id = ["cheap", "fast", "private", "mix"][index]
-    node.addEventListener("click", () => pick({ wires: id }))
+    ["cheap", "Public internet", "gremlin", "fine for batch jobs, slow and jittery for live users", [
+      "The public internet is the shared road everyone uses.",
+      "It is fine for batch jobs that can wait, and slow and jittery for live users.",
+      "Your traffic crosses several networks with no promise of a steady delay.",
+    ]],
+    ["peer", "Peering + eyeball networks", "user", "short paths to the ISPs your users are on", [
+      "Peering swaps traffic directly with other networks at an internet exchange.",
+      "Eyeball networks are the ISPs your users are already on, so the path to them is short.",
+      "It is the realistic middle option: better than the open internet, not as steady as a private link.",
+    ]],
+    ["fast", "ServiceFabric", "token", "private links to clouds, partners and other metros in minutes", [
+      "ServiceFabric is a private, on-demand link to clouds, partners and your other metros.",
+      "A connection can go live in minutes once the port exists, and the delay stays predictable.",
+      "ServiceFabric MCP lets an agent configure it for you: same network, faster operations.",
+    ]],
+    ["private", "Cross connect + Dark fiber", "chest", "your own fibre in the building and between your sites", [
+      "A cross connect is your own fibre to a partner in the same building, so the delay is tiny.",
+      "Dark fiber is your own glass between nearby metros, so it pays off with two or three sites.",
+      "Users still reach you over ServiceFabric. Too far for fibre, and the link between sites uses ServiceFabric too.",
+    ]],
+  ].map(([id, label, art, hint, lines]) => {
+    const wrap = picture({
+      key: `wires-${id}`,
+      art,
+      label,
+      hint,
+      on: choices.wires === id,
+      lines,
+      nerd: choices.wires === id ? legs : "",
+      onPick: () => pick({ wires: id }),
+    })
+    if (id === "fast" && state.nerd && choices.wires === "fast") {
+      const toggle = el("button", {
+        type: "button",
+        class: `mcp-toggle${choices.mcp ? " on" : ""}`,
+        "data-key": "wires-mcp",
+        "aria-pressed": choices.mcp ? "true" : "false",
+        title: "Let an agent configure it",
+        text: choices.mcp ? "MCP ON" : "MCP",
+      })
+      toggle.addEventListener("pointerdown", (event) => event.stopPropagation())
+      toggle.addEventListener("click", (event) => {
+        event.stopPropagation()
+        pick({ mcp: !choices.mcp })
+      })
+      wrap.append(toggle)
+    }
+    return wrap
   })
-  return choiceRow("wires", "WIRES", "How the answers travel.", tiles)
+  return choiceRow("wires", "CONNECTION", "How answers travel", tiles)
+}
+
+function orcaRow(choices) {
+  const tiles = [
+    picture({
+      key: "helper",
+      art: "orca",
+      label: choices.helper ? "ORCA PT-3 ON" : "ORCA PT-3 OFF",
+      hint: "photonic quantum accelerator",
+      on: choices.helper,
+      lines: [
+        "ORCA PT-3 is a photonic quantum accelerator that sits beside the GPUs.",
+        "The GPUs build a binding graph of molecule and protein, and ORCA helps find the best match.",
+        "It finds about twice as many strong binders as classical AI, and it does not make tokens faster.",
+      ],
+      nerd: `Lead ${ORCA.leadWeeks} weeks. Photonic boson sampling. London Innovation Lab, LHR19.`,
+      onPick: () => pick({ helper: !choices.helper }),
+    }),
+  ]
+  return choiceRow("orca", "ORCA", "Quantum accelerator for finding medicines", tiles)
+}
+
+/* ---------- The simple board: three decisions, three real tiles each ---------- */
+
+const RACK_ART = { h100: "rackAir", h200: "rackAir", b200: "rackAir", b300: "rackAir", gb200: "rackLiquid", gb300: "rackLiquid", vr: "rackRubin" }
+const SIMPLE_WIRE_ART = { cheap: "gremlin", peer: "user", fast: "token" }
+const SIMPLE_WIRE_LEARN = {
+  cheap: [
+    "The public internet is the shared road everyone uses.",
+    "It is fine for batch jobs that can wait, and slow and jittery for live users.",
+    "Your traffic crosses several networks with no promise of a steady delay.",
+  ],
+  peer: [
+    "Peering swaps traffic directly with other networks at an internet exchange.",
+    "Eyeball networks are the ISPs your users are already on, so the path to them is short.",
+    "It is the realistic middle option: better than the open internet, not as steady as a private link.",
+  ],
+  fast: [
+    "ServiceFabric is a private, on-demand link to clouds, partners and your other metros.",
+    "A connection can go live in minutes once the port exists, and the delay stays predictable.",
+    "Documents and tools in the same building ride a cross connect, so that hop is tiny.",
+  ],
+}
+
+function simpleHallLearn(useCaseId, hall) {
+  const air = byId(HALLS, "A")
+  const liquid = byId(HALLS, "B")
+  if (hall.id === "cool") {
+    return [
+      "Air cooling is the fans, in-row coolers and rear door heat exchangers family. The servers breathe air.",
+      `This hall handles up to ${air.maxRackKW} kW per rack and is ready now.`,
+      "Air-cooled GPUs fit. A liquid-cooled GPU overheats and slows down.",
+    ]
+  }
+  const base = [
+    "Coolant goes straight to cold plates on the chips. This is the LIQUID-COOLED HALL.",
+    `Up to ${liquid.maxRackKW} kW per rack, and less power is spent on cooling.`,
+    "Required for NVIDIA GB200 NVL72 and Vera Rubin.",
+  ]
+  if (hall.id === "super") return base
+  if (cityChoices(useCaseId)) return [base[0], ...siteLearn(useCaseId, 2).slice(0, 3)]
+  return [base[0], "The KV memory tier parks the GPU's notes on each chat, so a follow-up skips the re-read.", "Turn it on when people keep the conversation going."]
+}
+
+/** What the simple board decided for the player, shown as small chips so nothing is hidden. */
+function includedChips(useCaseId, choices) {
+  const uc = byId(USE_CASES, useCaseId)
+  const chips = []
+  if (choices.memory) chips.push("KV memory on")
+  const library = autoLibrary(useCaseId)
+  if (library === "smart") chips.push("Vector index included")
+  if (library === "basic") chips.push("File & object storage included")
+  if (uc?.orca) chips.push("ORCA PT-3 included")
+  return chips
+}
+
+function simpleRows(choices) {
+  const id = state.plan.useCase
+  const tiles = simpleTiles(id)
+  const picks = simplePicks(id, choices)
+  const choose = (patch) => pick(simpleToChoices(id, { ...picks, ...patch }))
+  const gpus = tiles.brains.map((tile) => picture({
+    key: `brains-${tile.id}`,
+    art: RACK_ART[tile.platform?.id] || "rackAir",
+    label: `NVIDIA ${tile.label}`,
+    hint: tile.hint,
+    on: picks.brains === tile.id,
+    lines: GPU_LEARN[tile.platform?.id] || ["A rack of GPUs."],
+    onPick: () => choose({ brains: tile.id }),
+    scale: 3,
+  }))
+  const halls = tiles.halls.map((tile) => picture({
+    key: `hall-${tile.id}`,
+    art: tile.id === "cool" ? "fan" : tile.id === "super" ? "pipe" : cityChoices(id) ? "user" : "chest",
+    label: tile.label,
+    hint: tile.hint,
+    on: picks.hall === tile.id,
+    lines: simpleHallLearn(id, tile),
+    onPick: () => choose({ hall: tile.id }),
+    scale: 3,
+  }))
+  const wires = tiles.wires.map((tile) => picture({
+    key: `wires-${tile.id}`,
+    art: SIMPLE_WIRE_ART[tile.id],
+    label: tile.label,
+    hint: tile.hint,
+    on: picks.wires === tile.id,
+    lines: SIMPLE_WIRE_LEARN[tile.id],
+    onPick: () => choose({ wires: tile.id }),
+    scale: 3,
+  }))
+  return [
+    choiceRow("brains", "GPU", "The computers that run the AI", gpus),
+    choiceRow("home", "DATA HALL", "Cooling and where the racks live", halls),
+    choiceRow("wires", "CONNECTION", "How answers travel", wires),
+  ]
+}
+
+/** Two gauges, the crowd, one coach line and GO. Nothing a first-time visitor has to decode. */
+function simpleFeel(result) {
+  const spend = result.budgetSpend || 0
+  const budget = result.budget || 1
+  const late = result.lateWeeks > 0
+  const timePct = result.liveWeeks / Math.max(result.scenario?.deadlineWeeks || 1, result.liveWeeks, 1)
+  const mood = crowdMood(result)
+  const happy = mood === "happy" && !late && !result.overBudget && !result.overPower
+  return el("aside", { class: "feel simple" }, [
+    gauge("MONEY", spend / budget, result.overBudget ? "TOO MUCH" : "OK", { bad: result.overBudget, key: "budget", art: "token" }),
+    gauge("TIME", Math.min(1, timePct), late ? "LATE" : "ON TIME", { bad: late, key: "golive", art: "scroll" }),
+    el("div", { class: `crowd ${mood}`, "data-mood": mood, "aria-label": mood === "happy" ? "People are happy" : "People are waiting" }, [
+      spriteImg(mood === "happy" ? "user" : "gremlin", 4),
+      spriteImg(mood === "happy" ? "user" : "gremlin", 4),
+      spriteImg(mood === "happy" ? "user" : "gremlin", 4),
+      spriteImg(mood === "happy" ? "hero" : "gremlin", 4),
+      el("span", { class: "crowd-word", text: mood === "happy" ? "HAPPY" : "WAITING" }),
+    ]),
+    el("div", { class: `coach${happy ? " ok" : ""}`, "data-key": "coach" }, [
+      spriteImg("prof", 3),
+      el("p", { text: boothCoach(result) }),
+    ]),
+    btn("GO", () => startRun(), { kind: "big run", key: "run", sound: "start", disabled: !result.ok }),
+    btn("NERD MODE", toggleNerd, { kind: "ghost nerd-toggle", key: "nerd", pressed: false, sound: "blip" }),
+  ])
 }
 
 function gauge(label, pct, text, { bad = false, key = null, art = null } = {}) {
@@ -770,11 +1272,6 @@ function feel(result) {
       spriteImg(mood === "happy" ? "user" : "gremlin", 3),
       spriteImg(mood === "happy" ? "hero" : "gremlin", 3),
     ]),
-    el("div", { class: "score-row", "data-key": "score" }, [
-      el("span", { class: "fine", text: "SCORE" }),
-      el("strong", { text: formatScore(result.score) }),
-      starRow(stars(result), 2),
-    ]),
     el("div", { class: `coach${happy ? " ok" : ""}`, "data-key": "coach" }, [
       spriteImg("prof", 3),
       el("p", { text: advice }),
@@ -784,25 +1281,85 @@ function feel(result) {
   ])
 }
 
+const SITE_ROLES = [
+  ["inference", "Infer", "Serves people here. This is what counts for speed."],
+  ["training", "Train", "A separate job. It does not answer people. Enough of it makes answers a little better, and it does not make the first word faster."],
+  ["edge", "Edge", "A small cache near people. The answer is still written at an inference site, one hop away."],
+]
+
+function currentPlans(result) {
+  const sites = result.sites || []
+  const brain = brainPick(state.plan.useCase, state.plan.choices.brains)
+  const defaults = defaultSitePlans(result.platform, brain.racks, sites)
+  const saved = state.plan.choices.sitePlans
+  if (!saved?.length) return defaults
+  return sites.map((site, index) => {
+    const found = saved.find((item) => item.id === site.id)
+    return found ? { id: site.id, role: found.role || "inference", powerMW: Number(found.powerMW) || 0 } : defaults[index]
+  })
+}
+
+function siteDesigner(result) {
+  const sites = result.sites || []
+  if (sites.length < 2 || !result.platform) return null
+  const plans = currentPlans(result)
+  const commit = (next) => pick({
+    sitePlans: next.map((item) => ({ id: item.id, role: item.role, powerMW: Math.round(item.powerMW * 100) / 100 })),
+  })
+  return el("div", { class: "site-designer", "data-key": "site-designer" }, [
+    el("h4", { text: "EACH SITE" }),
+    el("p", { class: "fine", text: "Inference serves people. Training does not answer anyone. An edge site is a small cache, then one hop to an inference site." }),
+    ...sites.map((site) => {
+      const plan = plans.find((item) => item.id === site.id) || { role: "inference", powerMW: 0 }
+      return el("div", { class: "site-plan" }, [
+        el("b", { text: site.metro }),
+        el("span", { class: "fine", text: `${plan.powerMW.toFixed(2)} MW` }),
+        el("button", { type: "button", class: "step", text: "−", "aria-label": `Less power in ${site.metro}`, onclick: () => commit(plans.map((item) => item.id === site.id ? { ...item, powerMW: Math.max(0, item.powerMW - 0.05) } : item)) }),
+        el("button", { type: "button", class: "step", text: "+", "aria-label": `More power in ${site.metro}`, onclick: () => commit(plans.map((item) => item.id === site.id ? { ...item, powerMW: item.powerMW + 0.05 } : item)) }),
+        ...SITE_ROLES.map(([role, label, hint]) => el("button", {
+          type: "button",
+          class: `step${plan.role === role ? " on" : ""}`,
+          text: label,
+          title: hint,
+          "aria-pressed": plan.role === role ? "true" : "false",
+          onclick: () => commit(plans.map((item) => item.id === site.id ? { ...item, role } : item)),
+        })),
+      ])
+    }),
+    result.powerThrottle < 1 ? el("p", { class: "fine", text: "Too much power for this hall, so the racks slow down." }) : null,
+  ])
+}
+
 function gameScreen() {
   const uc = useCase()
   const choices = state.plan.choices
   const result = live()
   const story = STORIES[uc.id] || { line: uc.blurb, sprite: uc.icon }
-  return el("section", { class: "screen game" }, [
+  const rows = state.nerd ? [
+    brainRow(choices),
+    hostRow(choices),
+    memoryRow(choices),
+    libraryRow(choices),
+    homeRow(choices),
+    cityChoices(uc.id) ? siteRow(choices) : null,
+    wireRow(choices, result),
+    uc.orca ? orcaRow(choices) : null,
+  ].filter(Boolean) : simpleRows(choices)
+  const chips = state.nerd ? [] : includedChips(uc.id, choices)
+  return el("section", { class: `screen game${state.nerd ? " nerd" : " simple"}` }, [
     el("div", { class: "story", "data-key": "story" }, [
       spriteImg(story.sprite, 4),
       el("p", { class: "story-line", text: story.line }),
-      btn("NEW STORY", nextStory, { kind: "big", key: "new-story" }),
+      chips.length ? el("p", { class: "included", "data-key": "included" }, chips.map((chip) => el("span", { class: "chip", text: chip }))) : null,
+      btn("NEW STORY", openStories, { kind: "big", key: "new-story" }),
     ]),
-    el("div", { class: "choices" }, [
-      brainRow(choices),
-      memoryRow(uc, choices),
-      libraryRow(choices),
-      homeRow(choices),
-      wireRow(choices),
-    ]),
-    feel(result),
+    el("div", { class: "choices", style: `grid-template-rows: repeat(${rows.length}, minmax(0, 1fr))` }, rows),
+    state.nerd ? el("aside", { class: "think", "data-key": "think", "aria-label": "How we think" }, [
+      el("h3", { text: "HOW WE THINK" }),
+      siteDesigner(result),
+      ...thinkLines(result).map((line) => el("p", { text: line })),
+    ]) : null,
+    state.nerd ? feel(result) : simpleFeel(result),
     el("p", { class: "fine price-note", text: "Game numbers are estimates." }),
     el("div", { class: "run-overlay", id: "run-overlay", hidden: true }, [
       el("div", { class: "crt" }, [el("canvas", { class: "floor-canvas", id: "floor-canvas", "aria-label": "Your factory at work" })]),
@@ -817,7 +1374,7 @@ function gameScreen() {
 
 /* ---------- Run ---------- */
 
-const RUN_PHASES = ["PEOPLE ARRIVE", "WIRES HUM", "BRAINS THINK", "ANSWERS POP OUT"]
+const RUN_PHASES = ["PEOPLE ARRIVE", "LINKS HUM", "GPUS THINK", "ANSWERS POP OUT"]
 
 function startRun() {
   if (state.running) return
@@ -962,46 +1519,74 @@ function showResult() {
       ? el("p", { class: "banner", text: "PERSONAL BEST!" })
       : el("p", { class: "banner dim", text: `YOUR BEST STAYS ${formatScore(prevBest)}` })
   const root = document.getElementById("result")
-  root.replaceChildren(
-    el("div", { class: "dialog panel result", role: "dialog", "aria-modal": "true", "aria-labelledby": "result-title" }, [
-      el("div", { class: "result-head" }, [
-        spriteImg(newHigh ? "trophy" : uc.icon, 5),
-        el("div", {}, [
-          el("p", { class: "card-kicker", text: story }),
-          el("h2", { id: "result-title", text: "SCORE" }),
-          el("p", { class: "big-score", text: formatScore(result.score) }),
-          starRow(stars(result), 3),
-          banner,
-        ]),
-        el("div", { class: "rank-box" }, [
-          el("span", { class: "fine", text: "RANK" }),
-          el("strong", { text: ordinal(rank) }),
-          el("span", { class: "fine", text: `OF ${players}` }),
-        ]),
-      ]),
+  const head = el("div", { class: "result-head" }, [
+    spriteImg(newHigh ? "trophy" : uc.icon, 5),
+    el("div", {}, [
+      el("p", { class: "card-kicker", text: story }),
+      el("h2", { id: "result-title", text: "SCORE" }),
+      el("p", { class: "big-score", text: formatScore(result.score) }),
+      starRow(stars(result), 3),
+      banner,
+    ]),
+    el("div", { class: "rank-box" }, [
+      el("span", { class: "fine", text: "RANK" }),
+      el("strong", { text: ordinal(rank) }),
+      el("span", { class: "fine", text: `OF ${players}` }),
+    ]),
+  ])
+  const buttons = el("div", { class: "row end" }, [
+    btn("PLAY AGAIN", () => {
+      closeDialog("result")
+      goto("game")
+    }, { kind: "ghost", key: "again" }),
+    btn("NEXT PLAYER", resetRun, { kind: "big", key: "next-player" }),
+  ])
+  const footer = el("p", { class: "dr-footer", "data-key": "dr-footer" }, [
+    el("b", { text: "DIGITAL REALTY" }),
+    el("span", { text: DR_FOOTER }),
+  ])
+  const syncLine = el("p", { class: "sync-line", "data-key": "sync-line", text: state.syncLine || syncStatusLine(null, { rank, players }) })
+  const children = state.nerd
+    ? [
+      head,
       el("div", { class: `people-card${blocked || result.annualSavings < 0 ? " bad" : ""}`, "data-key": "people-card" }, [
         spriteImg("user", 4),
         blocked ? el("p", { class: "blocked-line", "data-key": "blocked-line", text: blocked.text }) : null,
         el("p", { class: "people-lead", text: peopleLead(result) }),
         el("p", { text: hoursLine(result.humanHoursPerYear) }),
         el("p", { class: `savings-line${blocked ? " if-only" : ""}`, text: savingsLine(result) }),
-        state.nerd ? el("p", { class: "fine nerd", text: nerdPeopleLine(result) }) : null,
+        el("p", { class: "fine nerd", text: nerdPeopleLine(result) }),
       ]),
       el("section", { class: "explain", "data-key": "explain", "aria-label": explained.title }, [
         el("h3", { text: explained.title }),
         el("ul", {}, explained.lines.map((line) => el("li", { "data-line": line.id, text: line.show }))),
       ]),
       el("p", { class: "beat-line", "data-key": "beat-line", text: beatLine(players, rank) }),
-      el("p", { class: "sync-line", "data-key": "sync-line", text: state.syncLine || syncStatusLine(null, { rank, players }) }),
+      syncLine,
       el("div", { class: "coach" }, [spriteImg("prof", 3), el("p", { text: plainCoach(result) })]),
-      el("div", { class: "row end" }, [
-        btn("PLAY AGAIN", () => {
-          closeDialog("result")
-          goto("game")
-        }, { kind: "ghost", key: "again" }),
-        btn("NEXT PLAYER", resetRun, { kind: "big", key: "next-player" }),
+      buttons,
+      footer,
+    ]
+    : [
+      head,
+      el("p", { class: "headline", "data-key": "headline", text: explained.headline }),
+      el("div", { class: `people-card${blocked || result.annualSavings < 0 ? " bad" : ""}`, "data-key": "people-card" }, [
+        spriteImg("user", 4),
+        blocked ? el("p", { class: "blocked-line", "data-key": "blocked-line", text: blocked.text }) : null,
+        el("p", { class: "people-lead", text: peopleLead(result) }),
+        el("p", { class: `savings-line${blocked ? " if-only" : ""}`, text: savingsLine(result) }),
       ]),
-    ]),
+      el("div", { class: `coach${explained.suggestion.better ? "" : " ok"}`, "data-key": "next-step" }, [
+        spriteImg("prof", 3),
+        el("p", { text: explained.suggestion.text }),
+      ]),
+      el("p", { class: "beat-line", "data-key": "beat-line", text: beatLine(players, rank) }),
+      syncLine,
+      buttons,
+      footer,
+    ]
+  root.replaceChildren(
+    el("div", { class: `dialog panel result${state.nerd ? "" : " simple"}`, role: "dialog", "aria-modal": "true", "aria-labelledby": "result-title" }, children),
   )
   root.hidden = false
   root.querySelector('[data-key="next-player"]')?.focus()
@@ -1200,6 +1785,14 @@ muteBtn.addEventListener("click", () => {
   if (!isMuted()) play("blip")
 })
 document.addEventListener("pointerdown", () => unlock(), { capture: true })
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeLearn()
+})
+document.addEventListener("pointerdown", (event) => {
+  if (!learnPop) return
+  if (event.target?.closest?.(".learn-pop, .learn-btn")) return
+  closeLearn()
+})
 
 document.getElementById("present").addEventListener("click", async () => {
   try {
@@ -1216,5 +1809,8 @@ document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return
   if (!document.getElementById("staff").hidden) closeDialog("staff")
 })
+
+const stamp = document.getElementById("build-stamp")
+if (stamp) stamp.textContent = `BUILD ${BUILD.stamp}`
 
 goto("title")

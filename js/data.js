@@ -334,7 +334,29 @@ export const NETWORKS = [
     orcaRetain: 0.35,
     does: "Transit from an ISP. Cheap per month, but slow, jittery, lossy, and with no SLA.",
     learn:
-      "ISP transit over other people's routers, with nothing private to configure, an install of days to weeks (game: 3 weeks), and about $3,000 a month for 10 Gbps (estimate); it is the slowest path, with no SLA, so tokens arrive late.",
+      "ISP transit over other people's routers, with nothing private to configure, an install of days to weeks (game: 3 weeks), and about $3,000 a month for 10 Gbps (estimate); it is the slowest path, with no SLA: live users see late, jittery tokens; batch jobs just move data more slowly.",
+  },
+  {
+    id: "peer",
+    name: "Peering at an IX",
+    short: "PEER",
+    gbps: 10,
+    orcaLocal: false,
+    orcaRetain: 0.4,
+    does: "Exchange traffic directly with other networks at an internet exchange, so the path is shorter than transit.",
+    learn:
+      "Peering at an internet exchange hands traffic straight to the other network instead of paying a transit ISP to carry it. The path is shorter than the public internet and still has some jitter. Game assumption: a few milliseconds of exchange delay on top of a slightly longer route.",
+  },
+  {
+    id: "eye",
+    name: "Eyeball-adjacent",
+    short: "EYEBALL",
+    gbps: 10,
+    orcaLocal: false,
+    orcaRetain: 0.45,
+    does: "Sit close to the ISPs your customers are on, so their traffic takes a short hop.",
+    learn:
+      "Eyeball networks are the ISPs people and devices actually use. A metro next to those networks cuts the distance. It is still a shared path, steadier than transit and not as private as ServiceFabric. Game assumption: the same fibre distance plus a small hop.",
   },
 ]
 
@@ -362,7 +384,7 @@ export const USE_CASES = [
       { id: "inter", name: "INTER-SITE", hint: "only with 2–3 metros", role: "inter", dest: "metro", trips: 0.4, bw: 0.35, jitter: 0.5, sensitive: true, critical: true, when: "multi" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "internet", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.39761734572313556,
+    parCost: 0.38394,
     worth: 2,
     bytesPerToken: 40,
     toolCalls: 0,
@@ -395,7 +417,7 @@ export const USE_CASES = [
       { id: "store", name: "SITE → DOCUMENTS", hint: "retrieval round trips", role: "data", dest: "cloud", trips: 2, bw: 1, jitter: 0.8, sensitive: true, critical: true, when: "always" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "cloud", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 1.194070821964497,
+    parCost: 1.2167,
     worth: 8,
     bytesPerToken: 500,
     toolCalls: 0,
@@ -429,7 +451,7 @@ export const USE_CASES = [
       { id: "inter", name: "INTER-SITE", hint: "only with 2–3 metros", role: "inter", dest: "metro", trips: 1, bw: 0.3, jitter: 0.5, sensitive: true, critical: true, when: "multi" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "partner", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.5454977429318127,
+    parCost: 0.6168795154317753,
     worth: 10,
     bytesPerToken: 180,
     toolCalls: 8,
@@ -462,7 +484,7 @@ export const USE_CASES = [
       { id: "data", name: "SITE → DATA / CLOUD", hint: "retrieval · tool trips", role: "data", dest: "cloud", trips: 10, bw: 0.7, jitter: 0.7, sensitive: true, critical: true, when: "always" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "internet", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.19841918778958847,
+    parCost: 0.2023,
     worth: 6,
     bytesPerToken: 160,
     toolCalls: 10,
@@ -491,6 +513,8 @@ export const USE_CASES = [
     netDest: { user: "partner", retrieval: "partner" },
     netWhy: "The lab ships bulk data to the site. ORCA sits in the same hall as the GPUs.",
     legs: [
+      // slaExempt (game assumption): the bulk lab leg pays no jitter or SLA haircut on the public
+      // internet; only the link's bandwidth limits how many candidates are screened per hour.
       { id: "lab", name: "LAB / DATA → SITE", hint: "bulk · latency-insensitive", role: "lab", dest: "partner", trips: 0.05, bw: 6, jitter: 0, sensitive: false, critical: true, when: "always", slaExempt: true },
       { id: "orca", name: "GPU ↔ ORCA", hint: "same-hall hand-off", role: "orca", dest: "partner", trips: 1, bw: 0.15, jitter: 0.2, sensitive: false, critical: false, when: "orca" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "partner", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
@@ -504,7 +528,40 @@ export const USE_CASES = [
     data: "required",
     orca: true,
     learn:
-      "Not a chat. GPUs screen candidates and build the binding graph. ORCA can raise the value of each hit. Tokens per second stay the same; a good hit is worth more. Batch work, so total value matters more than a snappy first token.",
+      "Not a chat. GPUs screen candidates and build the binding graph. ORCA can raise the value of each hit. Tokens per second stay the same; a good hit is worth more. Batch work, so total value matters more than a snappy first token. Game assumption: the lab's bulk data rides the public internet without a jitter or SLA penalty; a slower link just screens fewer candidates per hour.",
+  },
+  {
+    id: "robot",
+    name: "Robotics",
+    npc: "Bolt",
+    icon: "hero",
+    blurb: "Robot fleets on a factory floor need answers in milliseconds.",
+    model: "8B vision-language-action",
+    activeB: 8,
+    weightsGB: 8,
+    moe: false,
+    ctx: 512,
+    outTokens: 64,
+    kvMBPerTok: 0.02,
+    tps: 80,
+    ttft: 0.05,
+    demand: 220000,
+    netDest: { user: "partner" },
+    netWhy: "Robots sit on a private factory network. The public internet is too slow and too jittery for a 50 ms answer.",
+    legs: [
+      { id: "users", name: "FACTORY → SITE", hint: "ingress · milliseconds", role: "ingress", dest: "partner", trips: 2, bw: 1.2, jitter: 2, sensitive: true, critical: true, when: "always" },
+      { id: "inter", name: "INTER-SITE", hint: "only with 2 metros", role: "inter", dest: "metro", trips: 0.4, bw: 0.3, jitter: 1, sensitive: true, critical: true, when: "multi" },
+      { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "partner", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
+    ],
+    parCost: 0.13557,
+    worth: 2,
+    bytesPerToken: 48,
+    toolCalls: 0,
+    activeShare: 0.4,
+    reuse: 0.55,
+    data: "none",
+    learn:
+      "A physical-AI workload: small prompts, a very tight time to first token, and a steady stream of requests from robots in one or two industrial metros. The public internet misses the deadline. A nearby metro, a private path, and isolated hosts keep the line moving.",
   },
 ]
 
@@ -517,11 +574,12 @@ export const USE_CASES = [
  * `pricePerM` is what the customer pays per million good tokens (game estimate).
  */
 export const SCENARIOS = {
-  chat: { where: "Shoppers in Europe and North America", budget: 9_000_000, powerMW: 0.6, deadlineWeeks: 16, pricePerM: 0.55 },
+  chat: { where: "Shoppers in London and Frankfurt", budget: 9_000_000, powerMW: 0.6, deadlineWeeks: 16, pricePerM: 0.55 },
   rag: { where: "Staff at a London head office", budget: 8_500_000, powerMW: 0.5, deadlineWeeks: 20, pricePerM: 1.9 },
-  code: { where: "Developers across North America", budget: 9_000_000, powerMW: 0.6, deadlineWeeks: 26, pricePerM: 1.1 },
+  code: { where: "Developers on the US east and west coasts", budget: 9_000_000, powerMW: 0.6, deadlineWeeks: 26, pricePerM: 1.1 },
   research: { where: "Analysts in London and Paris", budget: 9_000_000, powerMW: 0.8, deadlineWeeks: 36, pricePerM: 0.4 },
   drug: { where: "A lab in Cambridge, UK", budget: 8_000_000, powerMW: 0.7, deadlineWeeks: 30, pricePerM: 0.1 },
+  robot: { where: "Factory floors near Frankfurt and Amsterdam", budget: 9_000_000, powerMW: 0.5, deadlineWeeks: 16, pricePerM: 0.8 },
 }
 
 export const HORIZON_WEEKS = 52
@@ -538,14 +596,16 @@ export const HORIZON_WEEKS = 52
  *   code     — engineer task, 25 minutes, 50%, engineer $160k, cap 8,000
  *   research — analyst report, 90 minutes, 50%, analyst $130k, cap 3,000
  *   drug     — computational-chemist triage, 3 minutes, 60%, chemist $150k, cap 2,000
+ *   robot    — operator intervention avoided, 2 minutes, 30%, operator $75k, cap 1,500
  */
 export const FTE_HOURS = 1800
 export const HUMAN_WORK = {
-  chat: { tokensPerTask: 300, humanMinutes: 1.5, share: 0.35, loadedCost: 55_000, fteCap: 25_000, savingsPar: 620042267.6326987 },
+  chat: { tokensPerTask: 300, humanMinutes: 1.5, share: 0.35, loadedCost: 55_000, fteCap: 25_000, savingsPar: 678521449 },
   rag: { tokensPerTask: 400, humanMinutes: 4, share: 0.4, loadedCost: 90_000, fteCap: 10_000, savingsPar: 530452420.0149035 },
   code: { tokensPerTask: 800, humanMinutes: 25, share: 0.5, loadedCost: 160_000, fteCap: 8_000, savingsPar: 822875190.6740854 },
   research: { tokensPerTask: 4000, humanMinutes: 90, share: 0.5, loadedCost: 130_000, fteCap: 3_000, savingsPar: 257211644.2215515 },
   drug: { tokensPerTask: 500, humanMinutes: 3, share: 0.6, loadedCost: 150_000, fteCap: 2_000, savingsPar: 287768261.6 },
+  robot: { tokensPerTask: 64, humanMinutes: 2, share: 0.3, loadedCost: 75_000, fteCap: 1_500, savingsPar: 85895704 },
 }
 
 export const SITES = [
@@ -562,15 +622,10 @@ export const SITES = [
 /** Where each mission's users sit (game assumption). Shares sum to 1. */
 export const USER_BASES = {
   chat: {
-    name: "Shoppers in Europe and North America",
+    name: "Shoppers in London and Frankfurt",
     places: [
-      { city: "London", lat: 51.51, lon: -0.13, share: 0.2 },
-      { city: "Madrid", lat: 40.42, lon: -3.7, share: 0.15 },
-      { city: "Berlin", lat: 52.52, lon: 13.4, share: 0.15 },
-      { city: "Warsaw", lat: 52.23, lon: 21.01, share: 0.1 },
-      { city: "New York", lat: 40.71, lon: -74.01, share: 0.2 },
-      { city: "Chicago", lat: 41.88, lon: -87.63, share: 0.1 },
-      { city: "Los Angeles", lat: 34.05, lon: -118.24, share: 0.1 },
+      { city: "London", lat: 51.51, lon: -0.13, share: 0.6 },
+      { city: "Frankfurt", lat: 50.11, lon: 8.68, share: 0.4 },
     ],
   },
   rag: {
@@ -578,13 +633,12 @@ export const USER_BASES = {
     places: [{ city: "London", lat: 51.51, lon: -0.13, share: 1 }],
   },
   code: {
-    name: "Developers across North America",
+    name: "Developers on the US east and west coasts",
     places: [
-      { city: "New York", lat: 40.71, lon: -74.01, share: 0.25 },
-      { city: "Toronto", lat: 43.65, lon: -79.38, share: 0.1 },
-      { city: "Austin", lat: 30.27, lon: -97.74, share: 0.2 },
-      { city: "San Francisco", lat: 37.77, lon: -122.42, share: 0.3 },
-      { city: "Seattle", lat: 47.61, lon: -122.33, share: 0.15 },
+      { city: "New York", lat: 40.71, lon: -74.01, share: 0.4 },
+      { city: "Toronto", lat: 43.65, lon: -79.38, share: 0.25 },
+      { city: "San Francisco", lat: 37.77, lon: -122.42, share: 0.25 },
+      { city: "Seattle", lat: 47.61, lon: -122.33, share: 0.1 },
     ],
   },
   research: {
@@ -598,6 +652,13 @@ export const USER_BASES = {
     name: "Lab in Cambridge, UK",
     places: [{ city: "Cambridge", lat: 52.2, lon: 0.12, share: 1 }],
   },
+  robot: {
+    name: "Factory floors in Germany and the Netherlands",
+    places: [
+      { city: "Stuttgart", lat: 48.78, lon: 9.18, share: 0.7 },
+      { city: "Rotterdam", lat: 51.92, lon: 4.48, share: 0.3 },
+    ],
+  },
 }
 
 /**
@@ -605,12 +666,18 @@ export const USER_BASES = {
  * wait (users bounce, agents stall) — a game assumption. Chat and code default to two metros.
  */
 export const MISSION_SITES = {
-  chat: { max: 3, defaults: ["lon", "iad"], sense: 3, toolsNearUsers: false },
-  rag: { max: 1, defaults: ["lon"], sense: 0.3, toolsNearUsers: false },
-  code: { max: 3, defaults: ["iad", "sjc"], sense: 0.6, toolsNearUsers: true },
-  research: { max: 1, defaults: ["lon"], sense: 0.1, toolsNearUsers: false },
-  drug: { max: 1, defaults: ["lon"], sense: 0, toolsNearUsers: false },
+  chat: { max: 3, defaults: ["lon", "fra"], sense: 3, toolsNearUsers: false, spread: true, closeKm: 300 },
+  rag: { max: 1, defaults: ["lon"], sense: 0.3, toolsNearUsers: false, spread: false, closeKm: 99999 },
+  code: { max: 3, defaults: ["iad", "sjc"], sense: 0.6, toolsNearUsers: true, spread: true, closeKm: 1400 },
+  research: { max: 1, defaults: ["lon"], sense: 0.1, toolsNearUsers: false, spread: false, closeKm: 99999 },
+  drug: { max: 1, defaults: ["lon"], sense: 0, toolsNearUsers: false, spread: false, closeKm: 99999 },
+  robot: { max: 2, defaults: ["fra"], sense: 8, toolsNearUsers: false, spread: true, closeKm: 220 },
 }
+
+/** Training quality bonus caps here. Game assumption, not a published training result. */
+export const TRAIN_BONUS_CAP = 0.08
+/** Share of an edge cohort that still arrives late, because generation is one hop away. */
+export const EDGE_LATE = 0.05
 
 /** One plain sentence per choice: what it does for you. */
 export const DOES = {
@@ -645,6 +712,32 @@ export const HALLS = [
     pue: 1.38,
     learn:
       "Your space in an air-cooled PlatformDIGITAL hall: 24 rack positions and ready now. This game cools a rack at 40 kW. A liquid rack still runs here, but it overheats. PUE 1.38 is Digital Realty's published portfolio figure, used here as this hall's overhead.",
+  },
+  {
+    id: "R",
+    name: "Rear-door hall",
+    kind: "Rear door heat exchanger",
+    cooling: "air",
+    itMW: 0.4,
+    rackSpace: 18,
+    fitOutWeeks: 6,
+    maxRackKW: 70,
+    pue: 1.28,
+    learn:
+      "A water-cooled door on the rack captures the hot exhaust. The servers stay air-cooled. This game allows about 40 to 70 kW per rack, with a 6 week fit-out. PUE 1.28 is a game assumption. NVL72 and Vera Rubin still need direct liquid cooling.",
+  },
+  {
+    id: "I",
+    name: "In-row hall",
+    kind: "In-row cooling",
+    cooling: "air",
+    itMW: 0.35,
+    rackSpace: 20,
+    fitOutWeeks: 4,
+    maxRackKW: 55,
+    pue: 1.32,
+    learn:
+      "Close-coupled coolers sit between the racks, so the heat does not cross the whole room. This game allows about 55 kW per rack, ready in 4 weeks. PUE 1.32 is a game assumption. Liquid GPUs still throttle here.",
   },
   {
     id: "B",
