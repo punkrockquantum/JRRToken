@@ -79,13 +79,19 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
       "Round 1: 812 → Round 2: 1,400 (+588)", league entry keeps round1 and round2 (`js/rounds.js`)
 - [x] Tests: `tests/simple.test.js` balance block, `tests/eco.test.js` rounds block
 
-## P6 — Nerd reference architectures `TODO`
+## P6 — Nerd reference architectures `DONE`
 
-- [ ] `js/refarch.js`: 3–4 anonymised OEM designs per GPU platform from public datasheets
-      (GPUs/node, U, CPU, memory, NICs, NVMe, node power, cooling, nodes/rack, racks, lead)
-- [ ] Source URL in code comments only
-- [ ] Nerd GPU step shows the designs; player text never names a vendor
-- [ ] Test bans `Dell|Supermicro|HPE|Hewlett|Lenovo|Cray|PowerEdge|ThinkSystem` in player text
+- [x] `js/refarch.js`: 3–4 anonymised OEM designs per GPU platform from public datasheets
+      (GPUs/node, U, CPU, memory, NICs, NVMe, node power, cooling, nodes/rack, racks, lead):
+      Hopper nodes shared by H100 / H200, B200 and B300 nodes, GB200 / GB300 / Vera Rubin NVL72 racks
+      (`designFacts`, `nodesPerRack` = rack height or hall power cap, `racksNeeded`, `leadBand` ± 1 wk)
+- [x] Source URL in code comments only (asserted: no URL survives comment stripping)
+- [x] Nerd GPU step shows the designs (`refarchPanel` in `js/main.js`, `.ra-card`); a pick stores `choices.refarch`,
+      `evaluateBuild` applies `withDesign` (rack power ≤ 10%, lead ≤ 4 wk, price ≤ 10%, GPUs never change) and
+      `result.cabinets` counts the racks the design really fills; a new GPU tile drops another platform's design;
+      the simple board forgets the design. Player text never names a vendor
+- [x] Test bans `Dell|Supermicro|HPE|Hewlett|Lenovo|Cray|PowerEdge|ThinkSystem` in player text and in every
+      non-comment line of `js/`, `css/` and `index.html` (`tests/refarch.test.js`)
 
 ## P7 — Results: HOW DIGITAL REALTY WOULD HAVE HELPED `TODO`
 
