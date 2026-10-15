@@ -1,4 +1,5 @@
-import { DATA_HOMES, SCENARIOS, SITES, USE_CASES, byId } from "./data.js"
+import { DATA_HOMES, PLATFORMS, SCENARIOS, SITES, USE_CASES, byId } from "./data.js"
+import { designCard, designFor, designLines, designsFor, referenceDesign } from "./refarch.js"
 import { BUILD } from "./build-info.js"
 import { DR_FOOTER, explainResult, thinkLines } from "./explain.js"
 import { ecoHint, ecoQuestion, ecoSummary, ecosystem } from "./eco.js"
@@ -873,8 +874,9 @@ function stepPanel(stepId, result) {
     return wrap
   })
   const selected = tiles.find(isOn)
-  // The wires step carries its nerd detail on every tile's TOKEN IMPACT strip, not under the grid.
-  const nerdLine = state.nerd && stepId !== "wires" ? selected?.nerd || "" : ""
+  // The wires step carries its nerd detail on every tile's TOKEN IMPACT strip, not under the grid;
+  // the GPU step carries it in the reference-architecture panel's title.
+  const nerdLine = state.nerd && stepId !== "wires" && stepId !== "gpu" ? selected?.nerd || "" : ""
   const max = maxMetros(id)
   const subtitle = stepId === "location"
     ? `${step.hint}${max > 1 ? `: pick up to ${max}` : ""}. ${metroSummary(id, choices)}`
@@ -889,7 +891,60 @@ function stepPanel(stepId, result) {
     stepId === "location" ? tinyMap(id, choices) : null,
     el("div", { class: `tiles count-${wraps.length}` }, wraps),
     nerdLine ? el("p", { class: "row-nerd", "data-key": "step-nerd", text: nerdLine }) : null,
+    stepId === "gpu" && state.nerd ? refarchPanel(result, selected) : null,
     stepNav(stepId),
+  ])
+}
+
+/**
+ * Nerd GPU step: the reference architectures behind the chosen rack, one small card each, the
+ * platform's own design first. A tap picks one; hold or "?" opens the whole anonymised datasheet.
+ */
+function refarchPanel(result, selected) {
+  const id = state.plan.useCase
+  const choices = state.plan.choices
+  const brain = brainPick(id, choices.brains || "medium")
+  const platform = byId(PLATFORMS, brain.platform)
+  if (!platform) return null
+  const hallId = state.plan.build.hall
+  const gpus = brain.racks * platform.gpusPerRack
+  const designs = designsFor(platform.id)
+  const current = designFor(platform.id, choices.refarch) || referenceDesign(platform.id)
+  const cards = designs.map((design) => {
+    const on = design.id === current?.id
+    const card = designCard(design, platform.id, hallId, gpus)
+    /* A hotter or later box can tip a build over its power room or past the deadline: say so before the pick. */
+    const alt = on ? result : evaluateBuild(id, { ...state.plan.build, refarch: design.id })
+    if (alt.overPower && !(on || result.overPower)) card.warn = "over the power room"
+    else if (alt.overBudget && !(on || result.overBudget)) card.warn = "over the budget"
+    else if (alt.lateWeeks > (result.lateWeeks || 0) && !on) card.warn = "past the deadline"
+    const learn = { title: `${card.title} · NVIDIA ${platform.name}`, lines: designLines(design, platform.id, hallId, gpus), nerd: "" }
+    const button = el("button", {
+      type: "button",
+      class: `ra-card${on ? " on" : ""}${card.warn ? " warn" : ""}`,
+      "data-key": `refarch-${design.id}`,
+      "aria-pressed": on ? "true" : "false",
+    }, [
+      el("span", { class: "ra-head" }, [el("b", { text: design.letter }), el("span", { class: "ra-form", text: design.form })]),
+      el("span", { class: "ra-line", text: card.spec }),
+      el("span", { class: "ra-line", text: card.density }),
+      el("span", { class: `ra-line ${card.warn ? "warn" : "dim"}`, text: card.warn ? `${card.lead} · ${card.warn}` : card.lead }),
+    ])
+    bindTile(button, () => pick({ refarch: design.id }), learn)
+    const ask = el("button", { type: "button", class: "learn-btn", "data-learn": `refarch-${design.id}`, "aria-label": `Learn about design ${design.letter}`, text: "?" })
+    ask.addEventListener("pointerdown", (event) => event.stopPropagation())
+    ask.addEventListener("click", (event) => {
+      event.stopPropagation()
+      openLearn(ask, learn)
+    })
+    return el("div", { class: "ra-wrap" }, [button, ask])
+  })
+  return el("div", { class: "refarch", "data-key": "refarch" }, [
+    el("div", { class: "ra-title" }, [
+      el("h3", { text: `REFERENCE ARCHITECTURES · ${gpus} GPUs · ${result.hall?.name || "hall"}, ${result.hall?.maxRackKW || 0} kW a rack` }),
+      selected?.nerd ? el("span", { class: "fine", "data-key": "step-nerd", text: selected.nerd }) : null,
+    ]),
+    el("div", { class: `ra-cards count-${designs.length}` }, cards),
   ])
 }
 

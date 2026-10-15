@@ -164,7 +164,8 @@ export function simpleChoices(useCaseId, choices = {}) {
     : picked.wires === "private" || picked.wires === "mix" || picked.wires === "combo" ? (hasCombo(useCaseId) ? "combo" : "fast") : "peer"
   const memory = memoryTile(picked) === "dpu" ? "plus" : memoryTile(picked)
   const library = SIMPLE_IDS.library.includes(picked.library) ? picked.library : "none"
-  const { sitePlans, ...rest } = picked
+  /* Site plans and reference architectures are nerd-only; the simple board forgets them. */
+  const { sitePlans, refarch, ...rest } = picked
   return {
     ...rest,
     metros: cleanMetros(useCaseId, picked.metros),
@@ -287,6 +288,7 @@ export function choicesToBuild(useCaseId, choices, nerd = false) {
     sites,
     choices: picked,
   }
+  if (nerd && picked.refarch) build.refarch = picked.refarch
   if (nerd && sites.length > 1 && Array.isArray(picked.sitePlans) && picked.sitePlans.length) {
     build.sitePlans = picked.sitePlans.map((plan) => ({
       id: plan.id,

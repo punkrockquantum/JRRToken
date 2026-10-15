@@ -1,5 +1,6 @@
 import { DATA_HOMES, DATA_TIERS, EDGE_LATE, EGRESS_PER_GB, FTE_HOURS, HALLS, HORIZON_WEEKS, HUMAN_WORK, IN_METRO_KM, KV_TIER, METRO_OFFERS, MISSION_SITES, NETWORKS, ORCA, PLATFORMS, SCENARIOS, SITES, TRAIN_BONUS_CAP, USER_BASES, USE_CASES, byId } from "./data.js"
 import { HOURS_PER_MONTH, blankFabric, destinationsNeeded, liveShare, networkBill } from "./network.js"
+import { designFor, racksNeeded, withDesign } from "./refarch.js"
 import { defaultRoutes, evaluateRoutes } from "./routes.js"
 
 /** Air-cooling a liquid rack keeps a sliver of throughput and bills a failure cost. */
@@ -664,10 +665,14 @@ function emptyResult(useCase, hall, platform, data, link, racks, build) {
 export function evaluateBuild(useCaseId, build = {}) {
   const useCase = byId(USE_CASES, useCaseId)
   const hall = byId(HALLS, build?.hall || "A")
-  const platform = byId(PLATFORMS, build?.platform)
+  const stock = byId(PLATFORMS, build?.platform)
+  // A nerd reference architecture ships the same GPUs in another box: rack power, lead and price shift a little.
+  const design = designFor(stock?.id, build?.refarch)
+  const platform = design ? withDesign(stock, design) : stock
   const data = byId(DATA_TIERS, build?.data) || DATA_TIERS[0]
   const link = byId(NETWORKS, build?.network) || byId(NETWORKS, "fabric")
   const out = emptyResult(useCase, hall, platform, data, link, Number(build?.racks) || 0, build)
+  out.design = design
   if (!useCase || !hall) {
     out.errors.push("Choose a use case.")
     return out
@@ -783,7 +788,10 @@ export function evaluateBuild(useCaseId, build = {}) {
   out.pue = pue
   out.facilityKW = out.itKW * pue
   out.siteKW = Math.max(...perSiteRacks) * platform.rackKW + storageKW + hostKW
-  out.spaceUsed = Math.max(...perSiteRacks) + storageSpace(build, useCase)
+  // Space counts the cabinets the chosen design really fills at this hall's rack cap; the game's rack units otherwise.
+  const cabinets = (count) => (design ? racksNeeded(design, hall, count * platform.gpusPerRack) : count)
+  out.cabinets = perSiteRacks.map(cabinets)
+  out.spaceUsed = Math.max(...out.cabinets) + storageSpace(build, useCase)
   out.spaceCap = hall.rackSpace
   const scenario = scenarioFor(useCase)
   out.scenario = scenario

@@ -7,6 +7,7 @@
 import { DATA_HOMES, DOES, HALLS, KV_TIER, ORCA, PLATFORMS, SITES, USE_CASES, byId } from "./data.js"
 import { formatMoney, metroOffers } from "./model.js"
 import { COMBO, NERD_IDS, SIMPLE_IDS, brainPick, cleanMetros, defaultChoices, maxMetros, memoryChoices, memoryTile, metroSets, wireIds } from "./presets.js"
+import { designFor } from "./refarch.js"
 
 export const STEPS = [
   { id: "location", title: "LOCATION", hint: "Which Digital Realty metros", short: "WHERE" },
@@ -354,7 +355,10 @@ export function applyTile(useCaseId, stepId, tileId, choices = {}) {
     return { ...rest, metros }
   }
   const tile = stepTiles(useCaseId, stepId, true).find((item) => item.id === tileId) || stepTiles(useCaseId, stepId, false).find((item) => item.id === tileId)
-  return tile ? { ...base, ...tile.patch } : base
+  const next = tile ? { ...base, ...tile.patch } : base
+  /* A reference architecture belongs to one platform: a new GPU tile drops a design built for another. */
+  if (stepId === "gpu" && next.refarch && !designFor(brainPick(useCaseId, next.brains).platform, next.refarch)) delete next.refarch
+  return next
 }
 
 /** The short ids of a story's metro short list. */

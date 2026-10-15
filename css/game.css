@@ -921,6 +921,39 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .imp-nerd { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; font-size: 9px; line-height: 1.35; color: var(--cyan); overflow-wrap: anywhere; }
 .screen.game .step-panel .tiles.count-4 .tile { padding-right: 36px; }
 .screen.game .step-panel .row-nerd { white-space: normal; -webkit-line-clamp: 3; display: -webkit-box; -webkit-box-orient: vertical; }
+/* Nerd GPU step: REFERENCE ARCHITECTURES, one small card per anonymised design, the platform's own first. */
+.refarch { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 0 0 auto; }
+.ra-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; min-width: 0; }
+.ra-title h3 { margin: 0; font-size: 10px; color: var(--cyan); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.ra-title .fine { flex: 1 1 220px; min-width: 0; margin: 0; font-size: 9px; line-height: 1.3; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ra-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.ra-cards.count-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ra-wrap { position: relative; min-width: 0; display: flex; }
+.ra-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-height: 56px;
+  padding: 5px 36px 5px 8px;
+  text-align: left;
+  font-family: inherit;
+  color: var(--pale);
+  background: var(--ink);
+  border: 3px solid var(--panel-2);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.ra-card:hover { background: var(--navy); }
+.ra-card.on { border-color: var(--yellow); background: #34345e; }
+.ra-card.warn { border-style: dashed; }
+.ra-head { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.ra-head b { flex: none; font-size: 12px; line-height: 1.2; color: var(--yellow); }
+.ra-form { min-width: 0; font-size: 10px; line-height: 1.2; color: var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ra-line { display: block; min-width: 0; font-size: 9px; line-height: 1.3; color: var(--pale); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ra-line.dim { color: var(--muted); }
+.ra-line.warn { color: #ffb0b0; }
 .step-nav { display: flex; justify-content: space-between; gap: 10px; margin-top: auto; }
 .step-nav .btn.big { min-height: 56px; padding: 8px 28px; }
 .review-rows { display: grid; gap: 6px; }
@@ -1040,6 +1073,11 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
   .screen.game.nerd .step-wires .tile-hint, .screen.game.nerd .step-wires .tile-art { display: none; } /* the title names the product; the strip says what it does */
   .screen.game.nerd .step-wires .tile-title { overflow-wrap: normal; }
   .screen.game.nerd .step-wires .imp-why, .screen.game.nerd .step-wires .imp-nerd { -webkit-line-clamp: 1; }
+  /* Reference architectures: two cards a row, two lines a card, so the GPU step still fits without scrolling. */
+  .ra-cards, .ra-cards.count-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+  .ra-card { min-height: 44px; padding: 3px 36px 3px 6px; gap: 1px; }
+  .ra-card .ra-line:nth-of-type(2) { display: none; } /* the spec line lives in the "?" popover here */
+  .refarch { gap: 2px; }
   .workers { max-width: 48px; }
   .people-copy strong { white-space: normal; }
   .step-nav .btn.big { min-height: 48px; padding: 6px 20px; }
