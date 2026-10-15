@@ -6,6 +6,7 @@ import { plainCoach } from "./coach.js"
 import { createFloor } from "./floor.js"
 import { createAdvanceGate, createIntro, matchingScene, sceneCaption, scenesFor, setIntroDetail } from "./intro.js"
 import { leagueCsv, leagueJson, ordinal, rankOf, sortLeague, upsertEntry } from "./league.js"
+import { mapCaption, mapPoints } from "./map.js"
 import { STAR_POINTS, defaultSitePlans, evaluateBuild, formatMoney, formatScore, formatTokens, stars } from "./model.js"
 import { blockedReason, peopleCount, peopleLead, savingsLine } from "./results.js"
 import { attemptPayload, syncStatusLine } from "./attempt.js"
@@ -885,6 +886,7 @@ function stepPanel(stepId, result) {
       el("h2", { id: "step-title", text: `${stepIndex(stepId) + 1}. ${step.title}` }),
       el("p", { class: "fine", "data-key": "step-hint", text: subtitle }),
     ]),
+    stepId === "location" ? tinyMap(id, choices) : null,
     el("div", { class: `tiles count-${wraps.length}` }, wraps),
     nerdLine ? el("p", { class: "row-nerd", "data-key": "step-nerd", text: nerdLine }) : null,
     stepNav(stepId),
@@ -894,6 +896,57 @@ function stepPanel(stepId, result) {
 function metroSummary(id, choices) {
   const picked = stepValue(id, "location", choices).map((site) => byId(SITES, site)?.metro || site)
   return picked.length > 1 ? `Chosen: ${picked.join(" + ")}.` : `Chosen: ${picked[0] || "none"}.`
+}
+
+const SVG_NS = "http://www.w3.org/2000/svg"
+
+function svgEl(tag, props = {}, children = []) {
+  const node = document.createElementNS(SVG_NS, tag)
+  for (const [key, value] of Object.entries(props)) {
+    if (value == null || value === false) continue
+    if (key === "text") node.textContent = value
+    else node.setAttribute(key, String(value))
+  }
+  for (const child of [].concat(children)) if (child) node.append(child)
+  return node
+}
+
+/** The tiny map: users, the model and data home, the metros on offer, and the trips the chosen metros make. */
+function tinyMap(id, choices) {
+  const picked = stepValue(id, "location", choices)
+  const { width, height, points, links } = mapPoints(id, picked)
+  const svg = svgEl("svg", { class: "tiny-map", viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": `Map: ${mapCaption(id, picked)}` }, [
+    ...links.map((link) => svgEl("line", { class: `map-link ${link.kind}`, x1: link.from.x, y1: link.from.y, x2: link.to.x, y2: link.to.y })),
+    ...points.map((p) => {
+      const above = p.y < height / 2
+      const labelY = above ? p.y - 9 : p.y + 15
+      if (p.kind === "users") {
+        return svgEl("g", { class: "map-users" }, [
+          svgEl("circle", { cx: p.x, cy: p.y, r: 4 + Math.round(5 * (p.share || 0)) }),
+          svgEl("text", { x: p.x, y: labelY, text: p.label }),
+        ])
+      }
+      if (p.kind === "data") {
+        return svgEl("g", { class: "map-data" }, [
+          svgEl("rect", { x: p.x - 5, y: p.y - 5, width: 10, height: 10, transform: `rotate(45 ${p.x} ${p.y})` }),
+          svgEl("text", { x: p.x, y: labelY, text: p.label }),
+        ])
+      }
+      return svgEl("g", { class: `map-metro${p.on ? " on" : ""}`, "data-metro": p.id }, [
+        svgEl("circle", { cx: p.x, cy: p.y, r: p.on ? 5 : 3.5 }),
+        svgEl("text", { x: p.x, y: labelY, text: p.label }),
+      ])
+    }),
+  ])
+  return el("figure", { class: "map-wrap", "data-key": "tiny-map" }, [
+    svg,
+    el("figcaption", { class: "fine map-legend" }, [
+      el("span", { class: "legend users", text: "users" }),
+      el("span", { class: "legend data", text: "model & data" }),
+      el("span", { class: "legend metro", text: "Digital Realty metro" }),
+      el("span", { class: "map-caption", "data-key": "map-caption", text: mapCaption(id, picked) }),
+    ]),
+  ])
 }
 
 /** The summary before GO: one line per step with a CHANGE button, the opening defaults called out, and the target. */
@@ -924,11 +977,12 @@ function reviewPanel(result) {
     ]),
     el("div", { class: "review-rows" }, rows),
     ecoBar(result, { detail: true }),
+    /* BACK, the target and GO share one row so the panel never scrolls on the booth screen. */
     el("div", { class: "review-go" }, [
+      btn("◀ BACK", () => gotoStep(prevStep("review")), { kind: "ghost", key: "back", sound: "back" }),
       targetLine(),
       btn("GO", () => startRun(), { kind: "big run", key: "run", sound: "start", disabled: !result.ok }),
     ]),
-    stepNav("review"),
   ])
 }
 
@@ -1011,8 +1065,8 @@ function feel(result) {
       gauge("CROWD", result.coverage, `${Math.round((result.coverage || 0) * 100)}% served`, { bad: result.coverage < 0.5, key: "demand" }),
       gauge("PRICE", Number.isFinite(result.costPerM) ? Math.min(1, (result.useCase?.parCost || 1) / result.costPerM) : 0, Number.isFinite(result.costPerM) ? formatMoney(result.costPerM) : "—", { bad: !(result.costPerM <= (result.useCase?.parCost || Infinity)), key: "cost" }),
       peopleBadge(result),
-      roundBadge(),
     ] : []),
+    roundBadge(),
     el("div", { class: `crowd ${mood}`, "data-mood": mood, "aria-label": mood === "happy" ? "People are happy" : "People are waiting" }, [
       spriteImg(mood === "happy" ? "user" : "gremlin", crowdScale),
       spriteImg(mood === "happy" ? "user" : "gremlin", crowdScale),
@@ -1316,8 +1370,8 @@ function showResult() {
     el("p", { class: `savings-line${blocked ? " if-only" : ""}`, text: savingsLine(result) }),
     state.nerd ? el("p", { class: "fine nerd", text: nerdPeopleLine(result) }) : null,
   ])
-  const children = [
-    head,
+  /* The head and the buttons stay put; everything between them scrolls as one body. */
+  const body = el("div", { class: "result-body", "data-key": "result-body" }, [
     el("p", { class: "headline", "data-key": "headline", text: explained.headline }),
     ecoBar(result),
     rightAndTry(result, { final: !improvable }),
@@ -1329,9 +1383,8 @@ function showResult() {
     state.nerd && !improvable ? el("div", { class: "coach" }, [spriteImg("prof", 3), el("p", { text: plainCoach(result) })]) : null,
     el("p", { class: "beat-line", "data-key": "beat-line", text: beatLine(players, rank) }),
     syncLine,
-    buttons,
-    footer,
-  ]
+  ])
+  const children = [head, body, buttons, footer]
   root.replaceChildren(
     el("div", { class: `dialog panel result${state.nerd ? "" : " simple"}${improvable ? " round-one" : " final"}`, role: "dialog", "aria-modal": "true", "aria-labelledby": "result-title" }, children),
   )

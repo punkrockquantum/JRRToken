@@ -5,6 +5,7 @@ import test from "node:test"
 import { fileURLToPath } from "node:url"
 import { USE_CASES } from "../js/data.js"
 import { ECO_PARTS, ecoHint, ecoQuestion, ecoSummary, ecosystem } from "../js/eco.js"
+import { upsertEntry } from "../js/league.js"
 import { evaluateBuild } from "../js/model.js"
 import { choicesToBuild } from "../js/presets.js"
 import { MAX_ROUNDS, canImprove, finalScore, roundEntry, roundHint, roundLine } from "../js/rounds.js"
@@ -168,6 +169,16 @@ test("the league entry after any round stores both rounds and keeps the better o
   const worse = roundEntry(player, first, [{ score: second.score, result: second }, { score: first.score, result: first }], { at: 9 })
   assert.equal(worse.score, second.score, "a worse second round keeps the first round's score")
   assert.equal(worse.fteEquivalent, second.fteEquivalent, "and the first round's people-power")
+  /* The board row is replaced by round two even when the score stands still, so both rounds reach the league. */
+  const afterOne = upsertEntry([], roundEntry(player, second, [{ score: second.score, result: second }], { at: 5 }))
+  assert.equal(afterOne[0].round2, null)
+  const afterTwo = upsertEntry(afterOne, worse)
+  assert.equal(afterTwo.length, 1)
+  assert.equal(afterTwo[0].score, second.score)
+  assert.equal(afterTwo[0].round1, second.score)
+  assert.equal(afterTwo[0].round2, first.score, "a level best still records the second round")
+  const stranger = upsertEntry(afterTwo, { ...worse, round2: 1, score: second.score - 1, at: 11 })
+  assert.equal(stranger[0].round2, first.score, "a lower score never overwrites the row")
 })
 
 /* ---------- The stepped build ---------- */

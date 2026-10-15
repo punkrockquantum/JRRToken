@@ -254,7 +254,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .scene-dots { display: flex; gap: 8px; justify-content: center; }
 .dot { width: 22px; height: 22px; background: var(--panel-2); border: 3px solid var(--ink); }
 .dot[aria-current="true"] { background: var(--yellow); }
-.intro .row { margin: 0; justify-content: flex-end; }
+.intro .row { margin: 0; flex: none; min-height: 68px; justify-content: flex-end; }
 
 /* ---------- Cards ---------- */
 .card {
@@ -424,11 +424,15 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 /* ---------- Dialogs ---------- */
 .dialog-back { position: fixed; inset: 0; z-index: 10; padding: 16px; display: grid; place-items: center; background: rgba(8, 8, 20, 0.85); overflow: hidden; }
 .dialog { width: min(980px, 100%); max-height: 100%; overflow: hidden; }
-.dialog.result { width: min(920px, 100%); max-height: calc(100dvh - 24px); display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
-.explain { min-height: 0; flex: 1 1 auto; overflow: auto; padding: 8px 10px; background: #14142a; border: 3px solid var(--line); }
+.dialog.result { width: min(1080px, 100%); max-height: calc(100dvh - 24px); display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+/* One scroll container between the fixed head and the buttons: nothing inside it clips on its own. */
+.result-body { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1 1 auto; overflow: hidden auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.result-body > * { flex: none; }
+.dialog.result.simple .result-body { gap: 12px; }
+.explain { padding: 8px 10px; background: #14142a; border: 3px solid var(--line); }
 .explain h3 { margin: 0 0 6px; font-size: var(--fs-s); color: var(--cyan); }
 .explain ul { margin: 0; padding-left: 18px; }
-.explain li { margin: 0 0 6px; font-size: var(--fs-s); line-height: 1.45; color: var(--pale); }
+.explain li { margin: 0 0 4px; font-size: var(--fs-s); line-height: 1.4; color: var(--pale); }
 .dialog.result .row.end { margin-top: 4px; }
 /* Simple results: score, one headline lesson, people-power, one next step, and the DR line. */
 .dialog.result.simple { width: min(860px, 100%); gap: 12px; }
@@ -817,7 +821,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
   border: 3px solid var(--dim);
   color: var(--muted);
 }
-.eco-part b { font-size: var(--fs-s); white-space: nowrap; }
+.eco-part b { font-size: var(--fs-s); white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .eco-light { flex: none; width: 14px; height: 14px; background: var(--dim); border: 2px solid var(--ink); box-shadow: 0 0 0 2px var(--dim); }
 .eco-part.green { border-color: var(--green); color: var(--lime); }
 .eco-part.green .eco-light { background: var(--lime); box-shadow: 0 0 0 2px var(--green), 0 0 10px var(--lime); }
@@ -864,6 +868,29 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 }
 .step-head h2 { margin: 0; font-size: var(--fs-l); color: var(--yellow); }
 .step-head .fine { margin: 4px 0 0; font-size: var(--fs-s); color: var(--pale); line-height: 1.4; }
+
+/* The tiny map on the LOCATION step: users, the data home, the metros on offer, and the chosen trips. */
+.map-wrap { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); gap: 10px; align-items: center; margin: 0; padding: 6px 8px; background: var(--ink); border: 2px solid var(--panel-2); }
+.tiny-map { display: block; width: 100%; height: auto; aspect-ratio: 240 / 150; background: var(--night); }
+.tiny-map text { font-family: inherit; font-size: 8px; fill: var(--muted); text-anchor: middle; pointer-events: none; }
+.tiny-map .map-link { stroke-width: 1.5; stroke-dasharray: 3 2; opacity: 0.8; }
+.tiny-map .map-link.users { stroke: var(--lime); }
+.tiny-map .map-link.data { stroke: var(--purple); }
+.tiny-map .map-users circle { fill: var(--lime); fill-opacity: 0.55; stroke: var(--lime); stroke-width: 1.5; }
+.tiny-map .map-data rect { fill: var(--purple); stroke: var(--line); stroke-width: 1; }
+.tiny-map .map-metro circle { fill: var(--panel-2); stroke: var(--cyan); stroke-width: 1.5; }
+.tiny-map .map-metro.on circle { fill: var(--cyan); stroke: var(--line); stroke-width: 2; }
+.tiny-map .map-metro.on text { fill: var(--line); font-weight: 700; }
+.map-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0; font-size: var(--fs-s); color: var(--muted); line-height: 1.4; }
+.map-legend .legend::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 5px; vertical-align: -1px; }
+.map-legend .legend.users::before { background: var(--lime); border-radius: 50%; }
+.map-legend .legend.data::before { background: var(--purple); transform: rotate(45deg); }
+.map-legend .legend.metro::before { background: var(--cyan); border-radius: 50%; }
+.map-legend .map-caption { flex-basis: 100%; color: var(--pale); }
+@media (max-width: 1100px) {
+  .map-wrap { grid-template-columns: minmax(0, 1fr); }
+  .tiny-map { max-width: 240px; }
+}
 .screen.game .step-panel .tiles { display: grid; grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; height: auto; min-height: 0; flex: 1 1 auto; align-content: start; }
 .screen.game .step-panel .tiles.count-1 { grid-template-columns: minmax(0, 1fr); }
 .screen.game .step-panel .tiles.count-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -888,8 +915,11 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .review-row.untouched strong { color: var(--pale); }
 .untouched-tag { color: var(--orange); }
 .btn.small { min-height: 32px; padding: 4px 10px; font-size: 9px; }
-.review-go { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; }
-.review-go .btn.run { min-height: 84px; min-width: 200px; font-size: clamp(20px, 1.6vw, 30px); }
+.review-go { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; margin-top: auto; }
+.review-go .btn.run { min-height: 72px; min-width: 200px; font-size: clamp(20px, 1.6vw, 30px); }
+.step-review .review-rows { gap: 4px; }
+.step-review .review-row { padding: 3px 10px; }
+.step-review .eco-bar.detail .eco-part { padding: 3px 8px; }
 .target { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 6px 10px; background: var(--ink); border: 3px solid var(--panel-2); }
 .target .fine { margin: 0; color: var(--muted); font-size: 9px; }
 .target-step { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-s); color: var(--pale); }
@@ -906,8 +936,9 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
   position: absolute;
   z-index: 6;
   left: 50%;
-  bottom: 56px;
+  bottom: 112px; /* above the step nav: a why-toast never sits on BACK or NEXT */
   transform: translateX(-50%);
+  pointer-events: none; /* and a tap goes straight through it */
   width: min(720px, 90%);
   margin: 0;
   padding: 12px 16px;
@@ -922,7 +953,9 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 }
 @keyframes toast-in { from { transform: translate(-50%, 12px); opacity: 0; } }
 .round-line { margin: 2px 0 0; font-size: var(--fs-s); color: var(--cyan); }
-.dialog.result .eco-bar .eco-part { min-height: 34px; }
+/* In the narrow dialog the light and icon sit on one row and the name takes the next, so CONNECTIONS never spills. */
+.dialog.result .eco-bar .eco-part { min-height: 34px; flex-wrap: wrap; justify-content: center; gap: 4px 8px; padding: 6px 6px; }
+.dialog.result .eco-bar .eco-part b { flex: 1 1 100%; text-align: center; }
 .right-try { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .right-try > div { padding: 8px 10px; background: #14142a; border: 3px solid var(--panel-2); min-width: 0; }
 .right-try .right { border-color: var(--green); }

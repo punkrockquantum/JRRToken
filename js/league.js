@@ -11,7 +11,8 @@ export function upsertEntry(entries, entry) {
   const next = entries.slice()
   const index = next.findIndex((item) => item.name.toLocaleLowerCase() === key)
   if (index === -1) next.push(entry)
-  else if (entry.score > next[index].score) {
+  /* A better score replaces the row; so does round two of the same best score, which carries both rounds. */
+  else if (entry.score > next[index].score || (entry.score === next[index].score && entry.round2 != null && next[index].round2 == null)) {
     next[index] = {
       ...entry,
       email: entry.email || next[index].email || "",
