@@ -671,11 +671,31 @@ function drawAsk(ctx, t) {
 /** The five parts of the ecosystem cutaway, left to right, with the words under each. */
 export const ECO_SCENE_PARTS = [
   { id: "power", name: "POWER", note: "FEEDS IT", nerd: "PUE 1.2-1.4" },
-  { id: "cooling", name: "COOLING", note: "KEEPS IT ALIVE", nerd: "40-240 KW/RACK" },
+  { id: "cooling", name: "COOLING", note: "KEEPS IT COOL", nerd: "40-240 KW/RACK" },
   { id: "compute", name: "COMPUTE", note: "GPUS THINK", nerd: "HBM SETS SPEED" },
-  { id: "data", name: "DATA", note: "SOMETHING TO KNOW", nerd: "VECTOR INDEX" },
-  { id: "connections", name: "CONNECTIONS", note: "CARRY THE ANSWER", nerd: "200 KM/MS" },
+  { id: "data", name: "DATA", note: "WHAT IT KNOWS", nerd: "VECTOR INDEX" },
+  { id: "connections", name: "CONNECTIONS", note: "CARRIES IT", nerd: "200 KM/MS" },
 ]
+
+// Cutaway geometry. The box starts below the path bar and the two-line title band (y 16-56),
+// is wide enough that the five 8px-per-glyph part names never touch (76.8 px per column), and
+// the person waiting for the answer stands just outside its right edge.
+const CUT_LEFT = 8
+const CUT_TOP = 58
+const CUT_WIDTH = 400
+const CUT_HEIGHT = 174
+const HERO_X = 420
+
+/** Label boxes of the cutaway's name and note rows (8 px per glyph), for layout tests. */
+export function ecoLabelBoxes({ nerdNotes = false } = {}) {
+  const colW = (CUT_WIDTH - 16) / 5
+  const centre = (i) => Math.round(CUT_LEFT + 8 + colW * i + colW / 2)
+  const box = (str, cx, y) => ({ text: str, x: cx - (str.length * 8) / 2, w: str.length * 8, y, h: 8 })
+  return ECO_SCENE_PARTS.flatMap((part, i) => [
+    box(part.name, centre(i), FLOOR + 8),
+    box(nerdNotes ? part.nerd : part.note, centre(i), i % 2 === 0 ? FLOOR + 20 : FLOOR + 30),
+  ]).concat([{ text: "frame", x: CUT_LEFT, w: CUT_WIDTH, y: CUT_TOP, h: CUT_HEIGHT }, { text: "title", x: 0, w: W, y: 0, h: 56 }])
+}
 
 /** How many parts are lit at `local` seconds into the ecosystem scene: one every 1.8 s. */
 export function ecosystemLit(local) {
@@ -687,10 +707,10 @@ export function ecosystemLit(local) {
  * "broken". Tokens flow to the person on the right only when every part is lit.
  */
 function drawCutaway(ctx, t, states, { nerdNotes = false } = {}) {
-  const left = 8
-  const width = 330
-  dashedRect(ctx, left, 30, width, 196, PALETTE.L)
-  text(ctx, "DATA CENTER", left + 8, 36, { color: PALETTE.L })
+  const left = CUT_LEFT
+  const width = CUT_WIDTH
+  dashedRect(ctx, left, CUT_TOP, width, CUT_HEIGHT, PALETTE.L)
+  text(ctx, "DATA CENTER", left + 8, CUT_TOP + 6, { color: PALETTE.L })
   const colour = (state) => (state === "hot" ? PALETTE.y : state === "lit" ? PALETTE.g : state === "broken" ? PALETTE.r : PALETTE.d)
   const live = (state) => state === "hot" || state === "lit"
   const colW = (width - 16) / 5
@@ -722,7 +742,7 @@ function drawCutaway(ctx, t, states, { nerdNotes = false } = {}) {
     for (let i = 0; i < 8; i += 1) {
       const phase = (t * 1.4 + i * 0.13) % 1
       const x = cx - 30 + ((i * 23) % 60)
-      const y = Math.round(lerp(FLOOR - 82, 56, phase))
+      const y = Math.round(lerp(FLOOR - 82, CUT_TOP + 10, phase))
       ctx.fillStyle = phase < 0.5 ? PALETTE.r : PALETTE.B
       ctx.fillRect(x, y, 3, 3)
     }
@@ -753,7 +773,7 @@ function drawCutaway(ctx, t, states, { nerdNotes = false } = {}) {
 
   // CONNECTIONS: the wire out of the building to the person waiting on the right.
   const wx = centre(4)
-  const heroX = 404
+  const heroX = HERO_X
   drawSprite(ctx, "hero", heroX, FLOOR - 48, 3)
   text(ctx, "YOU", heroX + 24, FLOOR + 8, { align: "center" })
   drawSprite(ctx, "user", wx - 12, FLOOR - 48, 3)
@@ -771,11 +791,14 @@ function drawCutaway(ctx, t, states, { nerdNotes = false } = {}) {
     text(ctx, "NO ANSWER", heroX + 24, FLOOR - 70, { color: PALETTE.r, align: "center" })
   }
 
+  // Names share one row (no neighbours touch at 76.8 px per column); the longer notes
+  // alternate between two rows so each one has two columns of width to itself.
   ECO_SCENE_PARTS.forEach((part, i) => {
     const state = states[i]
     text(ctx, part.name, centre(i), FLOOR + 8, { color: colour(state), align: "center" })
     const note = nerdNotes ? part.nerd : part.note
-    text(ctx, note, centre(i), FLOOR + 20, { color: state === "hot" ? PALETTE.Y : state === "broken" ? PALETTE.r : PALETTE.d, align: "center" })
+    const row = i % 2 === 0 ? FLOOR + 20 : FLOOR + 30
+    text(ctx, note, centre(i), row, { color: state === "hot" ? PALETTE.Y : state === "broken" ? PALETTE.r : PALETTE.d, align: "center" })
   })
   return all
 }
@@ -786,8 +809,8 @@ function drawEcosystem(ctx, t) {
   const lit = ecosystemLit(local)
   const states = ECO_SCENE_PARTS.map((_, i) => (i < lit - 1 ? "lit" : i === lit - 1 && local < 9 ? "hot" : i < lit ? "lit" : "off"))
   const all = drawCutaway(ctx, t, states, { nerdNotes: detail })
-  text(ctx, "EVERY AI ANSWER", W / 2, 30 - 6, { color: PALETTE.y, align: "center", scale: 2 })
-  text(ctx, "IS BORN IN A DATA CENTER", W / 2 + 60, 46, { color: PALETTE.L, align: "center" })
+  text(ctx, "EVERY AI ANSWER", W / 2, 22, { color: PALETTE.y, align: "center", scale: 2 })
+  text(ctx, "IS BORN IN A DATA CENTER", W / 2, 44, { color: PALETTE.L, align: "center" })
   if (lit > 0 && lit <= ECO_SCENE_PARTS.length) cue(`eco-${lit}`, "blip")
   if (all) cue("eco-flow", "token")
   return null
@@ -799,8 +822,8 @@ function drawTakeaway(ctx, t) {
   const broken = Math.floor(local / 1.6) % ECO_SCENE_PARTS.length
   const states = ECO_SCENE_PARTS.map((_, i) => (i === broken ? "broken" : "lit"))
   drawCutaway(ctx, t, states, { nerdNotes: detail })
-  text(ctx, "TAKE ANY ONE AWAY", W / 2, 24, { color: PALETTE.r, align: "center", scale: 2 })
-  text(ctx, "AND THE AI STOPS", W / 2, 48, { color: PALETTE.L, align: "center", scale: 2 })
+  text(ctx, "TAKE ANY ONE AWAY", W / 2, 20, { color: PALETTE.r, align: "center", scale: 2 })
+  text(ctx, "AND THE AI STOPS", W / 2, 40, { color: PALETTE.L, align: "center", scale: 2 })
   cue(`take-${broken}`, "back")
   return null
 }

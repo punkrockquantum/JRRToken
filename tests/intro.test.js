@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 import { GRAPH_SIZES, LESSONS, ORCA } from "../js/data.js"
 import { layout } from "../js/floor.js"
-import { DURATION, ECO_SCENE_PARTS, INPUT_HOLD_MS, PATH, SCENES, SIMPLE_PATH, SIMPLE_SCENES, createAdvanceGate, ecosystemLit, matchingScene, sceneAt, sceneCaption, sceneTime, scenesFor } from "../js/intro.js"
+import { DURATION, ECO_SCENE_PARTS, INPUT_HOLD_MS, PATH, SCENES, SIMPLE_PATH, SIMPLE_SCENES, createAdvanceGate, ecoLabelBoxes, ecosystemLit, matchingScene, sceneAt, sceneCaption, sceneTime, scenesFor } from "../js/intro.js"
 
 const IDS = ["prompt", "generation", "ecosystem", "factory", "wires", "quest"]
 const SIMPLE_COPY = [
@@ -97,6 +97,24 @@ test("the ecosystem cutaway names the five parts in the bar's order and lights t
   assert.match(ecosystem.nerd, /PUE/)
   assert.match(ecosystem.nerd, /200 km per millisecond/)
   assert.match(ecosystem.nerd, /take any one of the five away/i)
+})
+
+test("the cutaway's labels never overlap each other, the frame, or the title band", () => {
+  const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+  for (const nerdNotes of [false, true]) {
+    const boxes = ecoLabelBoxes({ nerdNotes })
+    const labels = boxes.filter((box) => box.text !== "frame" && box.text !== "title")
+    const frame = boxes.find((box) => box.text === "frame")
+    const title = boxes.find((box) => box.text === "title")
+    for (let i = 0; i < labels.length; i += 1) {
+      for (let j = i + 1; j < labels.length; j += 1) {
+        assert.ok(!overlaps(labels[i], labels[j]), `"${labels[i].text}" collides with "${labels[j].text}" (nerd ${nerdNotes})`)
+      }
+      assert.ok(labels[i].x >= frame.x && labels[i].x + labels[i].w <= frame.x + frame.w, `"${labels[i].text}" leaves the frame`)
+      assert.ok(labels[i].y + labels[i].h <= frame.y + frame.h, `"${labels[i].text}" falls below the frame`)
+    }
+    assert.ok(frame.y >= title.y + title.h, "the frame starts below the two-line title band")
+  }
 })
 
 test("the booth intro is four click-through scenes with the exact copy, and nerd mode keeps all six", () => {
