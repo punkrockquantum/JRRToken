@@ -31,13 +31,16 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
 - [x] Users and data distances per metro tile: "N km to users · M km to data" (`metroOffers`, `stepTiles`; `tests/sites.test.js`)
 - [x] Model transfer hours + egress $/GB folded into go-live (`modelTransfer`, EGRESS_PER_GB, lead parts)
 - [ ] Tiny map on the location step (users, data home, candidate metros)
-- [ ] `js/latency.js` physics module: 4.9 µs/km, inflation 1.2 fibre / 2.0 internet, per-option
-      overheads, TTFT = users RTT + trips × data RTT + store + queue + prefill, jitter pacing,
-      loss / Mathis, GPU idle = 1 − min(1, streams × step / (step + wait)), P(miss) normal
-      approximation × LATE_GOODPUT, `slaExempt` skips, model transfer hours + egress → go-live.
-      Today the physics lives in `js/model.js` / `js/routes.js` (5 µs/km, internet inflation 2.0,
-      no fibre inflation, triangular P(miss)).
-- [ ] Sanity tests: LON↔FRA ≈ 640 km ≈ 7.5 ms fibre RTT; LON↔Ashburn ≈ 5,900 km ≈ 69 ms fibre, ≥ 140 ms internet
+- [x] `js/latency.js` physics module: 4.9 µs/km, inflation 1.2 fibre / 2.0 internet, per-option
+      overheads (OPTIONS), `ttftS` = users RTT + trips × data RTT + store + queue + prefill,
+      `firstToken` over legs with `slaExempt` skips, jitter pacing (`pacedStepS`, `streamFeel`),
+      loss / Mathis (`mathisBps`, `usableBps`), `gpuIdle` = 1 − min(1, streams × step / (step + wait)),
+      `pMiss` normal approximation and `lateFactor` × LATE_GOODPUT, `transferHours` + `egressUsd` →
+      `goLiveDays`, and `tokenImpact` bundling it all for one option.
+      The scoring in `js/model.js` / `js/routes.js` keeps its tuned constants (5 µs/km, no fibre
+      inflation, triangular P(miss)); the strip reads `js/latency.js`, the score does not move.
+- [x] Sanity tests (`tests/latency.test.js`): LON↔FRA ≈ 640 km ≈ 7.5 ms fibre RTT; LON↔Ashburn ≈ 5,900 km
+      ≈ 69 ms fibre, ≥ 140 ms internet
 
 ## P4 — Connectivity step `PARTLY DONE`
 
