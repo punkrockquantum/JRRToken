@@ -1,0 +1,392 @@
+/**
+ * The stepped build: LOCATION, GPU, COOLING, MEMORY, CONNECTIVITY, STORAGE, QPU, then REVIEW.
+ * Pure: tile sets per step for the simple board (three tiles) and nerd mode (the full set),
+ * what each tile sets in a choice set, the one-line reason shown when a tile is picked, and
+ * the enumeration of every simple picture for the balance checks. No DOM here.
+ */
+import { DATA_HOMES, DOES, HALLS, KV_TIER, ORCA, PLATFORMS, SITES, USE_CASES, byId } from "./data.js"
+import { formatMoney, metroOffers } from "./model.js"
+import { NERD_IDS, SIMPLE_IDS, brainPick, cleanMetros, defaultChoices, maxMetros, memoryChoices, memoryTile, metroSets } from "./presets.js"
+
+export const STEPS = [
+  { id: "location", title: "LOCATION", hint: "Which Digital Realty metros", short: "WHERE" },
+  { id: "gpu", title: "GPU", hint: "The computers that run the AI", short: "GPU" },
+  { id: "cooling", title: "COOLING", hint: "How the racks are cooled", short: "COOL" },
+  { id: "memory", title: "MEMORY", hint: "What the GPUs remember between turns", short: "MEM" },
+  { id: "wires", title: "CONNECTIVITY", hint: "How answers and data travel", short: "NET" },
+  { id: "storage", title: "STORAGE", hint: "Where documents and checkpoints live", short: "DATA" },
+  { id: "qpu", title: "QPU", hint: "A quantum helper beside the GPUs", short: "QPU" },
+  { id: "review", title: "REVIEW", hint: "Check the build, then GO", short: "GO" },
+]
+
+export const STEP_IDS = STEPS.map((step) => step.id)
+export const BUILD_STEP_IDS = STEP_IDS.filter((id) => id !== "review")
+
+export function stepIndex(stepId) {
+  return Math.max(0, STEP_IDS.indexOf(stepId))
+}
+
+export function nextStep(stepId) {
+  return STEP_IDS[Math.min(STEP_IDS.length - 1, stepIndex(stepId) + 1)]
+}
+
+export function prevStep(stepId) {
+  return STEP_IDS[Math.max(0, stepIndex(stepId) - 1)]
+}
+
+const RACK_ART = { h100: "rackAir", h200: "rackAir", b200: "rackAir", b300: "rackAir", gb200: "rackLiquid", gb300: "rackLiquid", vr: "rackRubin" }
+
+/** Five words that tell a newcomer what each rack is good at. */
+const GPU_HINTS = {
+  h100: "the classic, runs on air",
+  h200: "more memory, runs on air",
+  b200: "FP4 maths, runs on air",
+  b300: "strongest rack on air",
+  gb200: "72 GPUs as one, liquid",
+  gb300: "reasoning rack, liquid only",
+  vr: "next gen, liquid, arrives late",
+}
+
+const GPU_LEARN = {
+  h100: [
+    "The GPU that kicked off the AI boom in 2022.",
+    "80 GB of memory per GPU is small for today's giant models, so a big model is split across many GPUs.",
+    "Pick it when you want an older, cheaper rack that arrives sooner.",
+  ],
+  h200: [
+    "The same Hopper brain as the H100, with 141 GB of memory per GPU.",
+    "Writing the answer is mostly a memory job, so this one is faster.",
+    "It still fits an air-cooled hall.",
+  ],
+  b200: [
+    "A Blackwell GPU with 180 GB of memory that still fits an air-cooled hall.",
+    "Smaller numbers mean each token needs less memory.",
+    "Pick it when you want a newer GPU without liquid cooling.",
+  ],
+  b300: [
+    "Blackwell Ultra, with 288 GB of memory per GPU.",
+    "It is the strongest rack that still runs on air cooling.",
+    "Pick it when you want a lot of answers without waiting for a liquid hall.",
+  ],
+  gb200: [
+    "72 GPUs joined by NVLink act as one giant GPU.",
+    "Huge models love that shared memory.",
+    "It runs too hot for fans, so pick it only with the liquid-cooled hall.",
+  ],
+  gb300: [
+    "72 Blackwell Ultra GPUs joined by NVLink act as one.",
+    "Built for models that think for a long time.",
+    "It needs the liquid-cooled hall.",
+  ],
+  vr: [
+    "The 2026 Vera Rubin rack has the fastest memory and a long wait for delivery.",
+    "NVIDIA first counted it as 144 GPU dies in 72 packages.",
+    "Pick it only when the deadline is long and the budget can take the highest price.",
+  ],
+}
+
+const SIZE_TAG = { small: "SMALL", medium: "MEDIUM", big: "BIG", rubin: "NEWEST", huge: "HUGE" }
+
+/** One line per story and GPU tile: the reason that pops up for two seconds when it is picked. */
+const GPU_WHY = {
+  chat: { h100: "Cheap and quick to get, but each rack answers few shoppers.", b300: "Six strong air racks: plenty of shoppers, no liquid hall needed.", gb200: "Two NVL72 racks answer the whole crowd, if the hall can cool them.", vr: "The fastest rack, but it lands after the 16-week deadline." },
+  rag: { h200: "Fits the 70B model, but slow on 16k-token prompts.", b300: "Air-cooled Blackwell fits a small power room.", gb200: "One NVL72 rack would do; two blow the power room.", vr: "Scarce and late for a 20-week deadline." },
+  code: { h200: "Too little memory for 64k-token agent contexts.", b300: "Six air racks keep up until the contexts fill the memory.", gb200: "Three NVL72 racks hold the 400B model and its long contexts.", vr: "Arrives too late for a 26-week launch." },
+  research: { h200: "A 671B model does not fit well on Hopper islands.", b300: "Works, but the model spills across small NVLink islands.", gb200: "72 GPUs as one is how a 671B reasoning model wants to run.", vr: "Inside the 36-week deadline, but the priciest rack on the board." },
+  drug: { h200: "Fine for 15B chemistry models; a bit slow on the screen.", b300: "Four Blackwell Ultra racks screen the library fast on air.", gb200: "More rack than the lab's power room can feed.", vr: "The lab would pay for speed it cannot power." },
+  robot: { h100: "The 8B model fits; a second rack serves both plants.", h200: "Faster memory writes each answer sooner for the robots.", vr: "A 210 kW rack for an 8B model: power and money wasted." },
+}
+
+const HALL_META = {
+  cool: { hallId: "A", label: "Air-cooled hall", nerdLabel: "Air cooling", art: "fan" },
+  row: { hallId: "I", label: "In-row cooling", nerdLabel: "In-row cooling", art: "rackAir" },
+  rear: { hallId: "R", label: "Rear-door hall", nerdLabel: "Rear door heat exchanger", art: "chest" },
+  super: { hallId: "B", label: "Liquid-cooled hall", nerdLabel: "Direct liquid cooling", art: "pipe" },
+}
+
+const HALL_LEARN = {
+  cool: (hall) => [
+    "Air cooling is the fans family. The servers breathe air.",
+    `This hall handles up to ${hall.maxRackKW} kW per rack and is ready now.`,
+    "Air-cooled GPUs fit. A liquid-cooled GPU overheats and slows down.",
+  ],
+  row: (hall) => [
+    "Coolers sit between the racks, so heat does not cross the whole room.",
+    `Up to ${hall.maxRackKW} kW per rack. PUE ${hall.pue}. Lead time ${hall.fitOutWeeks} weeks.`,
+    "Air-cooled GPUs fit. NVL72 and Vera Rubin still need direct liquid cooling.",
+  ],
+  rear: (hall) => [
+    "A water-cooled door on each rack takes the hot exhaust away. The servers stay air-cooled.",
+    `Up to ${hall.maxRackKW} kW per rack, and a better PUE than plain fans, so more of a small power room reaches the GPUs.`,
+    "Air-cooled Blackwell racks fit. NVL72 and Vera Rubin still need the liquid hall.",
+  ],
+  super: (hall) => [
+    "Coolant goes straight to cold plates on the chips. This is the LIQUID-COOLED HALL.",
+    `Up to ${hall.maxRackKW} kW per rack, and less power is spent on cooling.`,
+    "Required for NVIDIA GB200 NVL72 and Vera Rubin.",
+  ],
+}
+
+const HALL_WHY = {
+  cool: "Ready now and cheapest, but a fan-cooled room wastes the most power on cooling.",
+  row: "Coolers between the racks: a little more per rack, a little less waste.",
+  rear: "Water doors on air racks: a better PUE, so more of a small power room reaches the GPUs.",
+  super: "Cold plates on the chips: the only hall for NVL72 and Vera Rubin, and the least waste.",
+}
+
+const MEMORY_TILES = {
+  off: { label: "KV cache OFF", hint: "GPUs re-read every chat", art: "gremlin", phrase: "Turning the KV cache off", inWords: "with the KV cache off", lines: ["With the KV cache off, the GPU throws away its notes at the end of each chat.", "The next question makes it re-read the whole conversation.", "Leave it off only for one-off questions."], nerd: "No saved chats. Prefill runs again on every turn." },
+  on: { label: "KV cache ON", hint: "remembers chats, skips re-reading", art: "chest", phrase: "Turning the KV cache on", inWords: "with the KV cache on", lines: ["The KV cache is the GPU's notes on what it already read.", "A KV cache tier parks those notes and reloads them, so a follow-up skips the re-read.", "Turn it on when people keep the conversation going."], nerd: `Lead ${KV_TIER.leadWeeks} weeks, ${formatMoney(KV_TIER.capex)} and ${KV_TIER.kw} kW per site. Parks the KV cache instead of prefill.` },
+  plus: { label: "KV cache ON + CPU host memory", hint: "parks long contexts on CPUs", art: "rackAir", phrase: "Adding CPU host memory to the KV cache", inWords: "with the KV cache parked on CPU hosts", lines: ["Grace or Vera class hosts keep a big CPU memory pool beside the GPUs.", "It parks very long contexts, past about 32k tokens, so agents skip even more prefill.", "For short chats it is just extra cost and power."], nerd: "Game value: $450k and 12 kW per site. With the KV tier on, contexts past 32k tokens skip more prefill (the full effect at 64k)." },
+  dpu: { label: "KV cache ON + BlueField DPUs", hint: "secure multi-tenant hosts", art: "token", phrase: "Adding BlueField DPUs beside the KV cache", inWords: "with the KV cache and BlueField DPUs", lines: ["BlueField-class DPUs move data and keep tenants apart.", "The GPUs are interrupted less, which matters when many customers share a hall.", "They add cost and a little power, and they take the security work off the GPUs."], nerd: "Game value: $700k and 8 kW per site. A small tenancy haircut comes off." },
+}
+
+const MEMORY_WHY = {
+  chat: { off: "Shoppers come back with follow-ups, so the GPUs re-read every chat.", on: "Half of every chat is a repeat: parked notes skip that prefill.", plus: "4k-token chats never need CPU memory; it is cost and power for nothing.", dpu: "Tenant isolation does not make a shopper's answer faster." },
+  rag: { off: "Every lookup pastes 16k tokens the GPU reads again.", on: "The last lookup's prompt is parked, so a follow-up skips the re-read.", plus: "16k contexts do not reach the CPU pool; the KV tier alone is enough.", dpu: "Isolation for one head office does not pay." },
+  code: { off: "Agents hold 64k tokens of context; re-reading it eats the GPUs.", on: "Parked notes help, but 64k contexts overflow the KV tier.", plus: "CPU memory parks whole 64k contexts: the agents' biggest win.", dpu: "Security hosts, not memory hosts: the long contexts still spill." },
+  research: { off: "A 32k-token report is re-read on every tool call.", on: "Parked notes carry the report between tool calls.", plus: "At 32k tokens the CPU pool only starts to help; it costs more than it saves.", dpu: "Analysts share one tenancy; isolation does not pay here." },
+  drug: { off: "Screening is batch work: the GPUs rarely re-read a prompt.", on: "Candidates are not conversations; a KV tier has little to park.", plus: "CPU memory for 2k-token prompts: power and money for nothing.", dpu: "One lab, one tenant: isolation buys nothing." },
+  robot: { off: "Robots repeat similar prompts; a tiny re-read, done millions of times.", on: "Parked prompts shave the first-token time robots live by.", plus: "512-token prompts never reach CPU memory.", dpu: "Isolation does not shorten a 50 ms deadline." },
+}
+
+const WIRE_TILES = {
+  cheap: { label: "Public internet", hint: "cheap, busy, slow at peaks", art: "gremlin", lines: ["The public internet is the shared road everyone uses.", "It is fine for batch jobs that can wait, and slow and jittery for live users.", "Your traffic crosses several networks with no promise of a steady delay."] },
+  peer: { label: "Peering + eyeballs", hint: "straight into home networks", art: "user", lines: ["Peering swaps traffic directly with other networks at an internet exchange.", "Eyeball networks are the ISPs your users are already on, so the path to them is short.", "It is the realistic middle option: better than the open internet, not as steady as a private link."] },
+  fast: { label: "ServiceFabric", hint: "private lane, fast and steady", art: "token", lines: ["ServiceFabric is a private, on-demand link to clouds, partners and your other metros.", "A connection can go live in minutes once the port exists, and the delay stays predictable.", "Documents and tools in the same building ride a cross connect, so that hop is tiny."] },
+  private: { label: "Cross connect + Dark fiber", hint: "your own glass in the building and between sites", art: "chest", lines: ["A cross connect is your own fibre to a partner in the same building, so the delay is tiny.", "Dark fiber is your own glass between nearby metros, so it pays off with two or three sites.", "Users still reach you over ServiceFabric. Too far for fibre, and the link between sites uses ServiceFabric too."] },
+}
+
+const WIRE_WHY = {
+  chat: { cheap: "Shoppers on a jittery road leave before the first word.", peer: "Eyeball networks reach shoppers' ISPs directly: a short, shared path.", fast: "A private lane keeps every answer steady, and reaches the weights' cloud region.", private: "Your own glass between metros, ServiceFabric for shoppers." },
+  rag: { cheap: "Staff reach you from the company cloud; the open internet adds jitter to every lookup.", peer: "An exchange gets staff closer, but the documents still cross a shared path.", fast: "ServiceFabric reaches the company cloud privately; an on-ramp in the building makes retrieval tiny.", private: "A cross connect to the cloud on-ramp in this building: the shortest retrieval hop." },
+  code: { cheap: "Eight tool-call trips per task on a jittery road stall the agents.", peer: "Peering helps coders arrive; the repos still cross a shared path eight times.", fast: "Private links to coders, repos and the other coast keep eight trips steady.", private: "Cross connect to the repos' on-ramp, dark fiber where the metros are close." },
+  research: { cheap: "Ten tool trips per report on the open internet add seconds.", peer: "Analysts arrive faster; the paper corpus still rides a shared path.", fast: "Private paths to analysts and the sovereign cloud keep ten trips predictable.", private: "A cross connect to the cloud on-ramp makes the paper lookups tiny." },
+  drug: { cheap: "Batch data does not mind jitter, but a thin shared pipe screens fewer candidates an hour.", peer: "An exchange carries more bulk data than transit; a fat private pipe carries the most.", fast: "A fat ServiceFabric pipe from the lab keeps the GPUs fed with candidates.", private: "Dark fiber from the lab: the fattest feed, if the lab is close enough." },
+  robot: { cheap: "Robots need 50 ms; the open internet cannot promise it.", peer: "Factories are not on eyeball networks; an exchange still shares the path.", fast: "A private path from each plant keeps the 50 ms promise.", private: "Dark fiber to a plant is possible; ServiceFabric does it without the dig." },
+}
+
+const LIBRARY_TILES = {
+  none: { label: "Local only", hint: "each server's own drives", art: "scroll", lines: ["Each server keeps its own small drives.", "Fine for a chatbot that only needs what it already knows.", "It does not hold a shared search, so looking up company documents is slow."] },
+  basic: { label: "File & object", hint: "shared documents and checkpoints", art: "vault", lines: ["File and object storage holds the documents and the model files.", "The app can read a document before the model writes the answer.", "The model itself does not search."] },
+  smart: { label: "Vector index", hint: "finds the right passages fast", art: "gem", lines: ["A vector index finds the right passages for retrieval.", "The app turns the question into numbers, searches the index, and pastes the best passages into the prompt.", "The model never searches mid-thought."] },
+}
+
+const LIBRARY_WHY = {
+  chat: { none: "Shoppers' questions need no documents: local drives are free and enough.", basic: "Shared storage the chat never reads: cost and power for nothing.", smart: "An index with nothing to search for a help desk." },
+  rag: { none: "With no shared index the model guesses from memory: wrong answers, slow lookups.", basic: "Documents are there, but the app scans files instead of searching an index.", smart: "The question becomes numbers, the index finds the passages, the GPU starts fast." },
+  code: { none: "Repos and checkpoints have no shared home, so every agent fetches alone.", basic: "Shared repos and checkpoints: the agents start fast and share one copy.", smart: "An index helps a little; agents mostly read whole files." },
+  research: { none: "Four hundred terabytes of papers with nowhere to look them up.", basic: "Papers are stored, but found by scanning: slow before the first word.", smart: "The index finds the right papers in milliseconds, before the model thinks." },
+  drug: { none: "Candidate libraries with no shared home: the GPUs wait on them.", basic: "File and object storage keeps the next batch of candidates ready.", smart: "An index built for passages, not for molecule libraries." },
+  robot: { none: "Robots need no documents: local drives are enough.", basic: "Shared storage no robot ever reads.", smart: "An index with nothing to search on a factory floor." },
+}
+
+const QPU_TILES = {
+  none: { label: "No QPU", hint: "GPUs screen on their own", art: "rackAir", lines: ["The GPUs build the binding graph and search it classically.", "Fine for a first pass; ORCA finds more strong binders on the same candidates.", "No extra cabinets, no extra lead time."] },
+  orca: { label: "ORCA PT-3", hint: "photonic quantum accelerator", art: "orca", lines: ["ORCA PT-3 is a photonic quantum accelerator in two cabinets beside the GPUs.", "GPUs build the binding graph; ORCA samples it and finds strong binders about twice as often.", "It costs money and a few months; it only pays when the GPUs are there."], nerd: `Lead ${ORCA.leadWeeks} weeks. Photonic boson sampling. London Innovation Lab, LHR19.` },
+}
+
+const QPU_WHY = {
+  none: "Classical search on the GPUs: a fair screen, no extra cabinets.",
+  orca: "ORCA samples the binding graph and finds strong binders about twice as often.",
+}
+
+/** Why a story does not need a QPU: the one line shown instead of a choice. */
+const QPU_NOT_NEEDED = {
+  chat: "A help desk writes words; there is no binding graph to sample.",
+  rag: "Document lookup is a search problem the index already solves.",
+  code: "Agents read and write code; nothing here is a sampling problem.",
+  research: "Reasoning models think in tokens, not in photons.",
+  robot: "Robots need answers in milliseconds; a QPU adds a hop, not speed.",
+}
+
+export function qpuRelevant(useCaseId) {
+  return Boolean(byId(USE_CASES, useCaseId)?.orca)
+}
+
+export function qpuNotNeeded(useCaseId) {
+  return QPU_NOT_NEEDED[useCaseId] || "This job has no sampling problem for a QPU to solve."
+}
+
+function metroHint(offer) {
+  const users = Math.round(offer.usersKm)
+  const data = Math.round(offer.dataKm)
+  return `${users.toLocaleString("en-GB")} km to users · ${data.toLocaleString("en-GB")} km to data`
+}
+
+function metroLines(useCaseId, offer) {
+  const home = DATA_HOMES[useCaseId]
+  const liquid = offer.liquidWeeks > 0 ? `A liquid hall here takes ${offer.liquidWeeks} extra weeks to fit out.` : "A liquid hall here is ready to fit out now."
+  const power = offer.powerMult === 1 ? "The full power allocation is available." : offer.powerMult > 1 ? `About ${Math.round((offer.powerMult - 1) * 100)}% more power than the scenario asks for is available.` : `Only about ${Math.round(offer.powerMult * 100)}% of the scenario's power is available this year.`
+  const price = offer.priceMult === 1 ? "" : offer.priceMult < 1 ? ` Power is about ${Math.round((1 - offer.priceMult) * 100)}% cheaper.` : ` Power is about ${Math.round((offer.priceMult - 1) * 100)}% dearer.`
+  return [
+    `${offer.site?.metro || offer.id}: ${offer.note}.`,
+    `About ${Math.round(offer.usersKm).toLocaleString("en-GB")} km from the users and ${Math.round(offer.dataKm).toLocaleString("en-GB")} km from ${home?.label || "the data"}.`,
+    `${power}${price} ${liquid}`,
+  ]
+}
+
+function metroWhy(useCaseId, offer) {
+  const home = DATA_HOMES[useCaseId]
+  const nearData = offer.dataKm <= 60
+  if (nearData) return `${offer.site?.metro}: beside ${home?.what || "the data"}, so nothing has to be copied.`
+  return `${offer.site?.metro}: ${offer.note}; ${Math.round(offer.dataKm).toLocaleString("en-GB")} km from ${home?.city || "the data"}, so the weights and data copy over your link.`
+}
+
+/** The tiles one step offers for a story, simple or nerd. Each tile knows what it sets. */
+export function stepTiles(useCaseId, stepId, nerd = false) {
+  const ids = nerd ? NERD_IDS : SIMPLE_IDS
+  if (stepId === "location") {
+    return metroOffers(useCaseId).map((offer) => ({
+      id: offer.id,
+      label: offer.site?.metro || offer.id,
+      hint: metroHint(offer),
+      tag: offer.note.toUpperCase(),
+      art: "user",
+      lines: metroLines(useCaseId, offer),
+      nerd: `Power ×${offer.powerMult}, price ×${offer.priceMult}, liquid fit-out +${offer.liquidWeeks} wk (game values).`,
+      why: metroWhy(useCaseId, offer),
+      offer,
+    }))
+  }
+  if (stepId === "gpu") {
+    return ids.brains.map((id) => {
+      const pick = brainPick(useCaseId, id)
+      const platform = byId(PLATFORMS, pick.platform)
+      const spec = platform ? `${platform.hbmGB} GB HBM, ${platform.hbmTBs} TB/s, ${platform.rackKW} kW, ${formatMoney(platform.capex)}, lead ${platform.leadWeeks} weeks` : ""
+      return {
+        id,
+        label: `NVIDIA ${platform?.name || pick.platform} ×${pick.racks}`,
+        hint: GPU_HINTS[pick.platform] || "",
+        tag: SIZE_TAG[id],
+        art: RACK_ART[pick.platform] || "rackAir",
+        lines: GPU_LEARN[pick.platform] || ["A rack of GPUs."],
+        nerd: platform?.id === "vr" ? `${spec}. 35 PFLOPS. Announced as NVL144.` : spec,
+        why: GPU_WHY[useCaseId]?.[pick.platform] || DOES[pick.platform] || "",
+        patch: { brains: id },
+        platform,
+        racks: pick.racks,
+      }
+    })
+  }
+  if (stepId === "cooling") {
+    return ids.home.map((id) => {
+      const meta = HALL_META[id]
+      const hall = byId(HALLS, meta.hallId)
+      return {
+        id,
+        label: nerd ? meta.nerdLabel : meta.label,
+        hint: nerd ? `${hall.maxRackKW} kW · PUE ${hall.pue} · ${hall.fitOutWeeks} wk` : id === "cool" ? "fans, ready now, cheaper" : id === "super" ? "water to the chip, faster" : id === "rear" ? "water door, more kW on air" : "coolers between the racks",
+        art: meta.art,
+        lines: HALL_LEARN[id](hall),
+        nerd: `PUE ${hall.pue}. Fit-out ${hall.fitOutWeeks} weeks. Up to ${hall.maxRackKW} kW per rack.`,
+        why: HALL_WHY[id],
+        patch: { home: id },
+        hall,
+      }
+    })
+  }
+  if (stepId === "memory") {
+    return ids.memory.map((id) => ({ id, ...MEMORY_TILES[id], why: MEMORY_WHY[useCaseId]?.[id] || DOES.kv, patch: memoryChoices(id) }))
+  }
+  if (stepId === "wires") {
+    return ids.wires.map((id) => ({ id, ...WIRE_TILES[id], why: WIRE_WHY[useCaseId]?.[id] || "", patch: { wires: id } }))
+  }
+  if (stepId === "storage") {
+    return ids.library.map((id) => ({ id, ...LIBRARY_TILES[id], why: LIBRARY_WHY[useCaseId]?.[id] || DOES[{ none: "local", basic: "file", smart: "vector" }[id]], patch: { library: id } }))
+  }
+  if (stepId === "qpu") {
+    if (!qpuRelevant(useCaseId)) {
+      return [{ id: "none", label: "Not needed for this job", hint: qpuNotNeeded(useCaseId), art: "prof", lines: [qpuNotNeeded(useCaseId), "ORCA PT-3 is a photonic quantum accelerator for sampling problems such as drug binding graphs.", "Digital Realty hosts one at its London Innovation Lab (LHR19)."], why: qpuNotNeeded(useCaseId), patch: { helper: false }, locked: true }]
+    }
+    return ["none", "orca"].map((id) => ({ id, ...QPU_TILES[id], why: QPU_WHY[id], patch: { helper: id === "orca" } }))
+  }
+  return []
+}
+
+/** The tile id (or metro list) a choice set is on for one step. */
+export function stepValue(useCaseId, stepId, choices = {}) {
+  if (stepId === "location") return cleanMetros(useCaseId, choices.metros)
+  if (stepId === "gpu") return choices.brains || "medium"
+  if (stepId === "cooling") return choices.home || "cool"
+  if (stepId === "memory") return memoryTile(choices)
+  if (stepId === "wires") return choices.wires || "peer"
+  if (stepId === "storage") return choices.library || "none"
+  if (stepId === "qpu") return choices.helper && qpuRelevant(useCaseId) ? "orca" : "none"
+  return null
+}
+
+/** The choice set after picking one tile on one step. A metro toggles; the last metro stays. */
+export function applyTile(useCaseId, stepId, tileId, choices = {}) {
+  const base = { ...defaultChoices(useCaseId), ...choices }
+  if (stepId === "location") {
+    const current = cleanMetros(useCaseId, base.metros)
+    let metros
+    if (current.includes(tileId)) metros = current.length > 1 ? current.filter((id) => id !== tileId) : current
+    else if (current.length >= maxMetros(useCaseId)) metros = maxMetros(useCaseId) === 1 ? [tileId] : [...current.slice(1), tileId]
+    else metros = [...current, tileId]
+    const { sitePlans, ...rest } = base
+    return { ...rest, metros }
+  }
+  const tile = stepTiles(useCaseId, stepId, true).find((item) => item.id === tileId) || stepTiles(useCaseId, stepId, false).find((item) => item.id === tileId)
+  return tile ? { ...base, ...tile.patch } : base
+}
+
+/** The short ids of a story's metro short list. */
+export function metroShortList(useCaseId) {
+  return metroOffers(useCaseId).map((offer) => offer.id)
+}
+
+/** Every simple picture for one story: each metro set × three tiles on five steps × the QPU choice. */
+export function allSimple(useCaseId) {
+  const list = []
+  const qpu = qpuRelevant(useCaseId) ? [false, true] : [false]
+  for (const metros of metroSets(useCaseId, metroShortList(useCaseId))) {
+    for (const brains of SIMPLE_IDS.brains) {
+      for (const home of SIMPLE_IDS.home) {
+        for (const memory of SIMPLE_IDS.memory) {
+          for (const wires of SIMPLE_IDS.wires) {
+            for (const library of SIMPLE_IDS.library) {
+              for (const helper of qpu) list.push({ metros, brains, home, wires, library, helper, ...memoryChoices(memory), mcp: false })
+            }
+          }
+        }
+      }
+    }
+  }
+  return list
+}
+
+/** The simple-board opening picture: the home metro, the middle GPU, air, no memory, peering, local drives. */
+export function simpleDefaults(useCaseId) {
+  return { ...defaultChoices(useCaseId) }
+}
+
+/** One line that names a choice set tile by tile, for the coach and the results card. */
+export function describeChoices(useCaseId, choices = {}) {
+  const tile = (stepId) => {
+    const value = stepValue(useCaseId, stepId, choices)
+    return stepTiles(useCaseId, stepId, true).find((item) => item.id === value) || stepTiles(useCaseId, stepId, false).find((item) => item.id === value)
+  }
+  const metros = cleanMetros(useCaseId, choices.metros).map((id) => byId(SITES, id)?.metro || id)
+  const parts = [
+    tile("gpu")?.label,
+    `${tile("cooling")?.label?.toLowerCase()} in ${metros.join(" + ")}`,
+    tile("memory")?.inWords,
+    `on ${tile("wires")?.label}`,
+    `${tile("storage")?.label?.toLowerCase()} storage`,
+  ]
+  if (qpuRelevant(useCaseId)) parts.push(choices.helper ? "with ORCA PT-3" : "without a QPU")
+  return parts.filter(Boolean).join(", ")
+}
+
+/** Which steps a choice set still leaves at the opening default: the review card lists them. */
+export function untouchedSteps(useCaseId, choices = {}) {
+  const base = defaultChoices(useCaseId)
+  return BUILD_STEP_IDS.filter((stepId) => {
+    if (stepId === "qpu" && !qpuRelevant(useCaseId)) return false
+    const a = stepValue(useCaseId, stepId, choices)
+    const b = stepValue(useCaseId, stepId, base)
+    return JSON.stringify(a) === JSON.stringify(b)
+  })
+}

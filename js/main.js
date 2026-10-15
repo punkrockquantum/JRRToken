@@ -1,19 +1,21 @@
-import { HALLS, KV_TIER, MISSION_SITES, ORCA, PLATFORMS, SITES, USE_CASES, byId } from "./data.js"
+import { DATA_HOMES, SCENARIOS, SITES, USE_CASES, byId } from "./data.js"
 import { BUILD } from "./build-info.js"
 import { DR_FOOTER, explainResult, thinkLines } from "./explain.js"
-import { boothCoach } from "./booth.js"
+import { ecoHint, ecoQuestion, ecoSummary, ecosystem } from "./eco.js"
 import { plainCoach } from "./coach.js"
 import { createFloor } from "./floor.js"
 import { createAdvanceGate, createIntro, matchingScene, sceneCaption, scenesFor, setIntroDetail } from "./intro.js"
 import { leagueCsv, leagueJson, ordinal, rankOf, sortLeague, upsertEntry } from "./league.js"
-import { defaultSitePlans, evaluateBuild, formatMoney, formatScore, formatTokens, stars } from "./model.js"
+import { STAR_POINTS, defaultSitePlans, evaluateBuild, formatMoney, formatScore, formatTokens, stars } from "./model.js"
 import { blockedReason, peopleCount, peopleLead, savingsLine } from "./results.js"
 import { attemptPayload, syncStatusLine } from "./attempt.js"
 import { validateEmail, validateName } from "./names.js"
 import { fetchLeague, recordAttempt } from "./sync.js"
 import { isMuted, loadMute, play, setMuted, unlock } from "./sound.js"
 import { spriteImg } from "./sprites.js"
-import { PRESET_IDS, STORIES, autoLibrary, brainPick, choicesToBuild, cityChoices, citySites, defaultChoices, nerdChoices, simpleChoices, simpleDataKind, simpleDefaults, simplePicks, simpleTiles, simpleToChoices } from "./presets.js"
+import { STORIES, brainPick, choicesToBuild, maxMetros, nerdChoices, simpleChoices } from "./presets.js"
+import { BUILD_STEP_IDS, STEPS, STEP_IDS, applyTile, nextStep, prevStep, qpuRelevant, simpleDefaults, stepIndex, stepTiles, stepValue, untouchedSteps } from "./steps.js"
+import { canImprove, roundEntry, roundHint, roundLine } from "./rounds.js"
 
 const LEAGUE_KEY = "token-quest-league-v1"
 const STAFF_PIN = "2510"
@@ -39,6 +41,7 @@ const state = {
   runRaf: 0,
   running: false,
   result: null,
+  toast: null,
   syncLine: "",
   staffUnlocked: false,
   staffPin: "",
@@ -56,10 +59,10 @@ let logoTimer = 0
 const stage = document.getElementById("stage")
 const hud = document.getElementById("hud")
 
-/** A new plan for a story. The simple board opens on its three defaults; nerd mode on the full defaults. */
+/** A new plan for a story: the opening defaults, the LOCATION step, round one of two. */
 function freshPlan(useCaseId, nerd = false) {
-  const choices = nerd ? defaultChoices(useCaseId) : simpleDefaults(useCaseId)
-  return { useCase: useCaseId, choices, build: choicesToBuild(useCaseId, choices, nerd) }
+  const choices = simpleDefaults(useCaseId)
+  return { useCase: useCaseId, choices, build: choicesToBuild(useCaseId, choices, nerd), step: "location", round: 1, rounds: [] }
 }
 
 function el(tag, props = {}, children = []) {
@@ -209,6 +212,7 @@ function resetRun() {
 /* ---------- Title ---------- */
 
 
+const TAGLINE = "Every AI answer is born in a data center."
 const CONSENT_BODY = "By sharing your information, you agree that Digital Realty may use your personal data to contact you, in accordance with Digital Realty's Privacy Practices. You may unsubscribe from communications at any time by using the unsubscribe link included in our messages."
 const CONSENT_MORE = "For more information, see our Privacy Practices:"
 const PRIVACY_URL = "https://www.digitalrealty.com/about/legal/privacy"
@@ -314,6 +318,7 @@ function titleScreen() {
         el("div", { class: "logo-art" }, [spriteImg("hero", 4), spriteImg("token", 4), spriteImg("prof", 4)]),
         el("h1", { class: "game-logo" }, [el("span", { text: "TOKEN" }), el("span", { text: "QUEST" })]),
         el("p", { class: "subtitle", text: "A DIGITAL REALTY GAME" }),
+        el("p", { class: "tagline", "data-key": "tagline", text: TAGLINE }),
         el("p", {
           class: "pitch",
           text: "Build the best AI factory you can afford. Beat the high score!",
@@ -495,19 +500,49 @@ function introScreen() {
   return wrapEl
 }
 
-/* ---------- The game screen ---------- */
+/* ---------- The game screen: a stepped build ---------- */
+
+const TOAST_MS = 2000
+let toastTimer = 0
 
 function syncBuild() {
   state.plan.build = choicesToBuild(state.plan.useCase, state.plan.choices, state.nerd)
 }
 
+/** Nerd-only patches (MCP, site plans) that are not tiles. */
 function pick(patch) {
   play("select")
   const next = { ...state.plan.choices, ...patch }
-  if (patch.cities != null) delete next.sitePlans
   state.plan.choices = next
   syncBuild()
   render()
+}
+
+/** The two-second reason that pops up when a tile is picked. The screen re-renders, so the text lives in state. */
+function flashWhy(text) {
+  clearTimeout(toastTimer)
+  state.toast = text || null
+  if (!text) return
+  toastTimer = setTimeout(() => {
+    state.toast = null
+    document.getElementById("toast")?.remove()
+  }, TOAST_MS)
+}
+
+function pickTile(stepId, tile) {
+  play("select")
+  state.plan.choices = applyTile(state.plan.useCase, stepId, tile.id, state.plan.choices)
+  syncBuild()
+  flashWhy(tile.why)
+  render()
+}
+
+function gotoStep(stepId) {
+  if (!STEP_IDS.includes(stepId)) return
+  state.plan.step = stepId
+  flashWhy(null)
+  render()
+  stage.querySelector(".step-panel")?.scrollTo?.(0, 0)
 }
 
 function openStories() {
@@ -648,11 +683,11 @@ function bindTile(tile, onPick, learn) {
   })
 }
 
-function picture({ key, art, tag = "", label, hint = "", on, lines, nerd = "", onPick, scale = 2 }) {
+function picture({ key, art, tag = "", label, hint = "", on, lines, nerd = "", onPick, scale = 2, locked = false }) {
   const learn = { title: label, lines, nerd }
   const tile = el("button", {
     type: "button",
-    class: `tile${on ? " on" : ""}`,
+    class: `tile${on ? " on" : ""}${locked ? " locked" : ""}`,
     "data-key": key,
     "data-nerd": nerd || null,
     "aria-pressed": on ? "true" : "false",
@@ -680,320 +715,14 @@ function picture({ key, art, tag = "", label, hint = "", on, lines, nerd = "", o
   return el("div", { class: "tile-wrap" }, [tile, ask])
 }
 
-function choiceRow(id, title, hint, wraps) {
-  const selected = wraps.map((wrap) => wrap.querySelector(".tile")).find((tile) => tile?.getAttribute("aria-pressed") === "true")
-  const nerd = state.nerd && selected?.dataset.nerd ? selected.dataset.nerd : ""
-  return el("div", { class: `choice-row${nerd ? " has-nerd" : ""}`, "data-row": id }, [
-    el("div", { class: "row-name" }, [
-      el("b", { text: title }),
-      el("span", { class: "fine", text: hint }),
-    ]),
-    el("div", { class: "tiles" }, wraps),
-    nerd ? el("p", { class: "row-nerd", text: nerd }) : null,
-  ])
-}
-
-function metroNames(useCaseId, cities) {
-  return citySites(useCaseId, cities).map((id) => byId(SITES, id)?.metro).filter(Boolean)
-}
-
-function siteLabel(count) {
-  return count === 1 ? "1 Digital Realty metro" : `${count} Digital Realty metros`
-}
-
-function siteLearn(useCaseId, count) {
-  const names = metroNames(useCaseId, count)
-  const list = names.join(", ") || "the city"
-  return [
-    `${siteLabel(count)}: ${list}.`,
-    "Closer to people = faster.",
-    "Putting the racks closer to the people shortens the trip the answer has to take.",
-    "Each extra metro also copies the storage and the links, so it costs more.",
-  ]
-}
-
-function nerdBrain(platform) {
-  const spec = `${platform.hbmGB} GB HBM, ${platform.hbmTBs} TB/s, ${platform.rackKW} kW, ${formatMoney(platform.capex)}, lead ${platform.leadWeeks} weeks`
-  if (platform.id !== "vr") return spec
-  return `${spec}. 35 PFLOPS. Announced as NVL144.`
-}
-
-const GPU_HINT = {
-  h100: "older, cheaper",
-  h200: "more memory, still on air",
-  b200: "newer, still on air",
-  b300: "strong on air cooling",
-  gb200: "GPUs working as one, needs liquid",
-  gb300: "GPUs working as one, needs liquid",
-  vr: "newest, long wait, huge power",
-}
-
-const GPU_LEARN = {
-  h100: [
-    "The GPU that kicked off the AI boom in 2022.",
-    "80 GB of memory per GPU is small for today's giant models, so a big model is split across many GPUs.",
-    "Pick it when you want an older, cheaper rack that arrives sooner.",
-  ],
-  h200: [
-    "The same Hopper brain as the H100, with 141 GB of memory per GPU.",
-    "Writing the answer is mostly a memory job, so this one is faster.",
-    "It still fits an air-cooled hall.",
-  ],
-  b200: [
-    "A Blackwell GPU with 180 GB of memory that still fits an air-cooled hall.",
-    "Smaller numbers mean each token needs less memory.",
-    "Pick it when you want a newer GPU without liquid cooling.",
-  ],
-  b300: [
-    "Blackwell Ultra, with 288 GB of memory per GPU.",
-    "It is the strongest rack that still runs on air cooling.",
-    "Pick it when you want a lot of answers without waiting for a liquid hall.",
-  ],
-  gb200: [
-    "72 GPUs joined by NVLink act as one giant GPU.",
-    "Huge models love that shared memory.",
-    "It runs too hot for fans, so pick it only with the liquid-cooled hall.",
-  ],
-  gb300: [
-    "72 Blackwell Ultra GPUs joined by NVLink act as one.",
-    "Built for models that think for a long time.",
-    "It needs the liquid-cooled hall.",
-  ],
-  vr: [
-    "The 2026 Vera Rubin rack has the fastest memory and a long wait for delivery.",
-    "NVIDIA first counted it as 144 GPU dies in 72 packages.",
-    "Pick it only when the deadline is long and the budget can take the highest price.",
-  ],
-}
-
-const SIZE_TAG = { small: "SMALL", medium: "MEDIUM", big: "BIG", rubin: "NEWEST", huge: "HUGE" }
-
-function brainRow(choices) {
-  const ids = state.nerd ? PRESET_IDS.nerdBrains : PRESET_IDS.brains
-  const artFor = { h100: "rackAir", h200: "rackAir", b200: "rackAir", b300: "rackAir", gb200: "rackLiquid", gb300: "rackLiquid", vr: "rackRubin" }
-  const tiles = ids.map((id) => {
-    const picked = brainPick(state.plan.useCase, id)
-    const platform = byId(PLATFORMS, picked.platform)
-    return picture({
-      key: `brains-${id}`,
-      art: artFor[picked.platform] || "rackAir",
-      tag: SIZE_TAG[id],
-      label: platform ? `NVIDIA ${platform.name} ×${picked.racks}` : id,
-      hint: GPU_HINT[picked.platform] || "",
-      on: choices.brains === id,
-      lines: GPU_LEARN[picked.platform] || ["A rack of GPUs."],
-      nerd: platform ? nerdBrain(platform) : "",
-      onPick: () => pick({ brains: id }),
-    })
-  })
-  return choiceRow("brains", "GPU", "The computers that run the AI", tiles)
-}
-
-function hostRow(choices) {
-  const tiles = [
-    picture({
-      key: "hosts-standard",
-      art: "rackAir",
-      label: "Standard hosts",
-      hint: "orchestration only",
-      on: (choices.hosts || "standard") === "standard",
-      lines: [
-        "Ordinary CPU hosts run the app around the GPUs.",
-        "They do not park the KV cache, and they do not isolate tenants.",
-        "This is the baseline, with no extra cost in this game.",
-      ],
-      nerd: "Game value: no host premium.",
-      onPick: () => pick({ hosts: "standard" }),
-    }),
-    picture({
-      key: "hosts-grace",
-      art: "rackAir",
-      label: "Grace/Vera CPU hosts",
-      hint: "big memory pool for KV",
-      on: choices.hosts === "grace",
-      lines: [
-        "Grace or Vera class hosts keep a big memory pool beside the GPUs.",
-        "That pool can park the KV cache, so a follow-up spends less time on prefill.",
-        "It pays for very long contexts, past about 32k tokens; for short chats it is just extra cost.",
-      ],
-      nerd: "Game value: $450k and 12 kW per site. With the KV tier on, contexts past 32k tokens skip more prefill (the full effect at 64k).",
-      onPick: () => pick({ hosts: "grace" }),
-    }),
-    picture({
-      key: "hosts-dpu",
-      art: "token",
-      label: "+ BlueField DPUs",
-      hint: "secure multi-tenant",
-      on: choices.hosts === "dpu",
-      lines: [
-        "BlueField-class DPUs move data and keep tenants apart.",
-        "The GPUs are interrupted less, which matters when many customers share a hall.",
-        "They add cost and a little power, and they take the security work off the GPUs.",
-      ],
-      nerd: "Game value: $700k and 8 kW per site. A small tenancy haircut comes off.",
-      onPick: () => pick({ hosts: "dpu" }),
-    }),
-  ]
-  return choiceRow("hosts", "CPU / DPU", "Hosts beside the GPUs", tiles)
-}
-
-function memoryRow(choices) {
-  const tiles = [
-    picture({
-      key: "memory-off",
-      art: "token",
-      label: "KV cache tier OFF",
-      hint: "re-reads every chat",
-      on: !choices.memory,
-      lines: [
-        "With the KV cache off, the GPU throws away its notes at the end of each chat.",
-        "The next question makes it re-read the whole conversation.",
-        "Leave it off only for one-off questions.",
-      ],
-      nerd: "No saved chats. Prefill runs again on every turn.",
-      onPick: () => pick({ memory: false }),
-    }),
-    picture({
-      key: "memory-on",
-      art: "chest",
-      label: "KV cache tier ON",
-      hint: "remembers the chat",
-      on: choices.memory,
-      lines: [
-        "The KV cache is the GPU's notes on what it already read.",
-        "A KV cache tier parks those notes and reloads them, so a follow-up skips the re-read.",
-        "Turn it on when people keep the conversation going.",
-      ],
-      nerd: `Lead ${KV_TIER.leadWeeks} weeks. Parks the KV cache instead of prefill.`,
-      onPick: () => pick({ memory: true }),
-    }),
-  ]
-  return choiceRow("memory", "MEMORY", "KV cache: remembers chats so it doesn't re-read them", tiles)
-}
-
-function libraryRow(choices) {
-  const tiles = [
-    ["none", "Local only", "scroll", "each server's own drives", [
-      "Each server keeps its own small drives.",
-      "Fine for a chatbot that only needs what it already knows.",
-      "It does not hold a shared search, so looking up company documents is slow.",
-    ]],
-    ["basic", "File & object storage", "vault", "shared documents", [
-      "File and object storage holds the documents and the model files.",
-      "The app can read a document before the model writes the answer.",
-      "The model itself does not search.",
-    ]],
-    ["smart", "Vector index", "gem", "finds the right passages", [
-      "A vector index finds the right passages for retrieval.",
-      "The app turns the question into numbers, searches the index, and pastes the best passages into the prompt.",
-      "The model never searches mid-thought.",
-    ]],
-  ].map(([id, label, art, hint, lines]) => picture({
-    key: `library-${id}`,
-    art,
-    label,
-    hint,
-    on: choices.library === id,
-    lines,
-    onPick: () => pick({ library: id }),
-  }))
-  return choiceRow("library", "STORAGE", "Where documents live", tiles)
-}
-
-function homeRow(choices) {
-  const air = byId(HALLS, "A")
-  const rear = byId(HALLS, "R")
-  const row = byId(HALLS, "I")
-  const liquid = byId(HALLS, "B")
-  const airLines = [
-    "Air cooling is the fans, in-row coolers and rear door heat exchangers family. The servers breathe air.",
-    `This hall handles up to ${air.maxRackKW} kW per rack and is ready now.`,
-    "Air-cooled GPUs fit. A liquid-cooled GPU overheats and slows down.",
-  ]
-  const liquidLines = [
-    "Coolant goes straight to cold plates on the chips. This is the LIQUID-COOLED HALL.",
-    `Up to ${liquid.maxRackKW} kW per rack, and less power is spent on cooling.`,
-    "Required for NVIDIA GB200 NVL72 and Vera Rubin.",
-  ]
-  const cool = picture({
-    key: "home-cool",
-    art: "fan",
-    label: "AIR-COOLED HALL",
-    hint: `fans, up to ${air.maxRackKW} kW per rack`,
-    on: choices.home === "cool",
-    lines: airLines,
-    nerd: `PUE ${air.pue}. Fit-out ${air.fitOutWeeks} weeks. About 10–40 kW.`,
-    onPick: () => pick({ home: "cool" }),
-  })
-  const wet = picture({
-    key: "home-super",
-    art: "rackLiquid",
-    label: state.nerd ? "Direct Liquid Cooling" : "LIQUID-COOLED HALL",
-    hint: `water to the chip, up to ${liquid.maxRackKW} kW per rack`,
-    on: choices.home === "super",
-    lines: liquidLines,
-    nerd: `PUE ${liquid.pue}. Fit-out ${liquid.fitOutWeeks} weeks. About 100–240 kW.`,
-    onPick: () => pick({ home: "super" }),
-  })
-  if (!state.nerd) return choiceRow("home", "DATA HALL", "How the racks are cooled", [cool, wet])
-  const tiles = [
-    cool,
-    picture({
-      key: "home-row",
-      art: "rackAir",
-      label: "In-row cooling",
-      hint: `${row.maxRackKW} kW · PUE ${row.pue} · ${row.fitOutWeeks} wk`,
-      on: choices.home === "row",
-      lines: [
-        "Coolers sit between the racks, so heat does not cross the whole room.",
-        `Up to ${row.maxRackKW} kW per rack. PUE ${row.pue}. Lead time ${row.fitOutWeeks} weeks.`,
-        "Air-cooled GPUs fit. NVL72 and Vera Rubin still need direct liquid cooling.",
-      ],
-      nerd: `PUE ${row.pue} is a game assumption. Fit-out ${row.fitOutWeeks} weeks.`,
-      onPick: () => pick({ home: "row" }),
-    }),
-    picture({
-      key: "home-rear",
-      art: "rackAir",
-      label: "Rear Door Heat Exchanger",
-      hint: `${rear.maxRackKW} kW · PUE ${rear.pue} · ${rear.fitOutWeeks} wk`,
-      on: choices.home === "rear",
-      lines: [
-        "A water-cooled door captures the hot exhaust. The servers stay air-cooled.",
-        `About 40 to ${rear.maxRackKW} kW per rack. PUE ${rear.pue}. Lead time ${rear.fitOutWeeks} weeks.`,
-        "Strong air-cooled GPUs fit. NVL72 and Vera Rubin still need direct liquid cooling.",
-      ],
-      nerd: `PUE ${rear.pue} is a game assumption. Fit-out ${rear.fitOutWeeks} weeks.`,
-      onPick: () => pick({ home: "rear" }),
-    }),
-    wet,
-  ]
-  return choiceRow("home", "DATA HALL COOLING", "How the racks are cooled", tiles)
-}
-
-function siteRow(choices) {
-  const cityMax = MISSION_SITES[state.plan.useCase]?.max || 1
-  const tiles = []
-  for (let count = 1; count <= cityMax; count += 1) {
-    tiles.push(picture({
-      key: `city-${count}`,
-      art: "user",
-      label: siteLabel(count),
-      hint: metroNames(state.plan.useCase, count).join(", "),
-      on: choices.cities === count,
-      lines: siteLearn(state.plan.useCase, count),
-      onPick: () => pick({ cities: count }),
-    }))
-  }
-  return choiceRow("sites", "SITES", "Closer to people = faster", tiles)
-}
-
 const LINK_NAMES = {
   fabric: "ServiceFabric",
   mcp: "ServiceFabric MCP",
   cross: "Cross connect",
   fiber: "Dark fiber",
   public: "Public internet",
+  peer: "Peering",
+  eye: "Eyeball network",
 }
 
 function legWords(name = "") {
@@ -1012,41 +741,120 @@ function nerdLegs(result) {
     .join(". ")
 }
 
-function wireRow(choices, result) {
-  const legs = nerdLegs(result)
-  const tiles = [
-    ["cheap", "Public internet", "gremlin", "fine for batch jobs, slow and jittery for live users", [
-      "The public internet is the shared road everyone uses.",
-      "It is fine for batch jobs that can wait, and slow and jittery for live users.",
-      "Your traffic crosses several networks with no promise of a steady delay.",
-    ]],
-    ["peer", "Peering + eyeball networks", "user", "short paths to the ISPs your users are on", [
-      "Peering swaps traffic directly with other networks at an internet exchange.",
-      "Eyeball networks are the ISPs your users are already on, so the path to them is short.",
-      "It is the realistic middle option: better than the open internet, not as steady as a private link.",
-    ]],
-    ["fast", "ServiceFabric", "token", "private links to clouds, partners and other metros in minutes", [
-      "ServiceFabric is a private, on-demand link to clouds, partners and your other metros.",
-      "A connection can go live in minutes once the port exists, and the delay stays predictable.",
-      "ServiceFabric MCP lets an agent configure it for you: same network, faster operations.",
-    ]],
-    ["private", "Cross connect + Dark fiber", "chest", "your own fibre in the building and between your sites", [
-      "A cross connect is your own fibre to a partner in the same building, so the delay is tiny.",
-      "Dark fiber is your own glass between nearby metros, so it pays off with two or three sites.",
-      "Users still reach you over ServiceFabric. Too far for fibre, and the link between sites uses ServiceFabric too.",
-    ]],
-  ].map(([id, label, art, hint, lines]) => {
+/* ---------- Scenario card, rail, ecosystem bar ---------- */
+
+function responseWords(seconds) {
+  if (!Number.isFinite(seconds)) return "—"
+  return seconds < 1 ? `${Math.round(seconds * 1000)} ms` : `${seconds} s`
+}
+
+/** The brief every step shows: who the users are, where the model and data live, and the limits. */
+function scenarioCard(uc) {
+  const scenario = SCENARIOS[uc.id] || {}
+  const home = DATA_HOMES[uc.id]
+  const story = STORIES[uc.id] || { line: uc.blurb, sprite: uc.icon }
+  const fact = (label, value, key) => el("div", { class: "sc-fact", "data-key": `fact-${key}` }, [el("span", { class: "fine", text: label }), el("strong", { text: value })])
+  return el("div", { class: "scenario panel", "data-key": "scenario" }, [
+    el("div", { class: "sc-who" }, [
+      spriteImg(story.sprite, 3),
+      el("div", {}, [
+        el("h1", { text: uc.name }),
+        el("p", { class: "fine story-line", text: story.line }),
+      ]),
+    ]),
+    el("div", { class: "sc-places" }, [
+      el("p", { class: "sc-place", "data-key": "users-place" }, [el("b", { text: "USERS " }), scenario.users || scenario.where || ""]),
+      el("p", { class: "sc-place", "data-key": "data-place" }, [el("b", { text: "MODEL & DATA " }), home ? `${home.what} in ${home.label}` : "beside the GPUs"]),
+    ]),
+    el("div", { class: "sc-facts" }, [
+      fact("DEMAND", `${formatTokens(uc.demand)} tok/s`, "demand"),
+      fact("RESPONSE", responseWords(uc.ttft), "response"),
+      fact("BUDGET", formatMoney(scenario.budget), "budget"),
+      fact("POWER", `${scenario.powerMW} MW`, "power"),
+      fact("DEADLINE", `Week ${scenario.deadlineWeeks}`, "deadline"),
+    ]),
+    btn("NEW STORY", openStories, { kind: "ghost", key: "new-story" }),
+  ])
+}
+
+function rail(stepId) {
+  const current = stepIndex(stepId)
+  return el("ol", { class: "rail", "data-key": "rail", "aria-label": "Build steps" }, STEPS.map((step, index) => {
+    const here = index === current
+    const done = index < current
+    return el("li", { class: `rail-step${here ? " current" : done ? " done" : ""}`, "aria-current": here ? "step" : null }, [
+      el("button", {
+        type: "button",
+        class: "rail-btn",
+        "data-key": `step-${step.id}`,
+        "aria-label": `Step ${index + 1}: ${step.title}`,
+        onclick: () => {
+          play("blip")
+          gotoStep(step.id)
+        },
+      }, [
+        el("span", { class: "rail-num", text: String(index + 1) }),
+        el("span", { class: "rail-name", text: step.short }),
+      ]),
+    ])
+  }))
+}
+
+/** Five lights: POWER, COOLING, COMPUTE, DATA, CONNECTIONS. Green, amber or red from the live evaluation. */
+function ecoBar(result, { detail = false } = {}) {
+  const parts = ecosystem(result)
+  return el("div", { class: `eco-bar${detail ? " detail" : ""}`, "data-key": "eco-bar", role: "list", "aria-label": "The ecosystem" }, parts.map((part) =>
+    el("div", { class: `eco-part ${part.state}`, role: "listitem", "data-part": part.id, "data-state": part.state, title: part.why }, [
+      el("span", { class: "eco-light", "aria-hidden": "true" }),
+      spriteImg(part.art, 2),
+      el("b", { text: part.name }),
+      detail ? el("span", { class: "eco-why", text: part.why }) : null,
+    ]),
+  ))
+}
+
+/** The three star thresholds as a target line. No live score before GO. */
+function targetLine() {
+  return el("div", { class: "target", "data-key": "target" }, [
+    el("span", { class: "fine", text: "TARGET" }),
+    ...STAR_POINTS.map((points, index) => el("span", { class: "target-step" }, [starRow(index + 1, 1), el("b", { text: formatScore(points) })])),
+  ])
+}
+
+/* ---------- Steps ---------- */
+
+function stepNav(stepId) {
+  const index = stepIndex(stepId)
+  const last = index >= STEP_IDS.length - 1
+  return el("div", { class: "step-nav" }, [
+    btn("◀ BACK", () => gotoStep(prevStep(stepId)), { kind: "ghost", key: "back", sound: "back", disabled: index === 0 }),
+    last ? null : btn(nextStep(stepId) === "review" ? "REVIEW ▶" : "NEXT ▶", () => gotoStep(nextStep(stepId)), { kind: "big", key: "next", sound: "blip" }),
+  ])
+}
+
+function stepPanel(stepId, result) {
+  const id = state.plan.useCase
+  const choices = state.plan.choices
+  const step = STEPS[stepIndex(stepId)]
+  if (stepId === "review") return reviewPanel(result)
+  const tiles = stepTiles(id, stepId, state.nerd)
+  const value = stepValue(id, stepId, choices)
+  const isOn = (tile) => (stepId === "location" ? value.includes(tile.id) : value === tile.id)
+  const wraps = tiles.map((tile) => {
     const wrap = picture({
-      key: `wires-${id}`,
-      art,
-      label,
-      hint,
-      on: choices.wires === id,
-      lines,
-      nerd: choices.wires === id ? legs : "",
-      onPick: () => pick({ wires: id }),
+      key: `${stepId}-${tile.id}`,
+      art: tile.art,
+      tag: tile.tag || "",
+      label: tile.label,
+      hint: tile.hint,
+      on: isOn(tile),
+      lines: tile.lines,
+      nerd: stepId === "wires" && isOn(tile) ? nerdLegs(result) : tile.nerd || "",
+      onPick: () => (tile.locked ? gotoStep(nextStep(stepId)) : pickTile(stepId, tile)),
+      scale: state.nerd ? 2 : 3,
+      locked: Boolean(tile.locked),
     })
-    if (id === "fast" && state.nerd && choices.wires === "fast") {
+    if (stepId === "wires" && tile.id === "fast" && state.nerd && isOn(tile)) {
       const toggle = el("button", {
         type: "button",
         class: `mcp-toggle${choices.mcp ? " on" : ""}`,
@@ -1064,186 +872,67 @@ function wireRow(choices, result) {
     }
     return wrap
   })
-  return choiceRow("wires", "CONNECTION", "How answers travel", tiles)
-}
-
-function orcaRow(choices) {
-  const tiles = [
-    picture({
-      key: "helper",
-      art: "orca",
-      label: choices.helper ? "ORCA PT-3 ON" : "ORCA PT-3 OFF",
-      hint: "photonic quantum accelerator",
-      on: choices.helper,
-      lines: [
-        "ORCA PT-3 is a photonic quantum accelerator that sits beside the GPUs.",
-        "The GPUs build a binding graph of molecule and protein, and ORCA helps find the best match.",
-        "It finds about twice as many strong binders as classical AI, and it does not make tokens faster.",
-      ],
-      nerd: `Lead ${ORCA.leadWeeks} weeks. Photonic boson sampling. London Innovation Lab, LHR19.`,
-      onPick: () => pick({ helper: !choices.helper }),
-    }),
-  ]
-  return choiceRow("orca", "ORCA", "Quantum accelerator for finding medicines", tiles)
-}
-
-/* ---------- The simple board: three decisions, three real tiles each ---------- */
-
-const RACK_ART = { h100: "rackAir", h200: "rackAir", b200: "rackAir", b300: "rackAir", gb200: "rackLiquid", gb300: "rackLiquid", vr: "rackRubin" }
-const SIMPLE_WIRE_ART = { cheap: "gremlin", peer: "user", fast: "token" }
-const SIMPLE_WIRE_LEARN = {
-  cheap: [
-    "The public internet is the shared road everyone uses.",
-    "It is fine for batch jobs that can wait, and slow and jittery for live users.",
-    "Your traffic crosses several networks with no promise of a steady delay.",
-  ],
-  peer: [
-    "Peering swaps traffic directly with other networks at an internet exchange.",
-    "Eyeball networks are the ISPs your users are already on, so the path to them is short.",
-    "It is the realistic middle option: better than the open internet, not as steady as a private link.",
-  ],
-  fast: [
-    "ServiceFabric is a private, on-demand link to clouds, partners and your other metros.",
-    "A connection can go live in minutes once the port exists, and the delay stays predictable.",
-    "Documents and tools in the same building ride a cross connect, so that hop is tiny.",
-  ],
-}
-
-function simpleHallLearn(useCaseId, hall) {
-  const air = byId(HALLS, "A")
-  const liquid = byId(HALLS, "B")
-  if (hall.id === "cool") {
-    return [
-      "Air cooling is the fans, in-row coolers and rear door heat exchangers family. The servers breathe air.",
-      `This hall handles up to ${air.maxRackKW} kW per rack and is ready now.`,
-      "Air-cooled GPUs fit. A liquid-cooled GPU overheats and slows down.",
-    ]
-  }
-  const base = [
-    "Coolant goes straight to cold plates on the chips. This is the LIQUID-COOLED HALL.",
-    `Up to ${liquid.maxRackKW} kW per rack, and less power is spent on cooling.`,
-    "Required for NVIDIA GB200 NVL72 and Vera Rubin.",
-  ]
-  if (hall.id === "super") return base
-  if (cityChoices(useCaseId)) return [base[0], ...siteLearn(useCaseId, 2).slice(0, 3)]
-  const rear = byId(HALLS, "R")
-  return [
-    "A water-cooled door on each rack takes the hot exhaust away. The servers stay air-cooled.",
-    `Up to ${rear.maxRackKW} kW per rack, and a better PUE than plain fans, so more of a small power room reaches the GPUs.`,
-    "Air-cooled Blackwell racks fit. NVL72 and Vera Rubin still need the liquid hall.",
-  ]
-}
-
-const SIMPLE_DATA_ART = { kv: { off: "gremlin", on: "chest", plus: "rackAir" }, index: { off: "chest", on: "iconBook", plus: "scroll" }, lab: { off: "chest", on: "vault", plus: "orca" } }
-const SIMPLE_DATA_LEARN = {
-  kv: {
-    off: ["Without a KV cache tier the GPUs re-read the whole conversation on every turn.", "Fine for one-off questions. Costly when people keep talking.", "Prefill is the re-read; it eats GPU time before the first word."],
-    on: ["The KV cache tier parks the GPU's notes on each chat, so a follow-up skips the re-read.", "Turn it on when people keep the conversation going.", `Game value: ${formatMoney(KV_TIER.capex, 0)} and ${KV_TIER.kw} kW per site.`],
-    plus: ["Grace or Vera class hosts keep a big CPU memory pool beside the GPUs.", "It parks very long contexts, past about 32k tokens, so agents skip even more prefill.", "For short chats it is just extra cost and power."],
-  },
-  index: {
-    off: ["With no shared index the app has nothing to search, so the model answers from memory alone.", "Answers are weaker and the lookup is slow.", "Storage is not fetching the answer; it is feeding the prompt."],
-    on: ["The app embeds the question and searches the vector index, then pastes the best passages into the prompt.", "The model never searches mid-thought.", "The fastest lookup before the model runs."],
-    plus: ["The vector index finds the passages; the KV cache tier remembers the prompt they built.", "A follow-up question skips the re-read of those passages.", "Two small cabinets beside the GPUs."],
-  },
-  lab: {
-    off: ["Each server keeps its own small drives.", "The lab's candidate libraries and checkpoints have no shared home, so the GPUs wait on them.", "Fine for a chatbot, not for a screening pipeline."],
-    on: ["File and object storage holds the candidate libraries and model checkpoints.", "Checkpoints load into GPU memory at start-up, not on every token.", "The GPUs always have the next batch ready."],
-    plus: ["ORCA PT-3 is a photonic quantum accelerator in two cabinets beside the GPUs.", "GPUs build the binding graph; ORCA samples it and finds strong binders about twice as often.", "It costs money and a few months; it only pays when the GPUs are there."],
-  },
-}
-
-/** What the simple board decided for the player, shown as small chips so nothing is hidden. */
-function includedChips(useCaseId) {
-  const chips = []
-  const library = simpleDataKind(useCaseId) === "kv" ? autoLibrary(useCaseId) : "none"
-  if (library === "basic") chips.push("File & object storage included")
-  if (library === "smart") chips.push("Vector index included")
-  return chips
-}
-
-function simpleRows(choices) {
-  const id = state.plan.useCase
-  const tiles = simpleTiles(id)
-  const picks = simplePicks(id, choices)
-  const choose = (patch) => pick(simpleToChoices(id, { ...picks, ...patch }))
-  const gpus = tiles.brains.map((tile) => picture({
-    key: `brains-${tile.id}`,
-    art: RACK_ART[tile.platform?.id] || "rackAir",
-    label: `NVIDIA ${tile.label}`,
-    hint: tile.hint,
-    on: picks.brains === tile.id,
-    lines: GPU_LEARN[tile.platform?.id] || ["A rack of GPUs."],
-    onPick: () => choose({ brains: tile.id }),
-    scale: 3,
-  }))
-  const halls = tiles.halls.map((tile) => picture({
-    key: `hall-${tile.id}`,
-    art: tile.id === "cool" ? "fan" : tile.id === "super" ? "pipe" : cityChoices(id) ? "user" : "chest",
-    label: tile.label,
-    hint: tile.hint,
-    on: picks.hall === tile.id,
-    lines: simpleHallLearn(id, tile),
-    onPick: () => choose({ hall: tile.id }),
-    scale: 3,
-  }))
-  const wires = tiles.wires.map((tile) => picture({
-    key: `wires-${tile.id}`,
-    art: SIMPLE_WIRE_ART[tile.id],
-    label: tile.label,
-    hint: tile.hint,
-    on: picks.wires === tile.id,
-    lines: SIMPLE_WIRE_LEARN[tile.id],
-    onPick: () => choose({ wires: tile.id }),
-    scale: 3,
-  }))
-  const kind = simpleDataKind(id)
-  const data = tiles.data.map((tile) => picture({
-    key: `data-${tile.id}`,
-    art: SIMPLE_DATA_ART[kind][tile.id],
-    label: tile.label,
-    hint: tile.hint,
-    on: picks.data === tile.id,
-    lines: SIMPLE_DATA_LEARN[kind][tile.id],
-    onPick: () => choose({ data: tile.id }),
-    scale: 3,
-  }))
-  const dataTitle = kind === "kv" ? "MEMORY" : kind === "index" ? "DATA" : "DATA + QPU"
-  const dataHint = kind === "kv" ? "What the GPUs remember between turns" : kind === "index" ? "Where the documents live" : "Shared data and the quantum helper"
-  return [
-    choiceRow("brains", "GPU", "The computers that run the AI", gpus),
-    choiceRow("home", "DATA HALL", "Cooling and where the racks live", halls),
-    choiceRow("wires", "CONNECTION", "How answers travel", wires),
-    choiceRow("data", dataTitle, dataHint, data),
-  ]
-}
-
-/** Two gauges, the crowd, one coach line and GO. Nothing a first-time visitor has to decode. */
-function simpleFeel(result) {
-  const spend = result.budgetSpend || 0
-  const budget = result.budget || 1
-  const late = result.lateWeeks > 0
-  const timePct = result.liveWeeks / Math.max(result.scenario?.deadlineWeeks || 1, result.liveWeeks, 1)
-  const mood = crowdMood(result)
-  const happy = mood === "happy" && !late && !result.overBudget && !result.overPower
-  return el("aside", { class: "feel simple" }, [
-    gauge("MONEY", spend / budget, result.overBudget ? "TOO MUCH" : "OK", { bad: result.overBudget, key: "budget", art: "token" }),
-    gauge("TIME", Math.min(1, timePct), late ? "LATE" : "ON TIME", { bad: late, key: "golive", art: "scroll" }),
-    el("div", { class: `crowd ${mood}`, "data-mood": mood, "aria-label": mood === "happy" ? "People are happy" : "People are waiting" }, [
-      spriteImg(mood === "happy" ? "user" : "gremlin", 4),
-      spriteImg(mood === "happy" ? "user" : "gremlin", 4),
-      spriteImg(mood === "happy" ? "user" : "gremlin", 4),
-      spriteImg(mood === "happy" ? "hero" : "gremlin", 4),
-      el("span", { class: "crowd-word", text: mood === "happy" ? "HAPPY" : "WAITING" }),
+  const selected = tiles.find(isOn)
+  const nerdLine = state.nerd ? (stepId === "wires" ? nerdLegs(result) : selected?.nerd || "") : ""
+  const max = maxMetros(id)
+  const subtitle = stepId === "location"
+    ? `${step.hint}${max > 1 ? `: pick up to ${max}` : ""}. ${metroSummary(id, choices)}`
+    : stepId === "qpu" && !qpuRelevant(id)
+      ? "No choice here. Read why, then NEXT."
+      : step.hint
+  return el("section", { class: `step-panel step-${stepId}`, "data-key": "step-panel", "aria-labelledby": "step-title" }, [
+    el("div", { class: "step-head" }, [
+      el("h2", { id: "step-title", text: `${stepIndex(stepId) + 1}. ${step.title}` }),
+      el("p", { class: "fine", "data-key": "step-hint", text: subtitle }),
     ]),
-    el("div", { class: `coach${happy ? " ok" : ""}`, "data-key": "coach" }, [
-      spriteImg("prof", 3),
-      el("p", { text: boothCoach(result) }),
-    ]),
-    btn("GO", () => startRun(), { kind: "big run", key: "run", sound: "start", disabled: !result.ok }),
-    btn("NERD MODE", toggleNerd, { kind: "ghost nerd-toggle", key: "nerd", pressed: false, sound: "blip" }),
+    el("div", { class: `tiles count-${wraps.length}` }, wraps),
+    nerdLine ? el("p", { class: "row-nerd", "data-key": "step-nerd", text: nerdLine }) : null,
+    stepNav(stepId),
   ])
 }
+
+function metroSummary(id, choices) {
+  const picked = stepValue(id, "location", choices).map((site) => byId(SITES, site)?.metro || site)
+  return picked.length > 1 ? `Chosen: ${picked.join(" + ")}.` : `Chosen: ${picked[0] || "none"}.`
+}
+
+/** The summary before GO: one line per step with a CHANGE button, the opening defaults called out, and the target. */
+function reviewPanel(result) {
+  const id = state.plan.useCase
+  const choices = state.plan.choices
+  const untouched = new Set(untouchedSteps(id, choices))
+  const rows = BUILD_STEP_IDS.filter((stepId) => stepId !== "qpu" || qpuRelevant(id)).map((stepId) => {
+    const step = STEPS[stepIndex(stepId)]
+    const value = stepValue(id, stepId, choices)
+    const tiles = stepTiles(id, stepId, state.nerd)
+    const label = stepId === "location"
+      ? value.map((site) => byId(SITES, site)?.metro || site).join(" + ")
+      : tiles.find((tile) => tile.id === value)?.label || stepTiles(id, stepId, !state.nerd).find((tile) => tile.id === value)?.label || String(value)
+    return el("div", { class: `review-row${untouched.has(stepId) ? " untouched" : ""}`, "data-key": `review-${stepId}` }, [
+      el("span", { class: "fine", text: step.title }),
+      el("strong", { text: label }),
+      untouched.has(stepId) ? el("span", { class: "fine untouched-tag", text: "opening default" }) : null,
+      btn("CHANGE", () => gotoStep(stepId), { kind: "ghost small", key: `change-${stepId}`, sound: "blip" }),
+    ])
+  })
+  const summary = ecoSummary(result)
+  const roundWord = state.plan.round === 2 ? "ROUND 2: IMPROVE IT" : "REVIEW"
+  return el("section", { class: "step-panel step-review", "data-key": "step-panel", "aria-labelledby": "step-title" }, [
+    el("div", { class: "step-head" }, [
+      el("h2", { id: "step-title", text: `${STEPS.length}. ${roundWord}` }),
+      el("p", { class: "fine", "data-key": "step-hint", text: result.ok ? `${summary.green} of 5 parts of the ecosystem are green${summary.red ? `, ${summary.red} red` : ""}${summary.amber ? `, ${summary.amber} amber` : ""}. Change anything, then GO.` : "Pick a GPU to light the ecosystem." }),
+    ]),
+    el("div", { class: "review-rows" }, rows),
+    ecoBar(result, { detail: true }),
+    el("div", { class: "review-go" }, [
+      targetLine(),
+      btn("GO", () => startRun(), { kind: "big run", key: "run", sound: "start", disabled: !result.ok }),
+    ]),
+    stepNav("review"),
+  ])
+}
+
+/* ---------- The side panel: gauges, crowd, coach question ---------- */
 
 function gauge(label, pct, text, { bad = false, key = null, art = null } = {}) {
   const clamped = Math.max(0, Math.min(1, pct || 0))
@@ -1282,6 +971,25 @@ function peopleBadge(result) {
   return badge
 }
 
+function roundBadge() {
+  const round = state.plan.round || 1
+  const first = state.plan.rounds?.[0]
+  return el("div", { class: "round-badge", "data-key": "round" }, [
+    el("span", { class: "fine", text: `ROUND ${round} OF 2` }),
+    first ? el("span", { class: "fine", text: `Round 1: ${formatScore(first.score)}` }) : null,
+  ])
+}
+
+/** One coach sentence. When a part of the ecosystem is amber or red it is a question about that part. */
+function coachLine(result) {
+  const hint = ecoHint(result)
+  const amber = hint && hint.state !== "green"
+  return el("div", { class: `coach${amber ? "" : " ok"}`, "data-key": "coach", "data-part": hint?.id || "" }, [
+    spriteImg("prof", 3),
+    el("p", { text: ecoQuestion(result) }),
+  ])
+}
+
 function feel(result) {
   const spend = result.budgetSpend || 0
   const budget = result.budget || 1
@@ -1289,29 +997,31 @@ function feel(result) {
   const powerPct = result.powerMW > 0 ? result.powerUsedMW / result.powerMW : 0
   const timePct = result.liveWeeks / Math.max(result.scenario?.deadlineWeeks || 1, result.liveWeeks, 1)
   const mood = crowdMood(result)
-  const advice = plainCoach(result)
-  const happy = mood === "happy" && !late && !result.overBudget && !result.overPower
-  return el("aside", { class: "feel" }, [
+  const onReview = state.plan.step === "review"
+  const crowdScale = state.nerd ? 3 : 4
+  return el("aside", { class: `feel${state.nerd ? "" : " simple"}` }, [
+    targetLine(),
     gauge("MONEY", spend / budget, state.nerd ? `${formatMoney(spend)} / ${formatMoney(budget)}` : (result.overBudget ? "TOO MUCH" : "OK"), { bad: result.overBudget, key: "budget", art: "token" }),
-    gauge("POWER", powerPct, state.nerd ? `${result.powerUsedMW.toFixed(2)} MW` : (result.overPower ? "TOO MUCH" : "OK"), { bad: result.overPower, key: "power", art: "fan" }),
-    gauge("TIME", Math.min(1, timePct), state.nerd ? `Week ${Math.ceil(result.liveWeeks)}` : (late ? "LATE" : "ON TIME"), { bad: late, key: "golive", art: "scroll" }),
+    ...(state.nerd ? [
+      gauge("POWER", powerPct, `${(result.powerUsedMW || 0).toFixed(2)} MW`, { bad: result.overPower, key: "power", art: "fan" }),
+    ] : []),
+    gauge("TIME", Math.min(1, timePct), state.nerd ? `Week ${Math.ceil(result.liveWeeks || 0)}` : (late ? "LATE" : "ON TIME"), { bad: late, key: "golive", art: "scroll" }),
     ...(state.nerd ? [
       gauge("SPEED", result.slaMet ? 1 : 0.3, Number.isFinite(result.ttft) ? `${result.ttft.toFixed(2)} s` : "—", { bad: !result.slaMet, key: "speed" }),
-      gauge("CROWD", result.coverage, `${Math.round(result.coverage * 100)}% served`, { bad: result.coverage < 0.5, key: "demand" }),
+      gauge("CROWD", result.coverage, `${Math.round((result.coverage || 0) * 100)}% served`, { bad: result.coverage < 0.5, key: "demand" }),
       gauge("PRICE", Number.isFinite(result.costPerM) ? Math.min(1, (result.useCase?.parCost || 1) / result.costPerM) : 0, Number.isFinite(result.costPerM) ? formatMoney(result.costPerM) : "—", { bad: !(result.costPerM <= (result.useCase?.parCost || Infinity)), key: "cost" }),
+      peopleBadge(result),
+      roundBadge(),
     ] : []),
-    peopleBadge(result),
     el("div", { class: `crowd ${mood}`, "data-mood": mood, "aria-label": mood === "happy" ? "People are happy" : "People are waiting" }, [
-      spriteImg(mood === "happy" ? "user" : "gremlin", 3),
-      spriteImg(mood === "happy" ? "user" : "gremlin", 3),
-      spriteImg(mood === "happy" ? "user" : "gremlin", 3),
-      spriteImg(mood === "happy" ? "hero" : "gremlin", 3),
+      spriteImg(mood === "happy" ? "user" : "gremlin", crowdScale),
+      spriteImg(mood === "happy" ? "user" : "gremlin", crowdScale),
+      spriteImg(mood === "happy" ? "user" : "gremlin", crowdScale),
+      spriteImg(mood === "happy" ? "hero" : "gremlin", crowdScale),
+      state.nerd ? null : el("span", { class: "crowd-word", text: mood === "happy" ? "HAPPY" : "WAITING" }),
     ]),
-    el("div", { class: `coach${happy ? " ok" : ""}`, "data-key": "coach" }, [
-      spriteImg("prof", 3),
-      el("p", { text: advice }),
-    ]),
-    btn("GO", () => startRun(), { kind: "big run", key: "run", sound: "start", disabled: !result.ok }),
+    coachLine(result),
+    onReview ? null : btn("REVIEW ▶", () => gotoStep("review"), { kind: "big", key: "to-review", sound: "blip" }),
     btn(state.nerd ? "NERD ON" : "NERD MODE", toggleNerd, { kind: "ghost nerd-toggle", key: "nerd", pressed: state.nerd, sound: "blip" }),
   ])
 }
@@ -1367,35 +1077,20 @@ function siteDesigner(result) {
 
 function gameScreen() {
   const uc = useCase()
-  const choices = state.plan.choices
   const result = live()
-  const story = STORIES[uc.id] || { line: uc.blurb, sprite: uc.icon }
-  const rows = state.nerd ? [
-    brainRow(choices),
-    hostRow(choices),
-    memoryRow(choices),
-    libraryRow(choices),
-    homeRow(choices),
-    cityChoices(uc.id) ? siteRow(choices) : null,
-    wireRow(choices, result),
-    uc.orca ? orcaRow(choices) : null,
-  ].filter(Boolean) : simpleRows(choices)
-  const chips = state.nerd ? [] : includedChips(uc.id)
-  return el("section", { class: `screen game${state.nerd ? " nerd" : " simple"}` }, [
-    el("div", { class: "story", "data-key": "story" }, [
-      spriteImg(story.sprite, 4),
-      el("p", { class: "story-line", text: story.line }),
-      chips.length ? el("p", { class: "included", "data-key": "included" }, chips.map((chip) => el("span", { class: "chip", text: chip }))) : null,
-      btn("NEW STORY", openStories, { kind: "big", key: "new-story" }),
-    ]),
-    el("div", { class: "choices", style: `grid-template-rows: repeat(${rows.length}, minmax(0, 1fr))` }, rows),
+  const stepId = STEP_IDS.includes(state.plan.step) ? state.plan.step : "location"
+  return el("section", { class: `screen game${state.nerd ? " nerd" : " simple"} on-${stepId}` }, [
+    scenarioCard(uc),
+    el("div", { class: "eco-strip" }, [ecoBar(result), rail(stepId)]),
+    stepPanel(stepId, result),
     state.nerd ? el("aside", { class: "think", "data-key": "think", "aria-label": "How we think" }, [
       el("h3", { text: "HOW WE THINK" }),
       siteDesigner(result),
       ...thinkLines(result).map((line) => el("p", { text: line })),
     ]) : null,
-    state.nerd ? feel(result) : simpleFeel(result),
+    feel(result),
     el("p", { class: "fine price-note", text: "Game numbers are estimates." }),
+    state.toast ? el("div", { class: "toast", id: "toast", role: "status", "aria-live": "polite", text: state.toast }) : null,
     el("div", { class: "run-overlay", id: "run-overlay", hidden: true }, [
       el("div", { class: "crt" }, [el("canvas", { class: "floor-canvas", id: "floor-canvas", "aria-label": "Your factory at work" })]),
       el("div", { class: "run-meter" }, [
@@ -1479,19 +1174,12 @@ function stopRun() {
 function finishRun(result) {
   state.running = false
   const prevBest = state.league.find((entry) => entry.name.toLocaleLowerCase() === state.name.toLocaleLowerCase())?.score ?? null
-  const entry = {
-    name: state.name,
-    email: state.email,
-    consent: true,
-    consentAt: state.consentAt || Date.now(),
-    score: result.score,
-    useCase: result.useCase.id,
-    costPerM: Number.isFinite(result.costPerM) ? Math.round(result.costPerM * 10000) / 10000 : null,
-    fteEquivalent: result.fteEquivalent,
-    annualSavings: result.annualSavings,
+  const plan = state.plan
+  plan.rounds = [...(plan.rounds || []), { score: result.score, result, choices: { ...plan.choices } }]
+  const entry = roundEntry({ name: state.name, email: state.email, consentAt: state.consentAt }, result, plan.rounds, {
     at: Date.now(),
-    summary: `${STORIES[result.useCase.id]?.line || result.useCase.name} ${formatScore(result.score)} points.`,
-  }
+    story: STORIES[result.useCase.id]?.line || result.useCase.name,
+  })
   const leaderBefore = sortLeague(state.league)[0]
   state.league = upsertEntry(state.league, entry)
   saveLeague()
@@ -1499,6 +1187,8 @@ function finishRun(result) {
   state.syncLine = syncStatusLine(null, { rank: localRank, players: state.league.length })
   state.result = {
     result,
+    round: plan.rounds.length,
+    rounds: plan.rounds,
     rank: localRank,
     players: state.league.length,
     prevBest,
@@ -1542,12 +1232,50 @@ function nerdPeopleLine(result) {
 
 /* ---------- Results ---------- */
 
+function improveIt(hint) {
+  closeDialog("result")
+  state.plan.round = 2
+  state.plan.step = hint?.step && STEP_IDS.includes(hint.step) ? hint.step : "location"
+  state.result = null
+  renderHud()
+  goto("game")
+}
+
+function playAgain() {
+  closeDialog("result")
+  state.plan = freshPlan(state.plan.useCase, state.nerd)
+  state.result = null
+  renderHud()
+  goto("game")
+}
+
+/** "What you got right / what to try": green parts on the left; red and amber on the right. Round one shows only the single hint. */
+function rightAndTry(result, { final }) {
+  const parts = ecosystem(result)
+  const right = parts.filter((part) => part.state === "green")
+  const hint = roundHint(result)
+  const tries = final ? parts.filter((part) => part.state !== "green") : hint ? [hint] : []
+  const item = (part) => el("li", { "data-part": part.id, text: final ? `${part.name}: ${part.why}` : part.text || part.why })
+  return el("div", { class: "right-try", "data-key": "right-try" }, [
+    el("div", { class: "right" }, [
+      el("h3", { text: "WHAT YOU GOT RIGHT" }),
+      right.length ? el("ul", {}, right.map(item)) : el("p", { class: "fine", text: "Nothing is green yet. Every part of the ecosystem needs a look." }),
+    ]),
+    el("div", { class: "try" }, [
+      el("h3", { text: final ? "WHAT TO TRY" : "ONE HINT" }),
+      tries.length ? el("ul", {}, tries.map(item)) : el("p", { class: "fine", text: "Every part is green. Spend a little less and keep it that way." }),
+    ]),
+  ])
+}
+
 function showResult() {
-  const { result, rank, players, newHigh, personalBest, prevBest } = state.result
+  const { result, rank, players, newHigh, personalBest, prevBest, rounds = [], round = 1 } = state.result
   const uc = result.useCase
   const story = STORIES[uc.id]?.line || ""
   const blocked = blockedReason(result)
   const explained = explainResult(result, state.plan.choices, { nerd: state.nerd })
+  const improvable = canImprove(rounds)
+  const hint = roundHint(result)
   const banner = newHigh
     ? el("p", { class: "banner blink", text: "NEW HIGH SCORE!" })
     : personalBest
@@ -1558,9 +1286,10 @@ function showResult() {
     spriteImg(newHigh ? "trophy" : uc.icon, 5),
     el("div", {}, [
       el("p", { class: "card-kicker", text: story }),
-      el("h2", { id: "result-title", text: "SCORE" }),
-      el("p", { class: "big-score", text: formatScore(result.score) }),
-      starRow(stars(result), 3),
+      el("h2", { id: "result-title", text: improvable ? `ROUND ${round} SCORE` : "FINAL SCORE" }),
+      el("p", { class: "big-score", text: formatScore(improvable ? result.score : Math.max(...rounds.map((item) => item.score))) }),
+      starRow(stars(improvable ? result : rounds.reduce((best, item) => (item.score > best.score ? item : best), rounds[0]).result), 3),
+      el("p", { class: "round-line", "data-key": "round-line", text: roundLine(rounds) }),
       banner,
     ]),
     el("div", { class: "rank-box" }, [
@@ -1570,66 +1299,45 @@ function showResult() {
     ]),
   ])
   const buttons = el("div", { class: "row end" }, [
-    btn("PLAY AGAIN", () => {
-      closeDialog("result")
-      goto("game")
-    }, { kind: "ghost", key: "again" }),
-    btn("NEXT PLAYER", resetRun, { kind: "big", key: "next-player" }),
+    btn("PLAY AGAIN", playAgain, { kind: "ghost", key: "again" }),
+    improvable ? btn("IMPROVE IT ▶", () => improveIt(hint), { kind: "big pulse", key: "improve", sound: "start" }) : null,
+    btn("NEXT PLAYER", resetRun, { kind: improvable ? "ghost" : "big", key: "next-player" }),
   ])
   const footer = el("p", { class: "dr-footer", "data-key": "dr-footer" }, [
     el("b", { text: "DIGITAL REALTY" }),
     el("span", { text: DR_FOOTER }),
   ])
   const syncLine = el("p", { class: "sync-line", "data-key": "sync-line", text: state.syncLine || syncStatusLine(null, { rank, players }) })
-  const children = state.nerd
-    ? [
-      head,
-      el("div", { class: `people-card${blocked || result.annualSavings < 0 ? " bad" : ""}`, "data-key": "people-card" }, [
-        spriteImg("user", 4),
-        blocked ? el("p", { class: "blocked-line", "data-key": "blocked-line", text: blocked.text }) : null,
-        el("p", { class: "people-lead", text: peopleLead(result) }),
-        el("p", { text: hoursLine(result.humanHoursPerYear) }),
-        el("p", { class: `savings-line${blocked ? " if-only" : ""}`, text: savingsLine(result) }),
-        el("p", { class: "fine nerd", text: nerdPeopleLine(result) }),
-      ]),
-      el("section", { class: "explain", "data-key": "explain", "aria-label": explained.title }, [
-        el("h3", { text: explained.title }),
-        el("ul", {}, explained.lines.map((line) => el("li", { "data-line": line.id, text: line.show }))),
-      ]),
-      el("p", { class: "beat-line", "data-key": "beat-line", text: beatLine(players, rank) }),
-      syncLine,
-      el("div", { class: "coach" }, [spriteImg("prof", 3), el("p", { text: plainCoach(result) })]),
-      buttons,
-      footer,
-    ]
-    : [
-      head,
-      el("p", { class: "headline", "data-key": "headline", text: explained.headline }),
-      el("div", { class: `people-card${blocked || result.annualSavings < 0 ? " bad" : ""}`, "data-key": "people-card" }, [
-        spriteImg("user", 4),
-        blocked ? el("p", { class: "blocked-line", "data-key": "blocked-line", text: blocked.text }) : null,
-        el("p", { class: "people-lead", text: peopleLead(result) }),
-        el("p", { class: `savings-line${blocked ? " if-only" : ""}`, text: savingsLine(result) }),
-      ]),
-      el("div", { class: `coach${explained.suggestion.better ? "" : " ok"}`, "data-key": "next-step" }, [
-        spriteImg("prof", 3),
-        el("p", { text: explained.suggestion.text }),
-      ]),
-      el("p", { class: "beat-line", "data-key": "beat-line", text: beatLine(players, rank) }),
-      syncLine,
-      buttons,
-      footer,
-    ]
+  const people = el("div", { class: `people-card${blocked || result.annualSavings < 0 ? " bad" : ""}`, "data-key": "people-card" }, [
+    spriteImg("user", 4),
+    blocked ? el("p", { class: "blocked-line", "data-key": "blocked-line", text: blocked.text }) : null,
+    el("p", { class: "people-lead", text: peopleLead(result) }),
+    state.nerd ? el("p", { text: hoursLine(result.humanHoursPerYear) }) : null,
+    el("p", { class: `savings-line${blocked ? " if-only" : ""}`, text: savingsLine(result) }),
+    state.nerd ? el("p", { class: "fine nerd", text: nerdPeopleLine(result) }) : null,
+  ])
+  const children = [
+    head,
+    el("p", { class: "headline", "data-key": "headline", text: explained.headline }),
+    ecoBar(result),
+    rightAndTry(result, { final: !improvable }),
+    state.nerd ? el("section", { class: "explain", "data-key": "explain", "aria-label": explained.title }, [
+      el("h3", { text: explained.title }),
+      el("ul", {}, explained.lines.map((line) => el("li", { "data-line": line.id, text: line.show }))),
+    ]) : null,
+    people,
+    state.nerd && !improvable ? el("div", { class: "coach" }, [spriteImg("prof", 3), el("p", { text: plainCoach(result) })]) : null,
+    el("p", { class: "beat-line", "data-key": "beat-line", text: beatLine(players, rank) }),
+    syncLine,
+    buttons,
+    footer,
+  ]
   root.replaceChildren(
-    el("div", { class: `dialog panel result${state.nerd ? "" : " simple"}`, role: "dialog", "aria-modal": "true", "aria-labelledby": "result-title" }, children),
+    el("div", { class: `dialog panel result${state.nerd ? "" : " simple"}${improvable ? " round-one" : " final"}`, role: "dialog", "aria-modal": "true", "aria-labelledby": "result-title" }, children),
   )
   root.hidden = false
-  root.querySelector('[data-key="next-player"]')?.focus()
+  root.querySelector(improvable ? '[data-key="improve"]' : '[data-key="next-player"]')?.focus()
   poke()
-}
-
-function statBlock(label, value, bad = false) {
-  return el("div", { class: `stat-block${bad ? " bad" : ""}` }, [el("span", { class: "fine", text: label }), el("strong", { text: value })])
 }
 
 function closeDialog(id) {

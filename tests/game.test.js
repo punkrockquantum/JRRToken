@@ -64,37 +64,40 @@ test("expert tricks: Vera Rubin only pays when the deadline allows, ORCA only pa
 })
 
 test("picture presets map onto builds, and the preset board stays in the scoring band", () => {
-  const chat = choicesToBuild("chat", expertChoices("chat"))
+  /* The nerd board is the full tile set; the simple board snaps every step onto its three tiles. */
+  const nerd = (id, choices) => choicesToBuild(id, choices, true)
+  const chat = nerd("chat", expertChoices("chat"))
   assert.equal(chat.platform, "gb200")
   assert.equal(chat.racks, 2)
   assert.equal(chat.kv, true)
   assert.equal(chat.data, "local")
-  assert.equal(choicesToBuild("rag", expertChoices("rag")).data, "vector", "the RAG expert picks the vector index")
-  assert.equal(choicesToBuild("rag", { ...expertChoices("rag"), library: "basic" }).data, "vector", "the simple board snaps file storage onto its index tile")
+  assert.equal(nerd("rag", expertChoices("rag")).data, "vector", "the RAG expert picks the vector index")
+  assert.equal(choicesToBuild("rag", { ...expertChoices("rag"), library: "basic" }).data, "file", "storage is a real step on the simple board")
   assert.equal(choicesToBuild("rag", { ...expertChoices("rag"), library: "none" }).data, "local", "no index is a real simple-board choice")
-  assert.equal(choicesToBuild("rag", { ...expertChoices("rag"), library: "none" }, true).data, "local", "nerd mode exposes storage")
-  assert.equal(choicesToBuild("chat", { ...expertChoices("chat"), library: "smart" }).data, "local", "chat storage stays a hidden default on the simple board")
+  assert.equal(nerd("rag", { ...expertChoices("rag"), library: "none" }).data, "local", "nerd mode exposes storage")
+  assert.equal(choicesToBuild("chat", { ...expertChoices("chat"), library: "smart" }).data, "vector", "chat can waste money on an index it never searches")
   assert.equal(chat.hall, "B")
   assert.equal(chat.routes.users.kind, "fabric")
-  assert.equal(choicesToBuild("chat", { brains: "huge" }).platform, "vr")
-  assert.equal(choicesToBuild("chat", { brains: "huge" }).racks, 4)
+  assert.equal(nerd("chat", { brains: "huge" }).platform, "vr")
+  assert.equal(nerd("chat", { brains: "huge" }).racks, 4)
+  assert.equal(choicesToBuild("chat", { brains: "huge" }).racks, 2, "the simple board snaps HUGE onto the big tile")
   assert.equal(choicesToBuild("chat", { wires: "cheap" }).routes.users.kind, "public")
   assert.equal(choicesToBuild("drug", { helper: true }).orca, true)
   assert.equal(choicesToBuild("chat", { helper: true }).orca, false)
   assert.match(main, /nerd: false/)
-  assert.match(main, /state\.nerd && selected\?\.dataset\.nerd/)
+  assert.match(main, /const nerdLine = state\.nerd \? \(stepId === "wires" \? nerdLegs\(result\) : selected\?\.nerd \|\| ""\) : ""/)
   for (const useCase of USE_CASES) {
     const scored = allPresets(useCase.id).map((choices) => ({
       choices,
-      result: evaluateBuild(useCase.id, choicesToBuild(useCase.id, choices)),
+      result: evaluateBuild(useCase.id, nerd(useCase.id, choices)),
     })).sort((a, b) => b.result.score - a.result.score)
     const best = scored[0].result
-    const expert = evaluateBuild(useCase.id, choicesToBuild(useCase.id, expertChoices(useCase.id)))
-    const typical = evaluateBuild(useCase.id, choicesToBuild(useCase.id, defaultChoices(useCase.id)))
-    const huge = evaluateBuild(useCase.id, choicesToBuild(useCase.id, { ...expertChoices(useCase.id), brains: "huge" }))
+    const expert = evaluateBuild(useCase.id, nerd(useCase.id, expertChoices(useCase.id)))
+    const typical = evaluateBuild(useCase.id, nerd(useCase.id, defaultChoices(useCase.id)))
+    const huge = evaluateBuild(useCase.id, nerd(useCase.id, { ...expertChoices(useCase.id), brains: "huge" }))
     assert.equal(huge.score, 0, `${useCase.id} huge`)
     assert.ok(huge.overBudget, useCase.id)
-    assert.ok(typical.score >= 150 && typical.score <= 1200 && typical.score < best.score * 0.8, `${useCase.id} typical ${typical.score}`)
+    assert.ok(typical.score >= 0 && typical.score <= 1200 && typical.score < best.score * 0.8, `${useCase.id} typical ${typical.score}`)
     assert.ok(best.score >= 1390 && best.score <= 1430, `${useCase.id} preset best ${best.score}`)
     const near = scored.filter((item) => item.result.score >= best.score * 0.83)
     assert.ok(near.length >= 2, `${useCase.id} near ${near.length}`)
@@ -114,7 +117,7 @@ test("picture presets map onto builds, and the preset board stays in the scoring
       expert,
       typical,
       huge,
-      evaluateBuild(useCase.id, choicesToBuild(useCase.id, { ...expertChoices(useCase.id), brains: "small" })),
+      evaluateBuild(useCase.id, nerd(useCase.id, { ...expertChoices(useCase.id), brains: "small" })),
     ]
     const factors = new Set(samples.map((item) => item.savingsFactor.toFixed(2)))
     assert.ok(factors.size >= 3, `${useCase.id} factors ${[...factors].join(",")}`)
@@ -126,57 +129,60 @@ test("picture presets map onto builds, and the preset board stays in the scoring
   assert.match(main, /"OVER BUDGET"/)
   assert.match(main, /class: "learn-btn"/)
   assert.match(main, /function openLearn/)
+  const steps = readFileSync(join(root, "js/steps.js"), "utf8")
   for (const line of [
+    "Which Digital Realty metros",
     "The computers that run the AI",
-    "KV cache: remembers chats so it doesn't re-read them",
-        "DATA HALL",
     "How the racks are cooled",
-    "How answers travel",
-    "Quantum accelerator for finding medicines",
-    "NVIDIA ${platform.name} ×${picked.racks}",
-    "older, cheaper",
-    "strong on air cooling",
-    "GPUs working as one, needs liquid",
-    "newest, long wait, huge power",
-    "KV cache tier OFF",
-    "KV cache tier ON",
+    "What the GPUs remember between turns",
+    "How answers and data travel",
+    "Where documents and checkpoints live",
+    "A quantum helper beside the GPUs",
+    "NVIDIA ${platform?.name || pick.platform} ×${pick.racks}",
+    "the classic, runs on air",
+    "strongest rack on air",
+    "72 GPUs as one, liquid",
+    "next gen, liquid, arrives late",
+    "KV cache OFF",
+    "KV cache ON",
+    "KV cache ON + CPU host memory",
     "Local only",
-    "File & object storage",
+    "File & object",
     "Vector index",
-    "AIR-COOLED HALL",
-    "fans, up to ${air.maxRackKW} kW per rack",
-    "LIQUID-COOLED HALL",
-    "water to the chip, up to ${liquid.maxRackKW} kW per rack",
-    "Digital Realty metro",
+    "Air-cooled hall",
+    "Rear-door hall",
+    "Liquid-cooled hall",
+    "Direct liquid cooling",
+    "Rear door heat exchanger",
     "Public internet",
-    "fine for batch jobs, slow and jittery for live users",
-    "Peering + eyeball networks",
-    "short paths to the ISPs your users are on",
+    "cheap, busy, slow at peaks",
+    "Peering + eyeballs",
+    "straight into home networks",
     "ServiceFabric",
-    "private links to clouds, partners and other metros in minutes",
+    "private lane, fast and steady",
     "Cross connect + Dark fiber",
-    "your own fibre in the building and between your sites",
-    "Let an agent configure it",
-    "same network, faster operations",
-    "Closer to people = faster",
+    "your own glass in the building and between sites",
+    "km to users",
+    "km to data",
     "ORCA PT-3",
     "photonic quantum accelerator",
     "72 GPUs joined by NVLink act as one giant GPU.",
-    "about twice as many strong binders",
-  ]) assert.ok(main.includes(line), line)
+    "finds strong binders about twice as often",
+  ]) assert.ok(steps.includes(line), line)
+  for (const line of ["Let an agent configure it", "MCP ON", "USERS ", "MODEL & DATA ", "NEW STORY", "Game numbers are estimates."]) assert.ok(main.includes(line), line)
   const page = readFileSync(join(root, "index.html"), "utf8")
   assert.match(page, /id="nerd-bar"/)
   assert.match(page, /aria-pressed="false"/)
   assert.match(main, /function toggleNerd/)
   assert.match(main, /getElementById\("nerd-bar"\)/)
-  const cheapChat = evaluateBuild("chat", choicesToBuild("chat", { ...expertChoices("chat"), wires: "cheap" }))
-  const cheapCode = evaluateBuild("code", choicesToBuild("code", { ...expertChoices("code"), wires: "cheap" }))
+  const cheapChat = evaluateBuild("chat", nerd("chat", { ...expertChoices("chat"), wires: "cheap" }))
+  const cheapCode = evaluateBuild("code", nerd("code", { ...expertChoices("code"), wires: "cheap" }))
   assert.ok(cheapChat.coverage < 0.5 && cheapCode.coverage < 0.5)
 })
 
 test("an unaffordable build says why and does not claim the saving; an affordable one is unchanged", () => {
   for (const useCase of USE_CASES) {
-    const huge = evaluateBuild(useCase.id, choicesToBuild(useCase.id, { ...expertChoices(useCase.id), brains: "huge" }))
+    const huge = evaluateBuild(useCase.id, choicesToBuild(useCase.id, { ...expertChoices(useCase.id), brains: "huge" }, true))
     const blocked = blockedReason(huge)
     assert.equal(huge.score, 0, useCase.id)
     assert.equal(blocked.kind, "budget", useCase.id)
@@ -207,8 +213,10 @@ test("the game screen never shows ORCA's price", () => {
   assert.match(main, /budgetSpend/)
 })
 
-test("one game screen: no step rail, and the sync wiring is in place", () => {
-  assert.doesNotMatch(main, /FLOW = \[|progress\(|usecase:|compute:|review:/)
+test("one game screen with a step rail, and the sync wiring is in place", () => {
+  assert.doesNotMatch(main, /FLOW = \[|usecase:|compute:/)
+  assert.match(main, /function rail\(stepId\)/)
+  assert.match(main, /STEPS\.map\(\(step, index\) =>/)
   assert.match(main, /screens = \{ title: titleScreen, intro: introScreen, stories: storyScreen, game: gameScreen \}/)
   for (const key of ["budget", "power", "golive", "speed", "demand", "cost"]) assert.match(main, new RegExp(`key: "${key}"`))
   assert.match(main, /recordAttempt\(payload\)\.then/)

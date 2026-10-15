@@ -1,8 +1,9 @@
 /** Plain account of one finished build, plus the single tile change that would score higher. */
-import { MISSION_SITES, NETWORKS, PLATFORMS, SITES, byId } from "./data.js"
+import { NETWORKS, SITES, byId } from "./data.js"
 import { STAR_POINTS, evaluateBuild, formatMoney, formatScore } from "./model.js"
-import { SIMPLE_IDS, allSimple, brainPick, choicesToBuild, cityChoices, citySites, simpleDataTile, simpleHallTile, simplePicks, simpleTiles, simpleToChoices } from "./presets.js"
+import { choicesToBuild } from "./presets.js"
 import { peopleLead, savingsLine } from "./results.js"
+import { BUILD_STEP_IDS, allSimple, applyTile, describeChoices, qpuRelevant, stepTiles, stepValue } from "./steps.js"
 
 const KINDS = {
   fabric: "ServiceFabric",
@@ -27,104 +28,67 @@ function hallWords(hall) {
   return hall?.cooling === "liquid" ? "liquid-cooled hall" : "air-cooled hall"
 }
 
-/** One-tile neighbours of the current picture. */
-function neighbours(useCaseId, choices) {
+const STEP_PHRASE = {
+  gpu: (tile) => `Switching to ${tile.racks}× ${tile.platform?.name || tile.id}`,
+  cooling: (tile) => `Switching to the ${tile.label.toLowerCase()}`,
+  memory: (tile) => tile.phrase || `Switching memory to ${tile.label}`,
+  wires: (tile) => `Switching the connection to ${tile.label}`,
+  storage: (tile) => `Switching storage to ${tile.label.toLowerCase()}`,
+  qpu: (tile) => (tile.id === "orca" ? "Turning the ORCA PT-3 helper on" : "Turning the ORCA PT-3 helper off"),
+}
+
+function locationPhrase(useCaseId, before, after) {
+  const name = (id) => byId(SITES, id)?.metro || id
+  const added = after.filter((id) => !before.includes(id))
+  const dropped = before.filter((id) => !after.includes(id))
+  if (added.length && dropped.length) return `Moving the racks from ${dropped.map(name).join(" and ")} to ${added.map(name).join(" and ")}`
+  if (added.length) return `Adding a second metro in ${added.map(name).join(" and ")}`
+  return `Dropping ${dropped.map(name).join(" and ")}`
+}
+
+/** One-tile neighbours of the current picture: every other tile on every step, simple or nerd. */
+function neighbours(useCaseId, choices, nerd = false) {
   const list = []
-  for (const brains of ["small", "medium", "big", "rubin"]) {
-    if (brains === choices.brains) continue
-    const pick = brainPick(useCaseId, brains)
-    const platform = byId(PLATFORMS, pick.platform)
-    list.push({
-      choices: { ...choices, brains },
-      phrase: `Switching to ${pick.racks}× ${platform?.name || pick.platform}`,
-    })
-  }
-  list.push({
-    choices: { ...choices, memory: !choices.memory },
-    phrase: choices.memory ? "Turning the KV cache tier off" : "Turning the KV cache tier on",
-  })
-  const home = choices.home === "super" ? "cool" : "super"
-  list.push({
-    choices: { ...choices, home },
-    phrase: `Switching to the ${home === "super" ? "liquid-cooled" : "air-cooled"} hall`,
-  })
-  if (cityChoices(useCaseId)) {
-    for (let cities = 1; cities <= (MISSION_SITES[useCaseId]?.max || 1); cities += 1) {
-      if (cities === choices.cities) continue
-      const names = metros(citySites(useCaseId, cities)).join(" and ")
+  for (const stepId of BUILD_STEP_IDS) {
+    if (stepId === "qpu" && !qpuRelevant(useCaseId)) continue
+    const value = stepValue(useCaseId, stepId, choices)
+    for (const tile of stepTiles(useCaseId, stepId, nerd)) {
+      if (tile.locked) continue
+      if (stepId !== "location" && tile.id === value) continue
+      const next = applyTile(useCaseId, stepId, tile.id, choices)
+      if (stepId === "location" && JSON.stringify(stepValue(useCaseId, "location", next)) === JSON.stringify(value)) continue
       list.push({
-        choices: { ...choices, cities },
-        phrase: `Placing the computers in ${names || `${cities} cities`}`,
+        kind: stepId,
+        to: tile.id,
+        choices: next,
+        phrase: stepId === "location" ? locationPhrase(useCaseId, value, stepValue(useCaseId, "location", next)) : STEP_PHRASE[stepId](tile),
       })
     }
   }
-  for (const wires of ["cheap", "peer", "fast", "private"]) {
-    if (wires === choices.wires) continue
-    list.push({
-      choices: { ...choices, wires },
-      phrase: `Switching the connection to ${WIRES[wires]}`,
-    })
-  }
-  if (choices.helper != null && useCaseId === "drug") {
-    list.push({
-      choices: { ...choices, helper: !choices.helper },
-      phrase: choices.helper ? "Turning the ORCA PT-3 helper off" : "Turning the ORCA PT-3 helper on",
-    })
-  }
   return list
 }
 
-/** One-tile neighbours on the simple board: three decisions, three tiles each. */
-function simpleNeighbours(useCaseId, choices) {
-  const picks = simplePicks(useCaseId, choices)
-  const list = []
-  for (const brains of SIMPLE_IDS.brains) {
-    if (brains === picks.brains) continue
-    const pick = brainPick(useCaseId, brains)
-    const platform = byId(PLATFORMS, pick.platform)
-    list.push({
-      kind: "brains",
-      to: brains,
-      choices: simpleToChoices(useCaseId, { ...picks, brains }),
-      phrase: `Switching to ${pick.racks}× ${platform?.name || pick.platform}`,
-    })
-  }
-  for (const hall of SIMPLE_IDS.halls) {
-    if (hall === picks.hall) continue
-    list.push({ kind: "hall", to: hall, choices: simpleToChoices(useCaseId, { ...picks, hall }), phrase: simpleHallTile(useCaseId, hall).phrase })
-  }
-  for (const wires of SIMPLE_IDS.wires) {
-    if (wires === picks.wires) continue
-    list.push({ kind: "wires", to: wires, choices: simpleToChoices(useCaseId, { ...picks, wires }), phrase: `Switching the connection to ${WIRES[wires]}` })
-  }
-  for (const data of SIMPLE_IDS.data) {
-    if (data === picks.data) continue
-    list.push({ kind: "data", to: data, choices: simpleToChoices(useCaseId, { ...picks, data }), phrase: simpleDataTile(useCaseId, data).phrase })
-  }
-  return list
-}
+/** The simple board does not change while the game runs, so each story's best is scored once. */
+const SIMPLE_BEST = new Map()
 
-/** The highest-scoring picture on the simple board, spelled out as one tile sentence. */
-function simpleBest(useCaseId) {
+/** The highest-scoring picture on the simple board, spelled out step by step. */
+export function simpleBest(useCaseId) {
+  if (SIMPLE_BEST.has(useCaseId)) return SIMPLE_BEST.get(useCaseId)
   let best = null
   for (const combo of allSimple(useCaseId)) {
-    const result = evaluateBuild(useCaseId, choicesToBuild(useCaseId, simpleToChoices(useCaseId, combo), false))
+    const result = evaluateBuild(useCaseId, choicesToBuild(useCaseId, combo, false))
     if (!best || result.score > best.result.score) best = { combo, result }
   }
-  if (!best) return null
-  const tiles = simpleTiles(useCaseId)
-  const tile = (row, id) => tiles[row].find((item) => item.id === id)
-  return {
-    score: best.result.score,
-    phrase: `${tile("brains", best.combo.brains)?.label || best.combo.brains} ${tile("halls", best.combo.hall)?.inWords || ""} on ${tile("wires", best.combo.wires)?.label || best.combo.wires}, ${tile("data", best.combo.data)?.inWords || best.combo.data}`,
-  }
+  const found = best ? { score: best.result.score, choices: best.combo, result: best.result, phrase: describeChoices(useCaseId, best.combo) } : null
+  SIMPLE_BEST.set(useCaseId, found)
+  return found
 }
 
 /** The best single tile change, or a line that this picture already wins. */
 export function bestChange(useCaseId, choices, { nerd = false } = {}) {
   const current = evaluateBuild(useCaseId, choicesToBuild(useCaseId, choices, nerd))
   let winner = null
-  for (const step of nerd ? neighbours(useCaseId, choices) : simpleNeighbours(useCaseId, choices)) {
+  for (const step of neighbours(useCaseId, choices, nerd)) {
     const result = evaluateBuild(useCaseId, choicesToBuild(useCaseId, step.choices, nerd))
     if (!winner || result.score > winner.result.score) winner = { ...step, result }
   }
@@ -256,7 +220,7 @@ function siteStory(result, choices, nerd = false) {
   let detail = ""
   if (remote) {
     const solo = evaluateBuild(id, {
-      ...choicesToBuild(id, { ...choices, cities: 1 }, nerd),
+      ...choicesToBuild(id, { ...choices, metros: [sites[0].id] }, nerd),
       sites: [sites[0].id],
     })
     const before = (solo.cohorts || []).find((row) => row.city === remote.city)
@@ -304,16 +268,20 @@ function capital(value) {
 /** The clause after the colon: which data-center decision held this build back. */
 function limitWords(change, useCaseId, batch) {
   if (change?.kind === "wires") {
-    return change.to === "fast" ? "a private connection would have carried more, faster" : "a better connection would have answered more of them"
+    return change.to === "fast" || change.to === "private" ? "a private connection would have carried more, faster" : "a better connection would have answered more of them"
   }
-  if (change?.kind === "hall") {
-    if (change.to === "plus") {
-      return cityChoices(useCaseId) ? "a second metro would have put the answers closer to people" : "KV memory would have spared the GPUs re-reading every prompt"
-    }
+  if (change?.kind === "location") {
+    return /^Adding/.test(change.phrase || "") ? "a second metro would have put the answers closer to people" : "a metro closer to the people and the data would have answered faster"
+  }
+  if (change?.kind === "cooling") {
     if (change.to === "super") return "liquid cooling would have let the racks run harder"
+    if (change.to === "rear" || change.to === "row") return "a better-cooled hall would have fed more of the power room to the GPUs"
     return "the air-cooled hall would have been ready sooner and cheaper"
   }
-  if (change?.kind === "brains") return batch ? "the GPUs ran out of muscle before the candidate list did" : "the GPUs ran out of muscle before the crowd did"
+  if (change?.kind === "memory") return change.to === "off" ? "memory the job never reuses was cost and power for nothing" : "KV memory would have spared the GPUs re-reading every prompt"
+  if (change?.kind === "storage") return change.to === "none" ? "shared storage the job never reads was cost and power for nothing" : "shared storage would have given the model something to know"
+  if (change?.kind === "qpu") return change.to === "orca" ? "ORCA PT-3 beside the GPUs would have found twice the strong binders" : "the quantum helper cost more than it found"
+  if (change?.kind === "gpu") return batch ? "the GPUs ran out of muscle before the candidate list did" : "the GPUs ran out of muscle before the crowd did"
   return "closer, cooler and better connected is the whole game"
 }
 

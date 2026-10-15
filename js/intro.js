@@ -40,43 +40,57 @@ export const SCENES = [
     lesson: "ttft",
   },
   {
-    id: "factory",
+    id: "ecosystem",
     stage: 2,
+    start: 86,
+    end: 100,
+    loop: true,
+    title: "3 · THE ECOSYSTEM",
+    simple: "Every AI answer is born in a data center: power feeds it, cooling keeps it alive, GPUs think, data gives it something to know, and connections carry the answer to you.",
+    nerd: "Power at a PUE near 1.2 on liquid and 1.38 on air feeds racks that cooling holds at about 40 kW on air and 100 to 240 kW on direct liquid. Compute is GPUs whose HBM bandwidth sets decode speed, fed by a vector index and a KV cache tier in the same hall. Connections carry round trips at about 200 km per millisecond, and take any one of the five away and the AI stops.",
+    lesson: "pue",
+  },
+  {
+    id: "factory",
+    stage: 3,
     start: 38,
     end: 62,
     loop: true,
-    title: "3 · THE FACTORY",
+    title: "4 · THE FACTORY",
     simple: "Four kinds of chips share the work: GPU for the maths, CPU to organise, DPU to move data safely, QPU for special searches. Chips make heat, so halls are cooled by air or by liquid.",
     nerd: "GPU HBM bandwidth decides decode speed, a Grace or Vera-class CPU host can park the KV cache in its LPDDR, a BlueField-class DPU isolates tenants and offloads networking, and an ORCA PT-3 photonic quantum accelerator uses boson sampling to find molecule matches about 2× more often. Air, in-row coolers or a Rear Door Heat Exchanger handle up to about 70 kW per rack. Direct Liquid cooling to cold plates on the chips carries 100-240 kW per rack with a better PUE.",
     lesson: "pue",
   },
   {
     id: "wires",
-    stage: 3,
+    stage: 4,
     start: 62,
     end: 70,
     loop: true,
-    title: "4 · THE WIRES",
+    title: "5 · THE WIRES",
     simple: "Inside the cluster, chips talk over super-fast links. Out to customers, the wire decides speed: public internet is slow and jittery, peering and private links are fast and steady.",
     nerd: "Inside, an NVLink domain joins 72 GPUs as one; outside, light covers about 200 km per millisecond, so time to first token is prefill plus round trips times distance. Peering and eyeball networks shorten the path to your users' ISPs, a cross connect is a cable inside the building, dark fiber is a cable of your own between your sites, and ServiceFabric sets up private software-defined links in minutes. ServiceFabric MCP is an agent configuring that same fabric through the Model Context Protocol: same latency, faster operations.",
     lesson: "network",
   },
   {
     id: "quest",
-    stage: 4,
+    stage: 5,
     start: 70,
     end: 86,
     loop: true,
-    title: "5 · YOUR QUEST",
+    title: "6 · YOUR QUEST",
     simple: "Every job wants a different factory: chat wants closeness and memory, research wants big clusters, medicine wants a QPU, robots want millisecond answers. Build the best AI factory you can afford!",
     nerd: "Digital Realty runs 300+ data centers in 50+ metros on PlatformDIGITAL, serving hyperscalers, scaling AI companies, banks and labs. Power, cooling and ServiceFabric connectivity are already in those buildings, so the factory, the wire and the cooling can match the job. Pick the chips, the cooling and the links the job actually needs, inside the budget.",
     lesson: "profit",
   },
 ]
 
+/** The ecosystem cutaway is shared by both intros; the nerd caption carries the numbers. */
+const ECOSYSTEM_SCENE = SCENES.find((scene) => scene.id === "ecosystem")
+
 /**
- * The booth intro: three click-through scenes, one sentence each, big sprites.
- * Nerd mode swaps in the five-scene deep dive above. Both sets share one timeline
+ * The booth intro: four click-through scenes, one sentence each, big sprites.
+ * Nerd mode swaps in the six-scene deep dive above. Both sets share one timeline
  * (absolute seconds), so the draw windows below can be reused.
  */
 export const SIMPLE_SCENES = [
@@ -90,23 +104,24 @@ export const SIMPLE_SCENES = [
     simple: "You ask. The AI reads your words as tokens and writes the answer one token at a time.",
     lesson: "token",
   },
+  { ...ECOSYSTEM_SCENE, stage: 1, title: "2 · THE ECOSYSTEM" },
   {
-    id: "center",
-    stage: 1,
-    start: 22,
-    end: 38,
+    id: "takeaway",
+    stage: 2,
+    start: 100,
+    end: 108,
     loop: true,
-    title: "2 · THE DATA CENTER",
-    simple: "That happens in a data center: GPUs do the maths, cooling keeps them running, wires carry the answers.",
+    title: "3 · TAKE ONE AWAY",
+    simple: "Take any one away and the AI stops: no power, no maths; no cooling, no GPUs; no data, nothing to know; no connection, no answer.",
     lesson: "pue",
   },
   {
     id: "build",
-    stage: 2,
+    stage: 3,
     start: 38,
     end: 54,
     loop: true,
-    title: "3 · YOUR QUEST",
+    title: "4 · YOUR QUEST",
     simple: "Closer, cooler and better connected means faster answers for less money. Build the best AI factory you can afford!",
     lesson: "profit",
   },
@@ -117,24 +132,24 @@ export function sceneCaption(scene, nerd = false) {
   return nerd ? scene.nerd || scene.simple : scene.simple
 }
 
-/** The scene set for the current mode: three booth scenes, or the five-scene deep dive. */
+/** The scene set for the current mode: four booth scenes, or the six-scene deep dive. */
 export function scenesFor(nerd = false) {
   return nerd ? SCENES : SIMPLE_SCENES
 }
 
 /**
  * Where to land when the player flips nerd mode mid-intro: the scene that covers the
- * same ground. Booth scene 1 is prompt + generation, 2 is the factory + wires, 3 is the quest.
+ * same ground. Booth scene 1 is prompt + generation, 2 and 3 are the ecosystem, 4 is the quest.
  */
 export function matchingScene(index, toNerd) {
   const i = Math.max(0, Number(index) || 0)
-  if (toNerd) return [0, 2, 4][Math.min(2, i)]
-  return i <= 1 ? 0 : i <= 3 ? 1 : 2
+  if (toNerd) return [0, 2, 2, 5][Math.min(3, i)]
+  return i <= 1 ? 0 : i === 2 ? 1 : 3
 }
 
-/** The five stages shown in the path bar at the top of every scene, one per scene. */
-export const PATH = ["PROMPT", "GENERATION", "FACTORY", "WIRES", "QUEST"]
-export const SIMPLE_PATH = ["ASK", "DATA CENTER", "BUILD"]
+/** The stages shown in the path bar at the top of every scene, one per scene. */
+export const PATH = ["PROMPT", "GENERATION", "ECOSYSTEM", "FACTORY", "WIRES", "QUEST"]
+export const SIMPLE_PATH = ["ASK", "ECOSYSTEM", "TAKE ONE AWAY", "BUILD"]
 
 export const DURATION = SCENES[SCENES.length - 1].end
 
@@ -653,53 +668,140 @@ function drawAsk(ctx, t) {
   return ANSWER.slice(0, k).join("")
 }
 
-/** Inside the data center: GPUs do the maths, cooling keeps them running, wires carry the answers. */
-function drawCenter(ctx, t) {
-  const local = t - 22
-  const focus = local < 5 ? 0 : local < 10 ? 1 : 2
-  dashedRect(ctx, 8, 30, 318, 196, PALETTE.L)
-  text(ctx, "DATA CENTER", 16, 36, { color: PALETTE.L })
-  const lit = (i) => (focus === i ? PALETTE.y : PALETTE.g)
+/** The five parts of the ecosystem cutaway, left to right, with the words under each. */
+export const ECO_SCENE_PARTS = [
+  { id: "power", name: "POWER", note: "FEEDS IT", nerd: "PUE 1.2-1.4" },
+  { id: "cooling", name: "COOLING", note: "KEEPS IT ALIVE", nerd: "40-240 KW/RACK" },
+  { id: "compute", name: "COMPUTE", note: "GPUS THINK", nerd: "HBM SETS SPEED" },
+  { id: "data", name: "DATA", note: "SOMETHING TO KNOW", nerd: "VECTOR INDEX" },
+  { id: "connections", name: "CONNECTIONS", note: "CARRY THE ANSWER", nerd: "200 KM/MS" },
+]
 
-  for (let i = 0; i < 3; i += 1) drawSprite(ctx, i === 1 ? "rackLiquid" : "rackAir", 30 + i * 44, FLOOR - 70, 3)
-  text(ctx, "GPUS", 94, FLOOR + 8, { color: lit(0), align: "center" })
-  text(ctx, "DO THE MATHS", 94, FLOOR + 20, { color: focus === 0 ? PALETTE.Y : PALETTE.d, align: "center" })
-  if (focus === 0) {
+/** How many parts are lit at `local` seconds into the ecosystem scene: one every 1.8 s. */
+export function ecosystemLit(local) {
+  return Math.min(ECO_SCENE_PARTS.length, Math.floor(Math.max(0, local) / 1.8) + (local >= 0 ? 1 : 0))
+}
+
+/**
+ * The data-center cutaway. `states[i]` is "lit", "hot" (the one being introduced), "off" or
+ * "broken". Tokens flow to the person on the right only when every part is lit.
+ */
+function drawCutaway(ctx, t, states, { nerdNotes = false } = {}) {
+  const left = 8
+  const width = 330
+  dashedRect(ctx, left, 30, width, 196, PALETTE.L)
+  text(ctx, "DATA CENTER", left + 8, 36, { color: PALETTE.L })
+  const colour = (state) => (state === "hot" ? PALETTE.y : state === "lit" ? PALETTE.g : state === "broken" ? PALETTE.r : PALETTE.d)
+  const live = (state) => state === "hot" || state === "lit"
+  const colW = (width - 16) / 5
+  const centre = (i) => Math.round(left + 8 + colW * i + colW / 2)
+
+  // POWER: a pylon with a bolt and a busbar along the floor to every other part.
+  const [power, cooling, compute, data, wires] = states
+  const px = centre(0)
+  pixelLine(ctx, px - 10, FLOOR - 4, px, FLOOR - 70, colour(power))
+  pixelLine(ctx, px + 10, FLOOR - 4, px, FLOOR - 70, colour(power))
+  pixelLine(ctx, px - 8, FLOOR - 40, px + 8, FLOOR - 40, colour(power))
+  pixelLine(ctx, px - 5, FLOOR - 56, px + 5, FLOOR - 56, colour(power))
+  if (live(power)) {
+    const bolt = blink(t, 4) ? PALETTE.Y : PALETTE.y
+    pixelLine(ctx, px + 2, FLOOR - 92, px - 4, FLOOR - 78, bolt)
+    pixelLine(ctx, px - 4, FLOOR - 78, px + 3, FLOOR - 78, bolt)
+    pixelLine(ctx, px + 3, FLOOR - 78, px - 3, FLOOR - 64, bolt)
+  } else if (power === "broken") {
+    text(ctx, "X", px, FLOOR - 92, { color: PALETTE.r, align: "center", scale: 2 })
+  }
+  ctx.fillStyle = live(power) ? PALETTE.y : PALETTE.d
+  ctx.fillRect(px, FLOOR - 2, centre(4) - px, 2)
+
+  // COOLING: a fan and a pipe; cold dots rise when it runs, heat shimmer when it is broken.
+  const cx = centre(1)
+  drawSprite(ctx, "fan", cx - 30, FLOOR - 76, 3)
+  drawSprite(ctx, "pipe", cx + 6, FLOOR - 68, 3)
+  if (live(cooling) && live(power)) {
+    for (let i = 0; i < 8; i += 1) {
+      const phase = (t * 1.4 + i * 0.13) % 1
+      const x = cx - 30 + ((i * 23) % 60)
+      const y = Math.round(lerp(FLOOR - 82, 56, phase))
+      ctx.fillStyle = phase < 0.5 ? PALETTE.r : PALETTE.B
+      ctx.fillRect(x, y, 3, 3)
+    }
+  }
+  if (cooling === "broken") text(ctx, "X", cx, FLOOR - 100, { color: PALETTE.r, align: "center", scale: 2 })
+
+  // COMPUTE: three racks; maths glyphs float when they think, red when they overheat.
+  const rx = centre(2)
+  for (let i = 0; i < 3; i += 1) drawSprite(ctx, i === 1 ? "rackLiquid" : "rackAir", rx - 36 + i * 24, FLOOR - 70, 2)
+  if (live(compute) && live(power) && live(cooling)) {
     const glyphs = ["+", "×", "=", "÷"]
-    for (let i = 0; i < 6; i += 1) {
-      const gx = 36 + ((i * 37 + Math.floor(t * 5) * 11) % 150)
-      const gy = 60 + ((i * 23 + Math.floor(t * 3) * 7) % 44)
+    for (let i = 0; i < 5; i += 1) {
+      const gx = rx - 32 + ((i * 29 + Math.floor(t * 5) * 11) % 64)
+      const gy = 64 + ((i * 23 + Math.floor(t * 3) * 7) % 44)
       text(ctx, glyphs[(i + Math.floor(t * 4)) % glyphs.length], gx, gy, { color: PALETTE.Y })
     }
+  } else if (cooling === "broken" && live(compute)) {
+    ctx.fillStyle = blink(t, 3) ? PALETTE.r : PALETTE.O
+    ctx.fillRect(rx - 40, FLOOR - 74, 76, 2)
   }
+  if (compute === "broken") text(ctx, "X", rx, FLOOR - 100, { color: PALETTE.r, align: "center", scale: 2 })
 
-  const fanY = FLOOR - 80 - (focus === 1 ? 2 : 0)
-  drawSprite(ctx, "fan", 214, fanY, 3)
-  drawSprite(ctx, "pipe", 262, fanY + 8, 3)
-  text(ctx, "COOLING", 250, FLOOR + 8, { color: lit(1), align: "center" })
-  text(ctx, "KEEPS THEM RUNNING", 250, FLOOR + 20, { color: focus === 1 ? PALETTE.Y : PALETTE.d, align: "center" })
-  for (let i = 0; i < 8; i += 1) {
-    const phase = ((t * 1.4) + i * 0.13) % 1
-    const x = 212 + ((i * 29) % 90)
-    const y = Math.round(lerp(fanY - 6, 56, phase))
-    ctx.fillStyle = focus === 1 ? (phase < 0.5 ? PALETTE.r : PALETTE.B) : PALETTE.d
-    ctx.fillRect(x, y, 3, 3)
-  }
+  // DATA: the vault and a gem; the gem glows when the model has something to know.
+  const dx = centre(3)
+  drawSprite(ctx, "vault", dx - 18, FLOOR - 64, 3)
+  if (live(data) && live(power)) drawSprite(ctx, "gem", dx - 8, FLOOR - 86 + Math.round(Math.sin(t * 4) * 3), 2)
+  if (data === "broken") text(ctx, "X", dx, FLOOR - 100, { color: PALETTE.r, align: "center", scale: 2 })
 
-  const heroX = 400
+  // CONNECTIONS: the wire out of the building to the person waiting on the right.
+  const wx = centre(4)
+  const heroX = 404
   drawSprite(ctx, "hero", heroX, FLOOR - 48, 3)
   text(ctx, "YOU", heroX + 24, FLOOR + 8, { align: "center" })
-  text(ctx, "WIRES", 362, 36, { color: lit(2), align: "center" })
-  text(ctx, "CARRY THE ANSWERS", 362, 48, { color: focus === 2 ? PALETTE.Y : PALETTE.d, align: "center" })
-  ctx.fillStyle = focus === 2 ? PALETTE.c : PALETTE.d
-  ctx.fillRect(326, FLOOR - 24, heroX - 326, 3)
-  if (focus === 2) {
+  drawSprite(ctx, "user", wx - 12, FLOOR - 48, 3)
+  ctx.fillStyle = live(wires) ? PALETTE.c : PALETTE.d
+  ctx.fillRect(wx + 8, FLOOR - 24, heroX - wx - 8, 3)
+  if (wires === "broken") text(ctx, "X", wx, FLOOR - 100, { color: PALETTE.r, align: "center", scale: 2 })
+
+  const all = states.every(live)
+  if (all) {
     for (let i = 0; i < 3; i += 1) {
-      const p = ((local - 10) / 1.2 + i / 3) % 1
-      drawSprite(ctx, "token", Math.round(lerp(322, heroX - 10, p)), FLOOR - 40 - Math.round(Math.sin(p * Math.PI) * 8), 2)
+      const p = (t / 1.2 + i / 3) % 1
+      drawSprite(ctx, "token", Math.round(lerp(rx, heroX - 10, p)), FLOOR - 40 - Math.round(Math.sin(p * Math.PI) * 10), 2)
     }
-    cue("center-wire", "token")
+  } else if (states.some((state) => state === "broken") && blink(t, 2)) {
+    text(ctx, "NO ANSWER", heroX + 24, FLOOR - 70, { color: PALETTE.r, align: "center" })
   }
+
+  ECO_SCENE_PARTS.forEach((part, i) => {
+    const state = states[i]
+    text(ctx, part.name, centre(i), FLOOR + 8, { color: colour(state), align: "center" })
+    const note = nerdNotes ? part.nerd : part.note
+    text(ctx, note, centre(i), FLOOR + 20, { color: state === "hot" ? PALETTE.Y : state === "broken" ? PALETTE.r : PALETTE.d, align: "center" })
+  })
+  return all
+}
+
+/** The ecosystem scene: POWER, COOLING, COMPUTE, DATA, CONNECTIONS light up in sequence, then the answer flows. */
+function drawEcosystem(ctx, t) {
+  const local = t - 86
+  const lit = ecosystemLit(local)
+  const states = ECO_SCENE_PARTS.map((_, i) => (i < lit - 1 ? "lit" : i === lit - 1 && local < 9 ? "hot" : i < lit ? "lit" : "off"))
+  const all = drawCutaway(ctx, t, states, { nerdNotes: detail })
+  text(ctx, "EVERY AI ANSWER", W / 2, 30 - 6, { color: PALETTE.y, align: "center", scale: 2 })
+  text(ctx, "IS BORN IN A DATA CENTER", W / 2 + 60, 46, { color: PALETTE.L, align: "center" })
+  if (lit > 0 && lit <= ECO_SCENE_PARTS.length) cue(`eco-${lit}`, "blip")
+  if (all) cue("eco-flow", "token")
+  return null
+}
+
+/** Take one away: every 1.6 s a different part breaks, and the answer stops. */
+function drawTakeaway(ctx, t) {
+  const local = t - 100
+  const broken = Math.floor(local / 1.6) % ECO_SCENE_PARTS.length
+  const states = ECO_SCENE_PARTS.map((_, i) => (i === broken ? "broken" : "lit"))
+  drawCutaway(ctx, t, states, { nerdNotes: detail })
+  text(ctx, "TAKE ANY ONE AWAY", W / 2, 24, { color: PALETTE.r, align: "center", scale: 2 })
+  text(ctx, "AND THE AI STOPS", W / 2, 48, { color: PALETTE.L, align: "center", scale: 2 })
+  cue(`take-${broken}`, "back")
   return null
 }
 
@@ -741,7 +843,8 @@ function drawBuild(ctx, t) {
 /* Each scene chains the draw windows it was built from; the windows' absolute times are unchanged. */
 const DRAW = {
   ask: drawAsk,
-  center: drawCenter,
+  ecosystem: drawEcosystem,
+  takeaway: drawTakeaway,
   build: drawBuild,
   prompt: (ctx, t) => (t < 7 ? drawPrompt(ctx, t) : drawTokens(ctx, t)),
   generation: (ctx, t) => (t < 22 ? drawRetrieval(ctx, t) : t < 30 ? drawPrefill(ctx, t) : drawDecode(ctx, t)),

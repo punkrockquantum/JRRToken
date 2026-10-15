@@ -4,20 +4,43 @@ import { dirname, join } from "node:path"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
 import { searchBuilds } from "../js/balance.js"
-import { TRAIN_BONUS_CAP } from "../js/data.js"
-import { defaultSitePlans, evaluateBuild } from "../js/model.js"
+import { DATA_HOMES, TRAIN_BONUS_CAP, USE_CASES } from "../js/data.js"
+import { defaultSitePlans, evaluateBuild, metroOffers } from "../js/model.js"
 import { choicesToBuild, expertChoices } from "../js/presets.js"
 import { explainResult } from "../js/explain.js"
+import { stepTiles } from "../js/steps.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const main = readFileSync(join(root, "js/main.js"), "utf8")
+const intro = readFileSync(join(root, "js/intro.js"), "utf8")
 
+const WINNING = new Map()
 function winning(id) {
-  return searchBuilds(id)[0].build
+  if (!WINNING.has(id)) WINNING.set(id, searchBuilds(id)[0].build)
+  return WINNING.get(id)
 }
 
-test("closer to people is the site lesson", () => {
-  assert.match(main, /Closer to people = faster/)
+test("closer to people is the site lesson: every metro tile says how far it is from the users and the data", () => {
+  assert.match(intro, /Closer, cooler and better connected means faster answers for less money/)
+  assert.match(main, /"data-key": "users-place"/)
+  for (const { id } of USE_CASES) {
+    const offers = metroOffers(id)
+    assert.equal(offers.length, 4, `${id} short list`)
+    for (const tile of stepTiles(id, "location")) {
+      const offer = offers.find((item) => item.id === tile.id)
+      assert.ok(offer, `${id} ${tile.id} is on the short list`)
+      assert.equal(tile.hint, `${Math.round(offer.usersKm).toLocaleString("en-GB")} km to users · ${Math.round(offer.dataKm).toLocaleString("en-GB")} km to data`)
+      assert.match(tile.lines[1], /^About [\d,]+ km from the users and [\d,]+ km from /)
+    }
+    const home = DATA_HOMES[id]
+    const nearest = offers.reduce((a, b) => (b.dataKm < a.dataKm ? b : a))
+    /* Chat's weights live in a US cloud region: no European metro is beside them, so the copy is part of the story. */
+    if (id === "chat") assert.ok(nearest.dataKm > 5000, `chat: every metro is an ocean away from ${home.city} (${Math.round(nearest.dataKm)} km)`)
+    else assert.ok(nearest.dataKm <= 80, `${id}: one metro on the list sits beside ${home.city} (${Math.round(nearest.dataKm)} km)`)
+  }
+  const chat = Object.fromEntries(metroOffers("chat").map((offer) => [offer.id, offer]))
+  assert.ok(chat.lon.usersKm < chat.par.usersKm && chat.fra.usersKm < chat.par.usersKm, "London and Frankfurt are nearer the shoppers than Paris")
+  assert.ok(Math.abs(chat.lon.dataKm - 5917) < 60, `London is about 5,900 km from the weights in Ashburn (${Math.round(chat.lon.dataKm)})`)
 })
 
 test("even inference plans match a simple multi-site build", () => {
@@ -123,8 +146,9 @@ test("power past the hall slows the racks down", () => {
 
 test("the plain explanation names the second site without nerd units", () => {
   const build = winning("chat")
+  assert.deepEqual(build.sites, ["lon", "fra"], "the engine's best chat build sits in London and Frankfurt")
   const result = evaluateBuild("chat", build)
-  const choices = { ...expertChoices("chat"), cities: 2 }
+  const choices = { ...expertChoices("chat"), metros: build.sites }
   const plain = explainResult(result, choices, { nerd: false })
   const line = plain.lines.map((item) => item.show).join(" ")
   assert.match(line, /second site in Frankfurt/)

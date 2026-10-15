@@ -1,59 +1,95 @@
-import { PLATFORMS, USE_CASES, byId } from "../js/data.js"
+import { PLATFORMS, SITES, USE_CASES, byId } from "../js/data.js"
+import { ecosystem } from "../js/eco.js"
 import { evaluateBuild, formatMoney } from "../js/model.js"
-import { allPresets, allSimple, choicesToBuild, defaultChoices, expertChoices, simpleTiles, simpleToChoices } from "../js/presets.js"
+import { allPresets, choicesToBuild, defaultChoices, expertChoices, metroSets } from "../js/presets.js"
+import { allSimple, describeChoices, metroShortList, stepTiles, stepValue } from "../js/steps.js"
 
 const money = (value) => formatMoney(value, 0)
 const people = (fte) => Math.round(fte).toLocaleString("en-GB")
 const rows = []
+const metroName = (id) => byId(SITES, id)?.metro || id
+const metros = (choices) => (choices.metros || []).map(metroName).join("+")
 
-/* ---------- The simple board: 3 GPUs × 3 halls × 3 connections × 3 memory/data tiles ---------- */
+/* ---------- The simple board: every metro set × 3 GPUs × 3 halls × 3 memory × 3 connections × 3 storage × QPU ---------- */
 
-console.log("Simple board (nerd off): naive = Vera Rubin + air + public internet, maxed = last tile of every row, typical = opening picture, best = top of the 81 tiles")
-console.log("\n| Story | Naive | Maxed | Typical | Best | Best tiles | Within 2% | Near-misses (wrong hall / wire) |")
-console.log("|---|---:|---:|---:|---:|---|---:|---|")
+console.log("Simple board (nerd off): naive = Vera Rubin + air + public internet on the home metro, maxed = widest metro set + the last tile of every step, typical = opening picture, best = top of the whole simple space")
+console.log("\n| Story | Combos | Naive | Maxed | Typical | Best | Best tiles | Within 2% | Location near-misses (best per metro set) |")
+console.log("|---|---:|---:|---:|---:|---:|---|---:|---|")
 const bests = {}
+const lights = (result) => ecosystem(result).map((part) => part.state[0].toUpperCase()).join("")
 for (const useCase of USE_CASES) {
   const id = useCase.id
-  const simple = (combo) => evaluateBuild(id, choicesToBuild(id, simpleToChoices(id, combo), false))
-  const scored = allSimple(id).map((combo) => ({ combo, result: simple(combo) })).sort((a, b) => b.result.score - a.result.score)
+  const simple = (choices) => evaluateBuild(id, choicesToBuild(id, choices, false))
+  const scored = allSimple(id).map((choices) => ({ choices, result: simple(choices) })).sort((a, b) => b.result.score - a.result.score)
   const best = scored[0]
   const near = scored.filter((item) => item.result.score >= best.result.score * 0.98)
-  const tiles = simpleTiles(id)
-  const label = (row, key) => tiles[row].find((tile) => tile.id === key)?.label || key
-  const naive = simple({ brains: "rubin", hall: "cool", wires: "cheap", data: "off" }).score
-  const maxed = simple({ brains: "rubin", hall: "plus", wires: "fast", data: "plus" }).score
-  const typical = simple({ brains: "medium", hall: "cool", wires: "peer", data: "off" }).score
-  const b = best.combo
-  const misses = scored.filter((item) => item.combo.brains === b.brains && item.combo.data === b.data && ((item.combo.hall !== b.hall) !== (item.combo.wires !== b.wires)))
-  const tilesLine = `${label("brains", b.brains)} · ${label("halls", b.hall)} · ${label("wires", b.wires)} · ${label("data", b.data)}`
-  bests[id] = choicesToBuild(id, simpleToChoices(id, b), false)
-  console.log(`| ${useCase.name} | ${naive} | ${maxed} | ${typical} | ${best.result.score} | ${tilesLine} | ${near.length} | ${misses.map((item) => `${item.combo.hall}/${item.combo.wires} ${item.result.score}`).join(", ")} |`)
+  const home = defaultChoices(id).metros
+  const widest = metroSets(id, metroShortList(id)).reduce((a, b) => (b.length > a.length ? b : a))
+  const naive = simple({ ...defaultChoices(id), metros: home, brains: "rubin", home: "cool", wires: "cheap", memory: false, library: "none" }).score
+  const maxed = simple({ ...defaultChoices(id), metros: widest, brains: "rubin", home: "super", wires: "fast", memory: true, hosts: "grace", library: "smart", helper: Boolean(useCase.orca) }).score
+  const typical = simple(defaultChoices(id)).score
+  const byMetros = new Map()
+  for (const item of scored) {
+    const key = (item.choices.metros || []).join("+")
+    if (!byMetros.has(key)) byMetros.set(key, item)
+  }
+  const locationMisses = [...byMetros.values()].filter((item) => item !== best).map((item) => `${metros(item.choices)} ${item.result.score}`).join(", ")
+  bests[id] = choicesToBuild(id, best.choices, false)
+  console.log(`| ${useCase.name} | ${scored.length} | ${naive} | ${maxed} | ${typical} | ${best.result.score} | ${describeChoices(id, best.choices)} | ${near.length} | ${locationMisses} |`)
 }
 
-console.log("\nChecks: best 1,400 and alone within 2%; maxed ≤ 300; naive 0; a near-miss in 700–1,100; optima differ in ≥ 2 of 4 decisions between any two stories")
+console.log("\nChecks: best 1,400 and 1-2 within 2%; maxed ≤ 300; naive 0; a near-miss in 700–1,100; optima differ in ≥ 2 of 5 decisions between any two stories")
+for (const useCase of USE_CASES) {
+  const id = useCase.id
+  const simple = (choices) => evaluateBuild(id, choicesToBuild(id, choices, false))
+  const scored = allSimple(id).map((choices) => ({ choices, result: simple(choices) })).sort((a, b) => b.result.score - a.result.score)
+  const b = scored[0].choices
+  const same = (a, key) => JSON.stringify(stepValue(id, key, a)) === JSON.stringify(stepValue(id, key, b))
+  const misses = scored.filter((item) => {
+    const diff = ["location", "gpu", "cooling", "memory", "wires", "storage", "qpu"].filter((key) => !same(item.choices, key))
+    return diff.length === 1
+  })
+  const inBand = misses.filter((item) => item.result.score >= 700 && item.result.score <= 1100)
+  const threeStar = misses.filter((item) => item.result.score >= 1350)
+  console.log(`  ${id}: ${misses.length} one-step misses, ${inBand.length} in 700–1,100, ${threeStar.length} still three stars${threeStar.length ? ` (${threeStar.map((item) => `${describeChoices(id, item.choices)} ${item.result.score}`).join("; ")})` : ""}`)
+}
 const ids = USE_CASES.map((item) => item.id)
-const fingerprint = (build) => [`${build.platform}x${build.racks}`, `${build.hall}/${build.sites.length}`, build.choices.wires, `${build.data}/${build.kv}/${build.hosts}/${build.orca}`]
+const fingerprint = (build) => [build.sites.join("+"), `${build.platform}x${build.racks}`, build.hall, `${build.kv}/${build.hosts}`, build.choices.wires, `${build.data}/${build.orca}`]
 for (let i = 0; i < ids.length; i += 1) {
   for (let j = i + 1; j < ids.length; j += 1) {
     const a = fingerprint(bests[ids[i]])
     const c = fingerprint(bests[ids[j]])
     const differ = a.filter((part, index) => part !== c[index]).length
-    console.log(`  ${ids[i]} vs ${ids[j]}: ${differ} of 4 decisions differ${differ < 2 ? "  <-- too alike" : ""}`)
+    console.log(`  ${ids[i]} vs ${ids[j]}: ${differ} of 6 decisions differ${differ < 2 ? "  <-- too alike" : ""}`)
   }
 }
 
-console.log("\nSimple board, every tile set (GPU / hall / connection / memory-data → score)")
+console.log("\nEcosystem lights on the simple space (P/C/C/D/C = power, cooling, compute, data, connections; G green, A amber, R red)")
 for (const useCase of USE_CASES) {
   const id = useCase.id
-  const line = allSimple(id)
-    .map((combo) => `${combo.brains}/${combo.hall}/${combo.wires}/${combo.data} ${evaluateBuild(id, choicesToBuild(id, simpleToChoices(id, combo), false)).score}`)
-    .join(", ")
+  const counts = {}
+  for (const choices of allSimple(id)) {
+    const key = lights(evaluateBuild(id, choicesToBuild(id, choices, false)))
+    counts[key] = (counts[key] || 0) + 1
+  }
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([key, n]) => `${key} ×${n}`).join(", ")
+  console.log(`  ${id}: ${top}`)
+}
+
+console.log("\nLocation step: each metro on the short list with the rest of the build at the story's best")
+for (const useCase of USE_CASES) {
+  const id = useCase.id
+  const best = bests[id].choices
+  const line = stepTiles(id, "location").map((tile) => {
+    const score = evaluateBuild(id, choicesToBuild(id, { ...best, metros: [tile.id] }, false)).score
+    return `${tile.label} ${score} (${tile.hint})`
+  }).join(" · ")
   console.log(`  ${id}: ${line}`)
 }
 
 /* ---------- The nerd board: every picture preset, built in nerd mode ---------- */
 
-console.log("\nNerd board (every picture preset)")
+console.log("\nNerd board (every picture preset on the expert's metros)")
 for (const useCase of USE_CASES) {
   const scored = allPresets(useCase.id).map((choices) => ({
     choices,
@@ -67,7 +103,7 @@ for (const useCase of USE_CASES) {
   rows.push({ useCase, best, naive, typical, expert, near })
   const r = best.result
   console.log(`\n${useCase.name}`)
-  console.log(`  best ${r.score} · ${JSON.stringify(best.choices)}`)
+  console.log(`  best ${r.score} · ${describeChoices(useCase.id, best.choices)}`)
   console.log(`  people ${people(r.fteEquivalent)} · hours ${Math.round(r.humanHoursPerYear).toLocaleString("en-GB")} · saving ${money(r.annualSavings)}/year`)
   console.log(`  expert ${expert.score} · typical ${typical.score} · naive ${naive.score} · ${near.length} pictures within 10%`)
 }
@@ -82,35 +118,21 @@ for (const { useCase, best, naive, typical, near } of rows) {
 console.log("\nVera Rubin NVL72 ×1 (liquid hall, one metro) and connection order on the expert picture")
 for (const { useCase, best } of rows) {
   const id = useCase.id
-  const rubin = evaluateBuild(id, choicesToBuild(id, { ...expertChoices(id), brains: "rubin", home: "super", cities: 1 }, true))
+  const one = expertChoices(id).metros.slice(0, 1)
+  const rubin = evaluateBuild(id, choicesToBuild(id, { ...expertChoices(id), brains: "rubin", home: "super", metros: one }, true))
   const wires = ["cheap", "peer", "fast", "private"].map((wires) => [wires, evaluateBuild(id, choicesToBuild(id, { ...expertChoices(id), wires }, true)).score])
   const order = [...wires].sort((a, b) => a[1] - b[1]).map(([name, score]) => `${name} ${score}`).join(" < ")
   console.log(`  ${id}: rubin ${rubin.score} (${Math.round((rubin.score / best.result.score) * 100)}% of best, live week ${Math.ceil(rubin.liveWeeks)}) · ${order}`)
-}
-
-console.log("\nMulti-site deltas (best picture at each metro count)")
-for (const { useCase, best } of rows) {
-  const byCities = new Map()
-  for (const item of allPresets(useCase.id).map((choices) => ({ choices, result: evaluateBuild(useCase.id, choicesToBuild(useCase.id, choices, true)) }))) {
-    const count = item.choices.cities || 1
-    if (!byCities.has(count) || item.result.score > byCities.get(count).result.score) byCities.set(count, item)
-  }
-  const one = byCities.get(1)
-  const many = [...byCities.entries()].filter(([count]) => count >= 2).sort((a, b) => b[1].result.score - a[1].result.score)[0]
-  if (!many) {
-    const partner = useCase.id === "research" ? "par" : "fra"
-    const two = evaluateBuild(useCase.id, { ...choicesToBuild(useCase.id, best.choices, true), sites: ["lon", partner] })
-    console.log(`  ${useCase.id}: 1 site ${one.result.score} >= 2 sites ${two.score} (data gravity)`)
-    continue
-  }
-  const gap = ((many[1].result.score / one.result.score - 1) * 100).toFixed(1)
-  console.log(`  ${useCase.id}: ${many[0]} sites ${many[1].result.score} vs 1 site ${one.result.score} (${gap}%)`)
 }
 
 console.log("\nPer-site designer grid (coarse, on the nerd best)")
 for (const id of ["chat", "code", "robot"]) {
   const row = rows.find((item) => item.useCase.id === id)
   const build = choicesToBuild(id, row.best.choices, true)
+  if (build.sites.length < 2) {
+    console.log(`  ${id}: the nerd best uses one metro`)
+    continue
+  }
   const platform = byId(PLATFORMS, build.platform)
   const rackMW = platform.rackKW / 1000
   const [a, b] = build.sites

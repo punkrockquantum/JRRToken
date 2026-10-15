@@ -5,11 +5,17 @@ import { routeNetworkId } from "./routes.js"
 
 const RACKS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16]
 
-/** Site sets the search tries. Multi-site use cases get one-, two-, and three-metro options. */
+/**
+ * Site sets the search tries: every metro on the story's short list alone, plus the
+ * two- and three-metro sets a thoughtful player would try.
+ */
 export const SITE_SETS = {
-  chat: [["lon"], ["fra"], ["lon", "fra"], ["lon", "fra", "ams"]],
-  code: [["iad"], ["sjc"], ["iad", "chi"], ["iad", "sjc"], ["iad", "chi", "sjc"]],
-  robot: [["fra"], ["ams"], ["fra", "ams"]],
+  chat: [["lon"], ["fra"], ["ams"], ["par"], ["lon", "fra"], ["lon", "par"], ["lon", "fra", "ams"]],
+  rag: [["lon"], ["fra"], ["par"], ["ams"]],
+  code: [["iad"], ["sjc"], ["dfw"], ["chi"], ["iad", "chi"], ["iad", "sjc"], ["sjc", "chi"], ["iad", "chi", "sjc"]],
+  research: [["lon"], ["par"], ["fra"], ["ams"]],
+  drug: [["lon"], ["ams"], ["fra"], ["par"]],
+  robot: [["fra"], ["ams"], ["fra", "ams"], ["fra", "par"]],
 }
 
 function assignRoutes(useCase, build, assign) {
@@ -43,7 +49,36 @@ export function networkOptions(useCaseId, build) {
   return options
 }
 
-/** Every build the search tries for one use case, scored and sorted best first. */
+/** How many of the best builds keep their full evaluation; the rest keep a score summary. */
+export const FULL_RESULTS = 200
+
+/**
+ * The scalar summary kept for every build the search scores. A full evaluation carries
+ * lines, legs and warnings, and a story's search now runs to a few hundred thousand builds
+ * (every metro on the short list, hosts, every product mix), which no longer fits in memory.
+ */
+function summary(result) {
+  return {
+    ok: result.ok,
+    score: result.score,
+    profit: result.profit,
+    overBudget: result.overBudget,
+    overPower: result.overPower,
+    lateWeeks: result.lateWeeks,
+    liveWeeks: result.liveWeeks,
+    slaMet: result.slaMet,
+    coverage: result.coverage,
+    costPerM: result.costPerM,
+    annualSavings: result.annualSavings,
+    fteEquivalent: result.fteEquivalent,
+    summary: true,
+  }
+}
+
+/**
+ * Every build the search tries for one use case, scored and sorted best first. The top
+ * FULL_RESULTS entries carry the full evaluation; every entry below carries the summary.
+ */
 export function searchBuilds(useCaseId) {
   const useCase = byId(USE_CASES, useCaseId)
   const siteSets = SITE_SETS[useCaseId] || [MISSION_SITES[useCaseId]?.defaults?.slice(0, 1) || ["lon"]]
@@ -62,8 +97,7 @@ export function searchBuilds(useCaseId) {
                   const base = { hall: hall.id, platform: platform.id, racks, data: data.id, kv, hosts, orca, graphs: "large", sites }
                   for (const net of networkOptions(useCaseId, base)) {
                     const build = { ...base, ...net }
-                    const result = evaluateBuild(useCaseId, build)
-                    list.push({ build, result })
+                    list.push({ build, result: summary(evaluateBuild(useCaseId, build)) })
                   }
                 }
               }
@@ -73,7 +107,9 @@ export function searchBuilds(useCaseId) {
       }
     }
   }
-  return list.sort((a, b) => b.result.score - a.result.score)
+  list.sort((a, b) => b.result.score - a.result.score)
+  for (const item of list.slice(0, FULL_RESULTS)) item.result = evaluateBuild(useCaseId, item.build)
+  return list
 }
 
 /** Coarse strategy: hall, GPU, metro count, storage, and the mix of products. MCP counts as fabric. */
@@ -103,8 +139,9 @@ export function nearStrategies(list, band = 0.1) {
 export function maxedBuild(useCaseId) {
   const useCase = byId(USE_CASES, useCaseId)
   const vr = byId(PLATFORMS, "vr")
-  const sites = (SITE_SETS[useCaseId] || [["lon"]]).at(-1)
-  const base = { hall: "B", platform: vr.id, racks: vr.supply, data: "vector", kv: true, orca: Boolean(useCase.orca), graphs: "large", sites }
+  const sets = SITE_SETS[useCaseId] || [["lon"]]
+  const sites = sets.reduce((widest, set) => (set.length > widest.length ? set : widest), sets[0])
+  const base = { hall: "B", platform: vr.id, racks: vr.supply, data: "vector", kv: true, hosts: "grace", orca: Boolean(useCase.orca), graphs: "large", sites }
   const routes = assignRoutes(useCase, base, { all: "mcp" })
   return { ...base, routes, network: routeNetworkId(routes), bwTier: 1, fabricRedundant: true }
 }

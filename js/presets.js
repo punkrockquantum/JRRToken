@@ -1,6 +1,11 @@
 /**
  * The picture tiles on the game screen, and the builds they stand for.
  * Players never see these ids. The scoring engine does.
+ *
+ * A choice set is one object: `metros` (Digital Realty metro ids), `brains` (GPU tile),
+ * `home` (cooling), `memory` + `hosts` (the KV tier and the CPUs beside it), `wires`
+ * (connectivity), `library` (storage), `helper` (ORCA) and `mcp`. The simple board offers
+ * three tiles per step; nerd mode offers the full set. Both run through `choicesToBuild`.
  */
 import { MISSION_SITES, PLATFORMS, SITES, USE_CASES, byId } from "./data.js"
 import { FIBER_MAX_KM, kmBetween } from "./model.js"
@@ -31,17 +36,11 @@ const BRAINS = {
 
 const LIBRARY = { none: "local", basic: "file", smart: "vector" }
 
-/** Storage the simple view picks for each story. Nerd mode can change it. */
+/** Storage the story's expert picks. Every player chooses it on the STORAGE step. */
 const AUTO_LIBRARY = { chat: "none", rag: "smart", code: "basic", research: "smart", drug: "basic", robot: "none" }
 
 export function autoLibrary(useCaseId) {
   return AUTO_LIBRARY[useCaseId] || "basic"
-}
-
-const CITIES = {
-  chat: [["lon"], ["lon", "fra"], ["lon", "fra", "ams"]],
-  code: [["iad"], ["iad", "sjc"], ["iad", "chi", "sjc"]],
-  robot: [["fra"], ["fra", "ams"]],
 }
 
 /** Best legal mixture for each story. MCP sits on the control leg, out of sight. */
@@ -54,7 +53,6 @@ const MIX = {
   robot: { all: "fabric", control: "off" },
 }
 
-/** Picture-board tiles. Nerd mode adds HUGE, more halls, storage, hosts and the MCP toggle. */
 const BRAIN_IDS = ["small", "medium", "big", "rubin"]
 const NERD_BRAIN_IDS = ["small", "medium", "big", "rubin", "huge"]
 const LIBRARY_IDS = ["none", "basic", "smart"]
@@ -62,207 +60,88 @@ const WIRE_IDS = ["cheap", "peer", "fast", "private"]
 const HOME_IDS = ["cool", "rear", "super"]
 const NERD_HOME_IDS = ["cool", "row", "rear", "super"]
 
-/**
- * The simple board: four decisions, three tiles each. Everything else is a hidden default
- * for the story. The third DATA HALL tile adds a second metro where closeness matters, and
- * a rear-door hall for the one-site stories. The fourth row is the story's memory or data.
- */
+/** The tiles each step offers on the simple board (three) and in nerd mode (the full set). */
 export const SIMPLE_IDS = {
   brains: ["medium", "big", "rubin"],
-  halls: ["cool", "super", "plus"],
+  home: ["cool", "rear", "super"],
+  memory: ["off", "on", "plus"],
   wires: ["cheap", "peer", "fast"],
-  data: ["off", "on", "plus"],
+  library: ["none", "basic", "smart"],
+}
+export const NERD_IDS = {
+  brains: NERD_BRAIN_IDS,
+  home: NERD_HOME_IDS,
+  memory: ["off", "on", "plus", "dpu"],
+  wires: WIRE_IDS,
+  library: LIBRARY_IDS,
 }
 
-/**
- * What the fourth row decides for each story: the KV cache (and the CPU hosts that park it),
- * the document index (and the KV cache beside it), or the lab's shared data (and ORCA).
- */
-const DATA_KIND = { chat: "kv", code: "kv", robot: "kv", rag: "index", research: "index", drug: "lab" }
-
-export function simpleDataKind(useCaseId) {
-  return DATA_KIND[useCaseId] || "kv"
+/** Which metros a story may use, and how many. */
+export function maxMetros(useCaseId) {
+  return MISSION_SITES[useCaseId]?.max || 1
 }
 
-const SIMPLE_DATA_TILES = {
-  kv: {
-    off: { label: "KV cache OFF", hint: "GPUs re-read every chat", phrase: "Turning the KV cache off", inWords: "with the KV cache off" },
-    on: { label: "KV cache ON", hint: "remembers chats, skips re-reading", phrase: "Turning the KV cache on", inWords: "with the KV cache on" },
-    plus: { label: "KV cache ON + CPU host memory", hint: "parks long contexts on CPUs", phrase: "Adding CPU host memory to the KV cache", inWords: "with the KV cache parked on CPU hosts" },
-  },
-  index: {
-    off: { label: "No index", hint: "the model guesses from memory", phrase: "Dropping the index", inWords: "with no index" },
-    on: { label: "Vector index", hint: "finds the right passages fast", phrase: "Adding the vector index", inWords: "with a vector index" },
-    plus: { label: "Vector index + KV cache", hint: "remembers the last lookup too", phrase: "Adding the vector index with a KV cache", inWords: "with a vector index and KV cache" },
-  },
-  lab: {
-    off: { label: "Local only", hint: "each server keeps its own", phrase: "Keeping data on local drives", inWords: "with local drives only" },
-    on: { label: "File & object", hint: "shared data and checkpoints", phrase: "Adding file & object storage", inWords: "with file & object storage" },
-    plus: { label: "File & object + ORCA PT-3", hint: "quantum helper, better medicines", phrase: "Adding file & object storage with ORCA PT-3", inWords: "with file & object storage and ORCA PT-3" },
-  },
+export function cityChoices(useCaseId) {
+  return maxMetros(useCaseId) > 1
 }
 
-/**
- * The hall behind the third tile. Liquid by default; Robotics runs air-cooled Hopper racks,
- * so its two metros are air halls, like the nerd expert picture (a liquid hall would just cost more).
- * One-site stories get the rear-door hall: air racks with a better PUE, so more of a small
- * power room reaches the GPUs.
- */
-const PLUS_HOME = { robot: "cool" }
-
-export function plusHome(useCaseId) {
-  if (!cityChoices(useCaseId)) return "rear"
-  return PLUS_HOME[useCaseId] || "super"
+/** Clean metro list: known ids, no repeats, at least the story's home metro, at most its maximum. */
+export function cleanMetros(useCaseId, metros) {
+  const picked = [...new Set((metros || []).filter((id) => byId(SITES, id)))]
+  const list = picked.length ? picked : (MISSION_SITES[useCaseId]?.defaults || ["lon"]).slice(0, 1)
+  return list.slice(0, maxMetros(useCaseId))
 }
 
 export function defaultChoices(useCaseId) {
   return {
+    metros: (MISSION_SITES[useCaseId]?.defaults || ["lon"]).slice(0, 1),
     brains: "medium",
-    memory: useCaseId === "code",
-    library: autoLibrary(useCaseId),
+    memory: false,
+    library: "none",
     home: "cool",
-    cities: 1,
-    wires: "fast",
+    wires: "peer",
     mcp: false,
     helper: false,
     hosts: "standard",
   }
 }
 
-/** What the third hall tile adds for this story: a second metro, or a rear-door hall. */
-export function simplePlus(useCaseId) {
-  return cityChoices(useCaseId) ? "metros" : "rear"
+/** The MEMORY tile a choice set is on: the KV tier, and the hosts beside it. */
+export function memoryTile(choices = {}) {
+  if (!choices.memory) return "off"
+  if (choices.hosts === "grace") return "plus"
+  if (choices.hosts === "dpu") return "dpu"
+  return "on"
 }
 
-/** Which simple hall tile a full choice set lands on. */
-export function simpleHall(useCaseId, choices = {}) {
-  const home = choices.home || "cool"
-  if (simplePlus(useCaseId) === "metros") {
-    const base = home === "super" ? "super" : "cool"
-    return base === plusHome(useCaseId) && (choices.cities || 1) >= 2 ? "plus" : base
-  }
-  if (home === "super") return "super"
-  return home === "rear" || home === "row" ? "plus" : "cool"
+/** What one MEMORY tile sets. */
+export function memoryChoices(tile = "off") {
+  if (tile === "plus") return { memory: true, hosts: "grace" }
+  if (tile === "dpu") return { memory: true, hosts: "dpu" }
+  if (tile === "on") return { memory: true, hosts: "standard" }
+  return { memory: false, hosts: "standard" }
 }
 
-/** Which fourth-row tile a full choice set lands on. */
-export function simpleData(useCaseId, choices = {}) {
-  const kind = simpleDataKind(useCaseId)
-  if (kind === "kv") return !choices.memory ? "off" : choices.hosts === "grace" ? "plus" : "on"
-  if (kind === "index") return choices.library === "none" ? "off" : choices.memory ? "plus" : "on"
-  return choices.library === "none" ? "off" : choices.helper ? "plus" : "on"
-}
-
-/** The storage, memory, hosts and helper behind one fourth-row tile. */
-export function dataChoices(useCaseId, data = "off") {
-  const kind = simpleDataKind(useCaseId)
-  const tile = SIMPLE_IDS.data.includes(data) ? data : "off"
-  if (kind === "kv") return { memory: tile !== "off", hosts: tile === "plus" ? "grace" : "standard", library: autoLibrary(useCaseId), helper: false }
-  if (kind === "index") return { memory: tile === "plus", hosts: "standard", library: tile === "off" ? "none" : "smart", helper: false }
-  return { memory: false, hosts: "standard", library: tile === "off" ? "none" : "basic", helper: tile === "plus" }
-}
-
-/** Full choices for one simple tile set, hidden defaults included. */
-export function simpleToChoices(useCaseId, { brains = "medium", hall = "cool", wires = "peer", data = "off" } = {}) {
-  const plus = simplePlus(useCaseId)
+/** Snap any choice set onto the simple board: three tiles a step, no MCP, no HUGE. */
+export function simpleChoices(useCaseId, choices = {}) {
+  const picked = { ...defaultChoices(useCaseId), ...choices }
+  const brains = { small: "medium", huge: "big" }[picked.brains] || (SIMPLE_IDS.brains.includes(picked.brains) ? picked.brains : "medium")
+  const home = picked.home === "row" ? "rear" : SIMPLE_IDS.home.includes(picked.home) ? picked.home : "cool"
+  const wires = picked.wires === "private" || picked.wires === "mix" ? "fast" : SIMPLE_IDS.wires.includes(picked.wires) ? picked.wires : "peer"
+  const memory = memoryTile(picked) === "dpu" ? "plus" : memoryTile(picked)
+  const library = SIMPLE_IDS.library.includes(picked.library) ? picked.library : "none"
+  const { sitePlans, ...rest } = picked
   return {
-    ...defaultChoices(useCaseId),
-    brains: SIMPLE_IDS.brains.includes(brains) ? brains : "medium",
-    home: hall === "cool" ? "cool" : hall === "plus" ? plusHome(useCaseId) : "super",
-    cities: hall === "plus" && plus === "metros" ? 2 : 1,
-    wires: SIMPLE_IDS.wires.includes(wires) ? wires : "peer",
-    ...dataChoices(useCaseId, data),
+    ...rest,
+    metros: cleanMetros(useCaseId, picked.metros),
+    brains,
+    home,
+    wires,
+    library,
+    ...memoryChoices(memory),
+    mcp: false,
+    helper: Boolean(picked.helper && byId(USE_CASES, useCaseId)?.orca),
   }
-}
-
-/** The simple board's opening picture: the middle GPU, the air hall, peering, no memory or index. */
-export function simpleDefaults(useCaseId) {
-  return simpleToChoices(useCaseId, { brains: "medium", hall: "cool", wires: "peer", data: "off" })
-}
-
-/** The simple tile set a full choice set shows. */
-export function simplePicks(useCaseId, choices = {}) {
-  const brains = { small: "medium", huge: "big" }[choices.brains] || (SIMPLE_IDS.brains.includes(choices.brains) ? choices.brains : "medium")
-  const wires = choices.wires === "private" ? "fast" : SIMPLE_IDS.wires.includes(choices.wires) ? choices.wires : "peer"
-  return { brains, hall: simpleHall(useCaseId, choices), wires, data: simpleData(useCaseId, choices) }
-}
-
-const SIMPLE_WIRES = {
-  cheap: { label: "Public internet", hint: "cheap, busy, slow at peaks" },
-  peer: { label: "Peering + eyeballs", hint: "straight into home networks" },
-  fast: { label: "ServiceFabric", hint: "private lane, fast and steady" },
-}
-
-/** Five words that tell a newcomer what each rack is good at. */
-const SIMPLE_GPU_HINTS = {
-  h100: "the classic, runs on air",
-  h200: "more memory, runs on air",
-  b200: "FP4 maths, runs on air",
-  b300: "strongest rack on air",
-  gb200: "72 GPUs as one, liquid",
-  gb300: "reasoning rack, liquid only",
-  vr: "next gen, liquid, arrives late",
-}
-
-/** One simple hall tile: label, five-word hint and the phrase the coach uses to suggest it. */
-export function simpleHallTile(useCaseId, hall) {
-  if (hall === "cool") {
-    return { id: hall, label: "Air-cooled hall", hint: "fans, ready now, cheaper", phrase: "Switching to the air-cooled hall", inWords: "in an air-cooled hall" }
-  }
-  if (hall === "super") {
-    return { id: hall, label: "Liquid-cooled hall", hint: "water to the chip, faster", phrase: "Switching to the liquid-cooled hall", inWords: "in a liquid-cooled hall" }
-  }
-  if (simplePlus(useCaseId) === "metros") {
-    const names = citySites(useCaseId, 2).map((id) => byId(SITES, id)?.metro || id)
-    const cooled = plusHome(useCaseId) === "cool" ? "air-cooled" : "liquid-cooled"
-    return {
-      id: hall,
-      label: `${cooled.charAt(0).toUpperCase()}${cooled.slice(1)} in 2 metros`,
-      hint: `${names.join(" + ")}, closer to people`,
-      phrase: `Adding a second ${cooled} hall in ${names[1] || "a second metro"}`,
-      inWords: `in ${cooled} halls in ${names.join(" and ")}`,
-    }
-  }
-  return {
-    id: hall,
-    label: "Rear-door hall",
-    hint: "water door, more kW on air",
-    phrase: "Switching to the rear-door hall",
-    inWords: "in a rear-door hall",
-  }
-}
-
-/** One fourth-row tile: label, five-word hint and the phrase the coach uses to suggest it. */
-export function simpleDataTile(useCaseId, data) {
-  const kind = simpleDataKind(useCaseId)
-  return { id: data, ...(SIMPLE_DATA_TILES[kind][data] || SIMPLE_DATA_TILES[kind].off) }
-}
-
-/** The whole simple board for one story: four decisions, three real tiles each. */
-export function simpleTiles(useCaseId) {
-  return {
-    brains: SIMPLE_IDS.brains.map((id) => {
-      const pick = brainPick(useCaseId, id)
-      const platform = byId(PLATFORMS, pick.platform)
-      return { id, label: `${platform?.name || pick.platform} ×${pick.racks}`, hint: SIMPLE_GPU_HINTS[pick.platform] || "", platform, racks: pick.racks }
-    }),
-    halls: SIMPLE_IDS.halls.map((id) => simpleHallTile(useCaseId, id)),
-    wires: SIMPLE_IDS.wires.map((id) => ({ id, ...SIMPLE_WIRES[id] })),
-    data: SIMPLE_IDS.data.map((id) => simpleDataTile(useCaseId, id)),
-  }
-}
-
-/** Every simple-board combination for one story: 81 pictures. */
-export function allSimple(useCaseId) {
-  const list = []
-  for (const brains of SIMPLE_IDS.brains) {
-    for (const hall of SIMPLE_IDS.halls) {
-      for (const wires of SIMPLE_IDS.wires) {
-        for (const data of SIMPLE_IDS.data) list.push({ brains, hall, wires, data })
-      }
-    }
-  }
-  return list
 }
 
 /** Stories whose documents or tools sit beside the GPUs in the same building. */
@@ -274,54 +153,30 @@ const IN_BUILDING = new Set(["rag", "research", "code"])
  * "Cross connect + Dark fiber" for those stories.
  */
 export function nerdChoices(useCaseId, choices) {
-  const next = { ...choices }
+  const next = { ...defaultChoices(useCaseId), ...choices }
   if (next.wires === "fast" && IN_BUILDING.has(useCaseId)) next.wires = "private"
+  next.metros = cleanMetros(useCaseId, next.metros)
   return next
 }
 
 /**
- * The expert picture for each story. It differs by story on purpose: the right rack, the hall
- * that fits the power room, the metros near people, the right road, and the memory or data
- * the workload actually reuses.
+ * The expert picture for each story. It differs by story on purpose: the metros near the
+ * people or the data, the right rack, the hall that fits the power room, the right road,
+ * and the memory or data the workload actually reuses.
  */
+const EXPERTS = {
+  chat: { metros: ["lon", "fra"], brains: "big", memory: true, hosts: "standard", home: "super", wires: "fast", library: "none" },
+  rag: { metros: ["fra"], brains: "medium", memory: true, hosts: "standard", home: "rear", wires: "private", library: "smart" },
+  code: { metros: ["iad", "sjc"], brains: "big", memory: true, hosts: "grace", home: "super", wires: "private", library: "basic" },
+  research: { metros: ["par"], brains: "big", memory: true, hosts: "standard", home: "super", wires: "private", library: "smart" },
+  drug: { metros: ["lon"], brains: "medium", memory: false, hosts: "standard", home: "rear", wires: "private", library: "basic", helper: true },
+  robot: { metros: ["fra", "ams"], brains: "big", memory: true, hosts: "standard", home: "rear", wires: "fast", library: "none" },
+}
+
 export function expertChoices(useCaseId) {
   const useCase = byId(USE_CASES, useCaseId)
   const expert = EXPERTS[useCaseId] || EXPERTS.chat
-  return {
-    brains: expert.brains,
-    memory: expert.memory,
-    library: autoLibrary(useCaseId),
-    home: expert.home,
-    cities: expert.cities,
-    wires: expert.wires,
-    mcp: false,
-    helper: Boolean(useCase?.orca),
-    hosts: expert.hosts,
-  }
-}
-
-const EXPERTS = {
-  chat: { brains: "big", memory: true, home: "super", cities: 2, wires: "fast", hosts: "standard" },
-  rag: { brains: "medium", memory: true, home: "rear", cities: 1, wires: "private", hosts: "standard" },
-  code: { brains: "big", memory: true, home: "super", cities: 2, wires: "private", hosts: "grace" },
-  research: { brains: "big", memory: true, home: "super", cities: 1, wires: "private", hosts: "standard" },
-  drug: { brains: "medium", memory: false, home: "rear", cities: 1, wires: "private", hosts: "standard" },
-  robot: { brains: "big", memory: true, home: "cool", cities: 2, wires: "fast", hosts: "standard" },
-}
-
-/** Snap any choice set onto the simple board, hidden defaults and all. */
-export function simpleChoices(useCaseId, choices) {
-  return simpleToChoices(useCaseId, simplePicks(useCaseId, choices))
-}
-
-export function cityChoices(useCaseId) {
-  return (MISSION_SITES[useCaseId]?.max || 1) > 1
-}
-
-function sitesFor(useCaseId, cities) {
-  const sets = CITIES[useCaseId]
-  if (!sets) return [(MISSION_SITES[useCaseId]?.defaults || ["lon"])[0]]
-  return sets[Math.max(0, Math.min(sets.length, cities) - 1)].slice()
+  return { ...defaultChoices(useCaseId), ...expert, mcp: false, helper: Boolean(useCase?.orca && expert.helper) }
 }
 
 /**
@@ -369,23 +224,16 @@ export function brainPick(useCaseId, brains) {
   return { platform: picked[0], racks: picked[1] }
 }
 
-/** Metro ids for a cities tile. */
-export function citySites(useCaseId, cities) {
-  return sitesFor(useCaseId, cities)
-}
-
 /**
  * Turn picture choices into a build the scoring engine understands.
- * The simple board (nerd off) snaps storage, memory, hosts and the ORCA helper onto the
- * story's fourth-row tile, never uses MCP, and with ServiceFabric puts the documents or
- * tools leg on an in-building cross connect.
+ * The simple board (nerd off) snaps every step onto its three tiles, never uses MCP, and
+ * with ServiceFabric puts the documents or tools leg on an in-building cross connect.
  */
 export function choicesToBuild(useCaseId, choices, nerd = false) {
   const useCase = byId(USE_CASES, useCaseId)
-  const picked = { ...defaultChoices(useCaseId), ...choices }
-  if (!nerd) Object.assign(picked, dataChoices(useCaseId, simpleData(useCaseId, picked)), { mcp: false })
+  const picked = nerd ? { ...defaultChoices(useCaseId), ...choices } : simpleChoices(useCaseId, choices)
   const [platform, racks] = BRAINS[useCaseId][picked.brains] || BRAINS[useCaseId].big
-  const sites = sitesFor(useCaseId, cityChoices(useCaseId) ? picked.cities : 1)
+  const sites = cleanMetros(useCaseId, picked.metros)
   const helper = Boolean(useCase?.orca && picked.helper)
   const routes = assignRoutes(useCase, sites, helper, picked.wires, Boolean(picked.mcp), { inBuilding: !nerd })
   const build = {
@@ -393,7 +241,7 @@ export function choicesToBuild(useCaseId, choices, nerd = false) {
     hosts: picked.hosts || "standard",
     platform,
     racks,
-    data: LIBRARY[picked.library],
+    data: LIBRARY[picked.library] || "local",
     kv: Boolean(picked.memory),
     orca: helper,
     graphs: "large",
@@ -415,22 +263,35 @@ export function choicesToBuild(useCaseId, choices, nerd = false) {
   return build
 }
 
-/** Every simple-view picture combination for one story. Small enough to score all of them. */
+/** Every non-empty metro set a story may pick from its short list, up to its maximum. */
+export function metroSets(useCaseId, ids) {
+  const max = maxMetros(useCaseId)
+  const out = []
+  const walk = (start, acc) => {
+    if (acc.length) out.push(acc.slice())
+    if (acc.length >= max) return
+    for (let i = start; i < ids.length; i += 1) walk(i + 1, [...acc, ids[i]])
+  }
+  walk(0, [])
+  return out
+}
+
+/** Every nerd picture combination for one story, on the expert's metros. Small enough to score all of them. */
 export function allPresets(useCaseId) {
   const useCase = byId(USE_CASES, useCaseId)
-  const maxCities = MISSION_SITES[useCaseId]?.max || 1
-  const cities = cityChoices(useCaseId) ? Array.from({ length: maxCities }, (_, i) => i + 1) : [1]
+  const expert = expertChoices(useCaseId)
   const helpers = useCase?.orca ? [false, true] : [false]
   const library = autoLibrary(useCaseId)
+  const metroLists = cityChoices(useCaseId) ? [expert.metros.slice(0, 1), expert.metros] : [expert.metros]
   const list = []
   for (const brains of BRAIN_IDS) {
     for (const memory of [false, true]) {
       for (const hosts of memory ? ["standard", "grace"] : ["standard"]) {
         for (const home of HOME_IDS) {
-          for (const city of cities) {
+          for (const metros of metroLists) {
             for (const wires of WIRE_IDS) {
               for (const helper of helpers) {
-                list.push({ brains, memory, hosts, library, home, cities: city, wires, helper })
+                list.push({ metros, brains, memory, hosts, library, home, wires, helper })
               }
             }
           }

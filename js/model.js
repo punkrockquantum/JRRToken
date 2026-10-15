@@ -1,4 +1,4 @@
-import { DATA_TIERS, EDGE_LATE, FTE_HOURS, HALLS, HORIZON_WEEKS, HUMAN_WORK, KV_TIER, MISSION_SITES, NETWORKS, ORCA, PLATFORMS, SCENARIOS, SITES, TRAIN_BONUS_CAP, USER_BASES, USE_CASES, byId } from "./data.js"
+import { DATA_HOMES, DATA_TIERS, EDGE_LATE, EGRESS_PER_GB, FTE_HOURS, HALLS, HORIZON_WEEKS, HUMAN_WORK, IN_METRO_KM, KV_TIER, METRO_OFFERS, MISSION_SITES, NETWORKS, ORCA, PLATFORMS, SCENARIOS, SITES, TRAIN_BONUS_CAP, USER_BASES, USE_CASES, byId } from "./data.js"
 import { HOURS_PER_MONTH, blankFabric, destinationsNeeded, liveShare, networkBill } from "./network.js"
 import { defaultRoutes, evaluateRoutes } from "./routes.js"
 
@@ -129,6 +129,10 @@ export const CAMPUS_KM = 2
 export const PARTNER_KM = 15
 /** Dark fiber is a metro or regional product in this game. */
 export const FIBER_MAX_KM = 1500
+/** Where ORCA PT-3 is installed: Digital Realty's London Innovation Lab (LHR19). */
+export const ORCA_METRO = "lon"
+/** Share of ORCA's extra hits that survive a remote link from another metro (game value). */
+export const ORCA_REMOTE_RETAIN = 0.5
 
 /** Score thresholds for one, two, and three stars. Three stars means within a few percent of the best picture. */
 export const STAR_POINTS = [1000, 1200, 1350]
@@ -228,7 +232,67 @@ export function siteReach(useCaseId, siteIds) {
   for (let i = 0; i < sites.length; i += 1) {
     for (let j = i + 1; j < sites.length; j += 1) interKm = Math.max(interKm, kmBetween(sites[i], sites[j]))
   }
-  return { sites, perSite, avgKm, rttS, interKm }
+  const home = DATA_HOMES[useCaseId] || null
+  let dataKm = 0
+  let dataNearKm = 0
+  if (home && sites.length) {
+    const served = perSite.filter((entry) => entry.share > 0)
+    const pool = served.length ? served : perSite.map((entry) => ({ ...entry, share: 1 / perSite.length }))
+    const total = pool.reduce((sum, entry) => sum + entry.share, 0) || 1
+    dataKm = pool.reduce((sum, entry) => sum + (entry.share / total) * kmBetween(entry.site, home), 0)
+    dataNearKm = Math.min(...sites.map((site) => kmBetween(site, home)))
+  }
+  return { sites, perSite, avgKm, rttS, interKm, dataKm, dataNearKm, dataHome: home }
+}
+
+/** Distance from one metro to a story's users (share-weighted) and to its data home. */
+export function metroDistances(useCaseId, siteId) {
+  const site = byId(SITES, siteId)
+  if (!site) return { usersKm: 0, dataKm: 0 }
+  const places = USER_BASES[useCaseId]?.places || []
+  const usersKm = places.reduce((sum, place) => sum + place.share * kmBetween(place, site), 0)
+  const home = DATA_HOMES[useCaseId]
+  return { usersKm, dataKm: home ? kmBetween(site, home) : 0 }
+}
+
+/** The metros Digital Realty offers this story, with what is available in each. */
+export function metroOffers(useCaseId) {
+  return (METRO_OFFERS[useCaseId] || []).map((offer) => ({ ...offer, site: byId(SITES, offer.id), ...metroDistances(useCaseId, offer.id) }))
+}
+
+/**
+ * What the chosen metros can give: the tightest power share, the share-weighted power
+ * price, and the longest liquid fit-out. A metro off the short list counts as a plain 1×.
+ */
+export function metroTerms(useCaseId, sites = [], perSite = []) {
+  const offers = METRO_OFFERS[useCaseId] || []
+  const rows = sites.map((site) => offers.find((offer) => offer.id === (site.id || site)) || { id: site.id || site, powerMult: 1, priceMult: 1, liquidWeeks: 0 })
+  if (!rows.length) return { powerMult: 1, priceMult: 1, liquidWeeks: 0, offers: [] }
+  const shares = rows.map((row) => perSite.find((entry) => entry.site.id === row.id)?.share || 0)
+  const total = shares.reduce((sum, share) => sum + share, 0)
+  const priceMult = total > 0 ? rows.reduce((sum, row, i) => sum + (shares[i] / total) * row.priceMult, 0) : rows.reduce((sum, row) => sum + row.priceMult, 0) / rows.length
+  return {
+    powerMult: Math.min(...rows.map((row) => row.powerMult)),
+    priceMult,
+    liquidWeeks: Math.max(...rows.map((row) => row.liquidWeeks || 0)),
+    offers: rows,
+  }
+}
+
+/**
+ * The one-time copy of the weights and the reference data from where they live today to
+ * the nearest chosen metro. Same metro: nothing to move. Otherwise the copy waits for the
+ * data link to be lit, then runs at that link's speed, and the cloud bills egress per GB.
+ */
+export function modelTransfer(useCase, reach, { gbps = 1, leadDays = 0 } = {}) {
+  const home = reach?.dataHome || DATA_HOMES[useCase?.id] || null
+  const gb = (useCase?.weightsGB || 0) + (home?.corpusTB || 0) * 1000
+  const local = !home || (reach?.dataNearKm || 0) <= IN_METRO_KM
+  if (local) return { gb, local: true, hours: 0, weeks: 0, cost: 0, gbps, km: reach?.dataNearKm || 0 }
+  const speed = Math.max(0.1, Number(gbps) || 1)
+  const hours = (gb * 8) / speed / 3600
+  const weeks = Math.round(((leadDays || 0) / 7 + hours / 168) * 10) / 10
+  return { gb, local: false, hours, weeks, cost: gb * EGRESS_PER_GB, gbps: speed, km: reach?.dataNearKm || 0 }
 }
 
 export function splitRacks(racks, count) {
@@ -398,6 +462,9 @@ export function linkProfile(link, km = 0) {
     const rttS = 2 * one + 0.003
     return { oneWayS: one + 0.0015, rttS, jitterS: rttS * 0.05, loss: 0, gbps: link.gbps, inflatedKm }
   }
+  // A cross connect reaches the on-ramp in this building. When the data's region is in another
+  // metro, the trip beyond the on-ramp is fibre physics, like dark fibre.
+  if (distance > CAMPUS_KM) return { oneWayS: oneWay, rttS: 2 * oneWay, jitterS: 0, loss: 0, gbps: link?.gbps || 100, inflatedKm: distance }
   return { oneWayS: CROSS_RTT_S / 2, rttS: CROSS_RTT_S, jitterS: 0, loss: 0, gbps: link?.gbps || 100, inflatedKm: 0 }
 }
 
@@ -431,12 +498,13 @@ export function linkEligibility(useCaseId, build, link) {
  */
 export function networkLegs(useCase, data, reach) {
   const userKm = reach?.avgKm || 0
+  const dataKm = Math.max(PARTNER_KM, reach?.dataKm || 0)
   const legs = [{ id: "user", km: userKm }]
   if (useCase?.data && useCase.data !== "none" && data && data.id !== "local") {
-    legs.push({ id: "retrieval", km: Math.max(userKm, PARTNER_KM) })
+    legs.push({ id: "retrieval", km: dataKm })
     if (data.id === "vector") legs.push({ id: "retrieval", km: PARTNER_KM })
   }
-  const toolKm = MISSION_SITES[useCase?.id]?.toolsNearUsers ? userKm : Math.max(PARTNER_KM, reach?.interKm || 0)
+  const toolKm = MISSION_SITES[useCase?.id]?.toolsNearUsers ? userKm : Math.max(dataKm, reach?.interKm || 0)
   for (let i = 0; i < (useCase?.toolCalls || 0); i += 1) legs.push({ id: "tool", km: toolKm })
   return legs
 }
@@ -620,6 +688,11 @@ export function evaluateBuild(useCaseId, build = {}) {
   out.userKm = reach.avgKm
   out.userRttS = reach.rttS
   out.interKm = reach.interKm
+  out.dataKm = reach.dataKm
+  out.dataNearKm = reach.dataNearKm
+  out.dataHome = reach.dataHome
+  const terms = metroTerms(useCase.id, reach.sites, reach.perSite)
+  out.metroTerms = terms
 
   const kvOn = Boolean(build.kv)
   const orcaOn = Boolean(build.orca && useCase.orca)
@@ -667,7 +740,12 @@ export function evaluateBuild(useCaseId, build = {}) {
   }
   if (planned?.trainRacks > 0) out.hardwareCapex += planned.trainRacks * platform.capex
   out.orcaCapex = orcaOn ? ORCA.capex : 0
-  out.capex = out.hardwareCapex + bill.nrc
+  const dataLeg = (routed?.legs || []).find((leg) => ["data", "tools", "lab"].includes((useCase.legs.find((item) => item.id === leg.id) || {}).role) && leg.kind !== "off")
+  const copyGbps = dataLeg?.gbps ?? bill.capGbps ?? wire?.gbps ?? 1
+  // A bulk copy over the open internet rarely sustains more than about 1 Gbps per flow (game value).
+  const copyKind = dataLeg?.kind || wire?.id
+  out.transfer = modelTransfer(useCase, reach, { gbps: copyKind === "public" ? Math.min(copyGbps, 1) : copyGbps, leadDays: bill.leadDays || 0 })
+  out.capex = out.hardwareCapex + bill.nrc + out.transfer.cost
   out.netCost = bill.mrc / HOURS_PER_MONTH
 
   let thermal = 1
@@ -702,17 +780,22 @@ export function evaluateBuild(useCaseId, build = {}) {
   const scenario = scenarioFor(useCase)
   out.scenario = scenario
   out.budget = scenario.budget
-  out.powerCapKW = (scenario.powerMW * 1000) / pue
-  out.powerMW = scenario.powerMW
+  out.powerMW = Math.round(scenario.powerMW * terms.powerMult * 1000) / 1000
+  out.powerCapKW = (out.powerMW * 1000) / pue
+  out.priceMult = terms.priceMult
   out.powerUsedMW = (out.siteKW * pue) / 1000
-  out.leadParts = leadParts(useCase, hall, platform, data, kvOn, orcaOn, bill)
+  out.leadParts = leadParts(useCase, hall, platform, data, kvOn, orcaOn, bill, { liquidWeeks: terms.liquidWeeks, transfer: out.transfer })
   out.liveWeeks = Math.max(0, ...out.leadParts.map((part) => part.weeks))
   out.live = Math.max(0, HORIZON_WEEKS - out.liveWeeks) / HORIZON_WEEKS
   out.lateWeeks = Math.max(0, out.liveWeeks - scenario.deadlineWeeks)
   out.launchFactor = out.lateWeeks > 0 ? Math.max(LATE_FLOOR, 1 - out.lateWeeks * LATE_PER_WEEK) : 1
   if (out.lateWeeks > 0) warnings.push(`Live in week ${fmtWeeks(out.liveWeeks)}, ${fmtWeeks(out.lateWeeks)} weeks after the deadline. The slowest part is ${out.leadParts.reduce((a, b) => (b.weeks > a.weeks ? b : a)).name}.`)
   out.gpus = racks * platform.gpusPerRack
-  out.hitMult = orcaHitMult(useCase, { ...build, platform: platform.id, orca: orcaOn }, wire)
+  // ORCA PT-3 lives at the London Innovation Lab (LHR19). From another metro it is a remote link.
+  out.orcaRemote = orcaOn && !siteIds.includes(ORCA_METRO)
+  const orcaWire = out.orcaRemote ? { ...wire, orcaLocal: false, orcaRetain: Math.min(wire?.orcaRetain ?? 0.5, ORCA_REMOTE_RETAIN) } : wire
+  out.hitMult = orcaHitMult(useCase, { ...build, platform: platform.id, orca: orcaOn }, orcaWire)
+  if (out.orcaRemote) warnings.push("ORCA PT-3 is installed in London (LHR19). From this metro it is a remote link, so fewer of its hits survive the trip.")
 
   const group = groupSize(useCase, platform)
   const roles = planned ? planned.rows.map((row) => row.role) : perSiteRacks.map(() => "inference")
@@ -757,6 +840,9 @@ export function evaluateBuild(useCaseId, build = {}) {
   out.trainBonus = planned?.trainBonus || 0
   const blended = decodeRate > 0 ? 1 / (1 / decodeRate + prefillPerOutput / prefillTotal) : 0
   let throughput = blended
+  // The racks' own capacity at full speed, before cooling, power or the network take their
+  // bite: what the COMPUTE light judges, so a slow wire is never blamed on the GPUs.
+  out.rackTok = blended * deliver * (planned?.throttle < 1 ? planned.throttle : 1)
   const delay = routed
     ? routed.delay
     : networkDelay(useCase, wire, data, reach, { unreached: bill.unreached, capGbps: bill.capGbps })
@@ -795,7 +881,10 @@ export function evaluateBuild(useCaseId, build = {}) {
   const ingestS = delay.bytesPerSec > 0 ? promptBytes / delay.bytesPerSec : 0
   let ttft = prefillS * queue + data.retrieval[useCase.data] + delay.meanS + ingestS
   if (build?.hosts === "grace" && kvOn) ttft *= 0.9
-  if (orcaOn && !wire.orcaLocal) ttft += delay.rttS * (out.graphs === "large" ? 4 : 2)
+  if (orcaOn && (!wire.orcaLocal || out.orcaRemote)) {
+    const hop = out.orcaRemote ? Math.max(delay.rttS, fiberRttS(kmBetween(reach.sites[0], byId(SITES, ORCA_METRO)))) : delay.rttS
+    ttft += hop * (out.graphs === "large" ? 4 : 2)
+  }
   out.prefillS = prefillS
   out.netDelayS = delay.meanS
   const ttftHi = ttft + delay.jitterS
@@ -881,7 +970,7 @@ function settle(out) {
   if (out.siteKW > out.powerCapKW && out.siteKW > 0) {
     const scale = out.powerCapKW / out.siteKW
     scaleRun(scale)
-    out.powerCost += (out.siteKW - out.powerCapKW) * POWER_PRICE * OVERPOWER_MULT
+    out.powerCost += (out.siteKW - out.powerCapKW) * POWER_PRICE * (out.priceMult || 1) * OVERPOWER_MULT
     out.overPower = true
     add(`Power is over the ${out.powerMW ?? Math.round(out.powerCapKW / 100) / 10} MW available, so racks brown out and the overflow is billed.`)
   } else out.overPower = false
@@ -893,7 +982,7 @@ function settle(out) {
   const net = out.net || { haircut: 0 }
   const live = out.live ?? 1
   const outage = 1 - (net.haircut || 0)
-  out.powerCost += out.facilityKW * POWER_PRICE
+  out.powerCost += out.facilityKW * POWER_PRICE * (out.priceMult || 1)
   out.amort = out.capex / AMORT_HOURS
   // The token price still carries the whole overspend each hour, so an over-budget
   // rack cannot win and the ranking stays put. People-power repays it once a year.
@@ -952,14 +1041,15 @@ function fmtWeeks(value) {
 }
 
 /** Every component's lead time in weeks. Parts are ordered in parallel; the slowest sets go-live. */
-export function leadParts(useCase, hall, platform, data, kvOn, orcaOn, bill) {
+export function leadParts(useCase, hall, platform, data, kvOn, orcaOn, bill, { liquidWeeks = 0, transfer = null } = {}) {
   const parts = []
   if (platform) parts.push({ id: "gpu", name: platform.name, weeks: platform.leadWeeks || 0 })
-  if (hall?.fitOutWeeks) parts.push({ id: "hall", name: "Liquid hall fit-out", weeks: hall.fitOutWeeks })
+  if (hall?.fitOutWeeks) parts.push({ id: "hall", name: "Liquid hall fit-out", weeks: hall.fitOutWeeks + (hall.cooling === "liquid" ? liquidWeeks : 0) })
   if (data?.leadWeeks) parts.push({ id: "storage", name: data.name, weeks: data.leadWeeks })
   if (kvOn) parts.push({ id: "kv", name: KV_TIER.name, weeks: KV_TIER.leadWeeks })
   if (orcaOn) parts.push({ id: "orca", name: ORCA.name, weeks: ORCA.leadWeeks })
   if (bill) parts.push({ id: "network", name: "Network", weeks: Math.round(((bill.leadDays || 0) / 7) * 10) / 10 })
+  if (transfer && !transfer.local) parts.push({ id: "transfer", name: "Model & data copy", weeks: transfer.weeks })
   return parts
 }
 

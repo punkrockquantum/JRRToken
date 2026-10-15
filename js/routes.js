@@ -7,8 +7,8 @@
  * MCP not being a faster pipe) follow the published facts in network.js.
  */
 
-import { NETWORKS, byId } from "./data.js"
-import { CAMPUS_KM, INTERNET_LOSS, linkProfile } from "./model.js"
+import { IN_METRO_KM, NETWORKS, byId } from "./data.js"
+import { CAMPUS_KM, INTERNET_LOSS, PARTNER_KM, linkProfile } from "./model.js"
 import {
   FIBER_MAX_KM,
   INTERNET_MAX_GBPS,
@@ -107,10 +107,19 @@ export function routeNetworkId(routes = {}) {
   return "mix"
 }
 
+/**
+ * A data or tools leg runs from the site to where the data lives today. A cross connect
+ * reaches the cloud on-ramp in this building, which is only the whole trip when the data's
+ * region is in this metro; otherwise the region is still fibre distance away.
+ */
 export function legKm(leg, reach, kind) {
   if (leg.role === "orca" || leg.role === "control") return 0
   if (leg.role === "inter") return reach?.interKm || 0
-  if (leg.role === "data" || leg.role === "tools") return kind === "cross" ? 0 : CLOUD_REGION_KM
+  if (leg.role === "data" || leg.role === "tools") {
+    const dataKm = reach?.dataKm ?? CLOUD_REGION_KM
+    if (kind === "cross") return (reach?.dataNearKm ?? dataKm) <= IN_METRO_KM ? 0 : dataKm
+    return Math.max(PARTNER_KM, dataKm)
+  }
   if (leg.role === "lab") return reach?.avgKm || 0
   return reach?.avgKm || 0
 }
@@ -305,7 +314,7 @@ export function evaluateRoutes(ctx) {
     const link = byId(NETWORKS, row.kind) || byId(NETWORKS, "public")
     let profile = linkProfile(link, km)
     if (row.leg.role === "inter" && comboIds.has("backbone")) profile = { ...profile, rttS: 0, jitterS: 0, loss: 0, gbps: Infinity }
-    if (row.leg.role === "data" && comboIds.has("onramp")) profile = linkProfile(byId(NETWORKS, "cross"), 0)
+    if (row.leg.role === "data" && comboIds.has("onramp")) profile = linkProfile(byId(NETWORKS, "cross"), legKm(row.leg, reach, "cross"))
     const weight = row.leg.trips || 0
     let extra = 0
     if ((row.leg.role === "data" || row.leg.role === "tools") && ingress && row.kind === ingress.kind && !comboIds.has("onramp")) extra = SHARED_PIPE_S * weight

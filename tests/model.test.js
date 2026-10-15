@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { coach } from "../js/coach.js"
-import { DATA_TIERS, FTE_HOURS, HALLS, HORIZON_WEEKS, HUMAN_WORK, KV_TIER, NETWORKS, ORCA, PLATFORMS, PRICE_NOTE, USE_CASES, byId } from "../js/data.js"
+import { DATA_TIERS, FTE_HOURS, HALLS, HORIZON_WEEKS, HUMAN_WORK, KV_TIER, METRO_OFFERS, NETWORKS, ORCA, PLATFORMS, PRICE_NOTE, USE_CASES, byId } from "../js/data.js"
 import { boardHtml, leagueCsv, leagueJson, ordinal, rankOf, rivalFor, sortLeague, upsertEntry } from "../js/league.js"
 import {
   LATE_FLOOR,
@@ -137,8 +137,9 @@ test("a giant model spills off one NVLink domain on HGX H100", () => {
 })
 
 test("RAG without a vector index or file store is slow and poorly grounded", () => {
-  const local = evaluateBuild("rag", build({ data: "local", kv: true }))
-  const vector = evaluateBuild("rag", build({ data: "vector", kv: true }))
+  // Beside the company cloud in Frankfurt, where the documents live.
+  const local = evaluateBuild("rag", build({ data: "local", kv: true, sites: ["fra"], fabric: fabric({ dest: "cloud" }) }))
+  const vector = evaluateBuild("rag", build({ data: "vector", kv: true, sites: ["fra"], fabric: fabric({ dest: "cloud" }) }))
   assert.equal(local.slaMet, false)
   assert.equal(local.quality, 0.55)
   assert.equal(vector.slaMet, true)
@@ -237,7 +238,9 @@ test("power available caps the build: overflow browns out, is billed, and costs 
   for (const useCase of USE_CASES) {
     const sc = scenarioFor(useCase)
     const r = evaluateBuild(useCase.id, build({ hall: "B", platform: "gb300", racks: 1, data: "local" }))
-    assert.ok(Math.abs(r.powerCapKW - (sc.powerMW * 1000) / r.hall.pue) < 1e-9, useCase.id)
+    const offer = METRO_OFFERS[useCase.id].find((item) => item.id === r.sites[0].id)
+    assert.ok(Math.abs(r.powerMW - Math.round(sc.powerMW * offer.powerMult * 1000) / 1000) < 1e-9, `${useCase.id}: the metro's available share of the scenario power`)
+    assert.ok(Math.abs(r.powerCapKW - (r.powerMW * 1000) / r.hall.pue) < 1e-9, useCase.id)
     assert.ok(Math.abs(r.powerUsedMW - (r.siteKW * r.hall.pue) / 1000) < 1e-9, useCase.id)
   }
   const ok = evaluateBuild("chat", build({ hall: "B", platform: "gb300", racks: 2, data: "local", kv: true }))
@@ -423,10 +426,12 @@ test("Cross Connect is unavailable off-campus; dark fiber stays regional", () =>
   assert.ok(forced.warnings.some((line) => /falls back to the public internet/.test(line)))
 })
 
-test("network latency: cross < fibre ≤ fabric = MCP < public at the same distance", () => {
+test("network latency: cross ≤ fibre ≤ fabric = MCP < public at the same distance", () => {
   const km = 640
   const order = ["cross", "fiber", "fabric", "mcp", "public"].map((id) => linkProfile(byId(NETWORKS, id), km).rttS)
-  assert.ok(order[0] < order[1])
+  // Beyond the building, a cross connect to an on-ramp is fibre physics to the far region.
+  assert.ok(order[0] <= order[1])
+  assert.ok(linkProfile(byId(NETWORKS, "cross"), 0).rttS < linkProfile(byId(NETWORKS, "fiber"), 20).rttS)
   assert.ok(order[1] <= order[2])
   assert.equal(order[2], order[3])
   assert.ok(order[4] > Math.max(...order.slice(0, 4)))
@@ -593,7 +598,8 @@ test("balance: every use case's best sits in one band, with at least two strateg
     const list = searchBuilds(useCase.id)
     assert.ok(list.length > 0, useCase.id)
     bests.push(list[0].result.score)
-    assert.ok(nearStrategies(list).length >= 2, `${useCase.id} has one strategy near the top`)
+    // Optima are sharp on purpose now (one picture within 2%), so the second strategy sits within 20%.
+    assert.ok(nearStrategies(list, 0.2).length >= 2, `${useCase.id} has one strategy near the top`)
   }
   assert.ok(Math.min(...bests) >= 1250, bests.join(","))
   assert.ok(Math.max(...bests) <= 1550, bests.join(","))

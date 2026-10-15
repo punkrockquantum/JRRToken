@@ -203,8 +203,8 @@ export const DATA_TIERS = [
     capex: 0,
     leadWeeks: 0,
     space: 0,
-    retrieval: { required: 2.5, helpful: 0.8, none: 0 },
-    feed: { required: 0.55, helpful: 0.75, none: 1 },
+    retrieval: { required: 2.5, helpful: 0.8, bulk: 2.5, none: 0 },
+    feed: { required: 0.55, helpful: 0.75, bulk: 0.55, none: 1 },
     learn:
       "Each server keeps its own small drives. Fine for a chatbot. It does not hold the shared index the app searches, so a RAG lookup is slow. Weights still have to be loaded into GPU memory once, from somewhere.",
   },
@@ -217,8 +217,11 @@ export const DATA_TIERS = [
     capex: 400000,
     leadWeeks: 6,
     space: 0.5,
-    retrieval: { required: 0.35, helpful: 0.3, none: 0 },
-    feed: { required: 1, helpful: 1, none: 1 },
+    // Without an index the app scans files for passages: slower before the first word, and
+    // weaker grounding for a retrieval story (game values). Repos and candidate libraries
+    // are read whole, so agents and the lab lose nothing.
+    retrieval: { required: 0.6, helpful: 0.3, bulk: 0.35, none: 0 },
+    feed: { required: 0.9, helpful: 1, bulk: 1, none: 1 },
     learn:
       "File and object storage holds documents and model checkpoints. Checkpoints are loaded into GPU memory at start-up, not on every token. The app can read documents before the model runs.",
   },
@@ -231,8 +234,9 @@ export const DATA_TIERS = [
     capex: 550000,
     leadWeeks: 6,
     space: 1,
-    retrieval: { required: 0.08, helpful: 0.08, none: 0 },
-    feed: { required: 1, helpful: 1, none: 1 },
+    // An index built for passages adds nothing to a molecule library, and costs more (game value).
+    retrieval: { required: 0.08, helpful: 0.08, bulk: 0.35, none: 0 },
+    feed: { required: 1, helpful: 1, bulk: 0.97, none: 1 },
     learn:
       "The app embeds the question and searches this index, then pastes the best passages into the prompt. The model never searches mid-thought.",
   },
@@ -418,7 +422,7 @@ export const USE_CASES = [
       { id: "store", name: "SITE → DOCUMENTS", hint: "retrieval round trips", role: "data", dest: "cloud", trips: 2, bw: 1, jitter: 0.8, sensitive: true, critical: true, when: "always" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "cloud", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 1.431458896192811,
+    parCost: 1.4345767125848854,
     worth: 8,
     bytesPerToken: 500,
     toolCalls: 0,
@@ -452,7 +456,7 @@ export const USE_CASES = [
       { id: "inter", name: "INTER-SITE", hint: "only with 2–3 metros", role: "inter", dest: "metro", trips: 1, bw: 0.3, jitter: 0.5, sensitive: true, critical: true, when: "multi" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "partner", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.50328740196819,
+    parCost: 0.5073665934936242,
     worth: 10,
     bytesPerToken: 180,
     toolCalls: 8,
@@ -485,13 +489,14 @@ export const USE_CASES = [
       { id: "data", name: "SITE → DATA / CLOUD", hint: "retrieval · tool trips", role: "data", dest: "cloud", trips: 10, bw: 0.7, jitter: 0.7, sensitive: true, critical: true, when: "always" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "internet", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.20227373483791453,
+    parCost: 0.1988950027952783,
     worth: 6,
     bytesPerToken: 160,
     toolCalls: 10,
     activeShare: 0.6,
     reuse: 0.4,
-    data: "helpful",
+    // Deep research answers from the paper corpus: without it the reports are thin.
+    data: "required",
     learn:
       "Reasoning models think in thousands of hidden tokens and call tools along the way. The model is so big it needs many GPUs working as one. Tool trips ride the network you picked.",
   },
@@ -520,13 +525,14 @@ export const USE_CASES = [
       { id: "orca", name: "GPU ↔ ORCA", hint: "same-hall hand-off", role: "orca", dest: "partner", trips: 1, bw: 0.15, jitter: 0.2, sensitive: false, critical: false, when: "orca" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "partner", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.047474797906270426,
+    parCost: 0.04864189619954892,
     worth: 1.15,
     bytesPerToken: 220,
     toolCalls: 0,
     activeShare: 1,
-    reuse: 0.1,
-    data: "required",
+    // Screening prompts are unique candidates: almost nothing to reuse between turns.
+    reuse: 0.02,
+    data: "bulk",
     orca: true,
     learn:
       "Not a chat. GPUs screen candidates and build the binding graph. ORCA can raise the value of each hit. Tokens per second stay the same; a good hit is worth more. Batch work, so total value matters more than a snappy first token. Game assumption: the lab's bulk data rides the public internet without a jitter or SLA penalty; a slower link just screens fewer candidates per hour.",
@@ -554,7 +560,7 @@ export const USE_CASES = [
       { id: "inter", name: "INTER-SITE", hint: "only with 2 metros", role: "inter", dest: "metro", trips: 0.4, bw: 0.3, jitter: 1, sensitive: true, critical: true, when: "multi" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "partner", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.1355531280199725,
+    parCost: 0.13461246037975866,
     worth: 2,
     bytesPerToken: 48,
     toolCalls: 0,
@@ -575,15 +581,82 @@ export const USE_CASES = [
  * `pricePerM` is what the customer pays per million good tokens (game estimate).
  */
 export const SCENARIOS = {
-  chat: { where: "Shoppers in London and Frankfurt", budget: 9_000_000, powerMW: 0.6, deadlineWeeks: 16, pricePerM: 0.55 },
+  chat: { where: "Shoppers in London and Frankfurt", users: "60% London, 40% Frankfurt", budget: 9_000_000, powerMW: 0.6, deadlineWeeks: 16, pricePerM: 0.55 },
   // A head-office suite with a small power room: the right racks fit it, the biggest do not.
-  rag: { where: "Staff at a London head office", budget: 8_500_000, powerMW: 0.27, deadlineWeeks: 20, pricePerM: 1.9 },
+  rag: { where: "Staff at a London head office", users: "One head office in London", budget: 7_720_000, powerMW: 0.27, deadlineWeeks: 20, pricePerM: 1.9 },
   // Agents with 64k contexts on two coasts: the deepest pockets and the most demand on the board.
-  code: { where: "Developers on the US east and west coasts", budget: 12_500_000, powerMW: 0.6, deadlineWeeks: 26, pricePerM: 1.1 },
-  research: { where: "Analysts in London and Paris", budget: 9_000_000, powerMW: 0.8, deadlineWeeks: 36, pricePerM: 0.4 },
+  code: { where: "Developers on the US east and west coasts", users: "New York, Toronto, San Francisco, Seattle", budget: 12_500_000, powerMW: 0.6, deadlineWeeks: 26, pricePerM: 1.1 },
+  // Two NVL72 racks of power where the allocation is full; a metro that is 10% short browns out.
+  research: { where: "Analysts in London and Paris", users: "60% London, 40% Paris", budget: 7_500_000, powerMW: 0.35, deadlineWeeks: 36, pricePerM: 0.4 },
   // A lab's share of a hall: a few air-cooled racks of power, so cooling efficiency decides what fits.
-  drug: { where: "A lab in Cambridge, UK", budget: 8_000_000, powerMW: 0.18, deadlineWeeks: 30, pricePerM: 0.1 },
-  robot: { where: "Factory floors near Frankfurt and Amsterdam", budget: 9_000_000, powerMW: 0.5, deadlineWeeks: 16, pricePerM: 0.8 },
+  drug: { where: "A lab in Cambridge, UK", users: "One lab in Cambridge, UK", budget: 8_000_000, powerMW: 0.18, deadlineWeeks: 30, pricePerM: 0.1 },
+  robot: { where: "Factory floors near Frankfurt and Amsterdam", users: "Stuttgart (70%) and Rotterdam (30%)", budget: 9_000_000, powerMW: 0.5, deadlineWeeks: 16, pricePerM: 0.8 },
+}
+
+/**
+ * Where the model weights and the training or reference data live today. Scenario fiction
+ * on real metros: a copy to a far metro takes link time and egress money, and every retrieval
+ * or tool trip runs the distance from the chosen site to this place. `corpusTB` is the data
+ * that must move with the weights (documents, repos, papers, candidate libraries).
+ */
+export const DATA_HOMES = {
+  chat: { city: "Ashburn", lat: 39.04, lon: -77.49, kind: "cloud", label: "a public cloud region in Northern Virginia (Ashburn)", what: "70 GB of weights and 2 TB of fine-tuning data", corpusTB: 2 },
+  rag: { city: "Frankfurt", lat: 50.11, lon: 8.68, kind: "cloud", label: "the company's cloud tenancy in Frankfurt", what: "70 GB of weights and 30 TB of documents", corpusTB: 30 },
+  code: { city: "Ashburn", lat: 39.04, lon: -77.49, kind: "cloud", label: "a cloud region in Northern Virginia (Ashburn)", what: "400 GB of weights and 80 TB of repos", corpusTB: 80 },
+  research: { city: "Paris", lat: 48.86, lon: 2.35, kind: "cloud", label: "a sovereign cloud region in Paris", what: "700 GB of weights and 400 TB of papers", corpusTB: 400 },
+  drug: { city: "Cambridge", lat: 52.2, lon: 0.12, kind: "own", label: "the lab's own server room in Cambridge", what: "15 GB of models and 250 TB of candidate libraries", corpusTB: 250 },
+  robot: { city: "Frankfurt", lat: 50.11, lon: 8.68, kind: "own", label: "the carmaker's training cluster in Frankfurt", what: "8 GB of weights and 12 TB of driving logs", corpusTB: 12 },
+}
+
+/** Same metro: no copy, and an in-building on-ramp reaches the data (game threshold). */
+export const IN_METRO_KM = 60
+/** Cloud egress for the one-time copy, dollars per GB. A labelled game value near public list prices. */
+export const EGRESS_PER_GB = 0.05
+
+/**
+ * What Digital Realty can offer this customer in each metro right now: the metros on the
+ * short list, how much of the scenario's power is really available there (`powerMult`),
+ * the local power price (`priceMult`), and how many extra weeks a liquid hall takes to fit out.
+ * Game values that stand in for real capacity availability; the metros are real markets.
+ */
+export const METRO_OFFERS = {
+  chat: [
+    { id: "lon", powerMult: 1, priceMult: 1, liquidWeeks: 0, note: "near 60% of shoppers" },
+    { id: "fra", powerMult: 1, priceMult: 1, liquidWeeks: 0, note: "near 40% of shoppers" },
+    { id: "ams", powerMult: 0.9, priceMult: 1, liquidWeeks: 3, note: "power is tight this year" },
+    { id: "par", powerMult: 1.15, priceMult: 0.85, liquidWeeks: 0, note: "cheap power, far from shoppers" },
+  ],
+  rag: [
+    { id: "lon", powerMult: 0.8, priceMult: 1, liquidWeeks: 4, note: "near staff, a tight power room" },
+    { id: "fra", powerMult: 1, priceMult: 1, liquidWeeks: 0, note: "beside the company cloud" },
+    { id: "par", powerMult: 0.95, priceMult: 0.85, liquidWeeks: 0, note: "cheap power, far from both" },
+    { id: "ams", powerMult: 0.85, priceMult: 1, liquidWeeks: 3, note: "power is tight this year" },
+  ],
+  code: [
+    { id: "iad", powerMult: 1, priceMult: 0.95, liquidWeeks: 0, note: "beside the repos and weights" },
+    { id: "sjc", powerMult: 0.8, priceMult: 1.3, liquidWeeks: 0, note: "near west-coast coders, scarce power" },
+    { id: "dfw", powerMult: 1.2, priceMult: 0.8, liquidWeeks: 0, note: "cheap power, far from both coasts" },
+    { id: "chi", powerMult: 1.05, priceMult: 0.95, liquidWeeks: 2, note: "between the coasts" },
+  ],
+  research: [
+    { id: "lon", powerMult: 0.9, priceMult: 1, liquidWeeks: 4, note: "near 60% of analysts" },
+    { id: "par", powerMult: 1.1, priceMult: 0.85, liquidWeeks: 0, note: "beside the papers and weights" },
+    { id: "fra", powerMult: 0.95, priceMult: 1, liquidWeeks: 0, note: "far from analysts and papers" },
+    { id: "ams", powerMult: 0.9, priceMult: 1, liquidWeeks: 3, note: "power is tight this year" },
+  ],
+  // ORCA PT-3 is installed at the London Innovation Lab (LHR19): elsewhere it is a remote link.
+  drug: [
+    { id: "lon", powerMult: 1, priceMult: 1, liquidWeeks: 0, note: "80 km from the lab, ORCA on site" },
+    { id: "ams", powerMult: 1, priceMult: 1, liquidWeeks: 2, note: "across the sea from the lab" },
+    { id: "fra", powerMult: 1, priceMult: 1, liquidWeeks: 0, note: "far from the lab" },
+    { id: "par", powerMult: 1, priceMult: 0.85, liquidWeeks: 0, note: "cheap power, far from the lab" },
+  ],
+  robot: [
+    { id: "fra", powerMult: 1, priceMult: 1, liquidWeeks: 0, note: "near Stuttgart and the training cluster" },
+    { id: "ams", powerMult: 1, priceMult: 1, liquidWeeks: 2, note: "near Rotterdam" },
+    { id: "par", powerMult: 1.1, priceMult: 0.85, liquidWeeks: 0, note: "cheap power, far from both plants" },
+    { id: "lon", powerMult: 1, priceMult: 1, liquidWeeks: 0, note: "across the sea from both plants" },
+  ],
 }
 
 export const HORIZON_WEEKS = 52
@@ -604,12 +677,12 @@ export const HORIZON_WEEKS = 52
  */
 export const FTE_HOURS = 1800
 export const HUMAN_WORK = {
-  chat: { tokensPerTask: 300, humanMinutes: 1.5, share: 0.35, loadedCost: 55_000, fteCap: 25_000, savingsPar: 678517249.1702592 },
-  rag: { tokensPerTask: 400, humanMinutes: 4, share: 0.4, loadedCost: 90_000, fteCap: 10_000, savingsPar: 523494447.6593566 },
-  code: { tokensPerTask: 800, humanMinutes: 25, share: 0.5, loadedCost: 160_000, fteCap: 8_000, savingsPar: 844267506.5266552 },
-  research: { tokensPerTask: 4000, humanMinutes: 90, share: 0.5, loadedCost: 130_000, fteCap: 3_000, savingsPar: 257058937.0215515 },
-  drug: { tokensPerTask: 500, humanMinutes: 3, share: 0.6, loadedCost: 150_000, fteCap: 2_000, savingsPar: 289723463.36 },
-  robot: { tokensPerTask: 64, humanMinutes: 2, share: 0.3, loadedCost: 75_000, fteCap: 1_500, savingsPar: 88566089.54648635 },
+  chat: { tokensPerTask: 300, humanMinutes: 1.5, share: 0.35, loadedCost: 55_000, fteCap: 25_000, savingsPar: 678517145.6702592 },
+  rag: { tokensPerTask: 400, humanMinutes: 4, share: 0.4, loadedCost: 90_000, fteCap: 10_000, savingsPar: 522477277.3545038 },
+  code: { tokensPerTask: 800, humanMinutes: 25, share: 0.5, loadedCost: 160_000, fteCap: 8_000, savingsPar: 844232144.1586552 },
+  research: { tokensPerTask: 4000, humanMinutes: 90, share: 0.5, loadedCost: 130_000, fteCap: 3_000, savingsPar: 257086797.08384013 },
+  drug: { tokensPerTask: 500, humanMinutes: 3, share: 0.6, loadedCost: 150_000, fteCap: 2_000, savingsPar: 289710962.61 },
+  robot: { tokensPerTask: 64, humanMinutes: 2, share: 0.3, loadedCost: 75_000, fteCap: 1_500, savingsPar: 88571871.14648634 },
 }
 
 export const SITES = [

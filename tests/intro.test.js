@@ -3,12 +3,13 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 import { GRAPH_SIZES, LESSONS, ORCA } from "../js/data.js"
 import { layout } from "../js/floor.js"
-import { DURATION, INPUT_HOLD_MS, PATH, SCENES, SIMPLE_PATH, SIMPLE_SCENES, createAdvanceGate, matchingScene, sceneCaption, sceneTime, scenesFor } from "../js/intro.js"
+import { DURATION, ECO_SCENE_PARTS, INPUT_HOLD_MS, PATH, SCENES, SIMPLE_PATH, SIMPLE_SCENES, createAdvanceGate, ecosystemLit, matchingScene, sceneAt, sceneCaption, sceneTime, scenesFor } from "../js/intro.js"
 
-const IDS = ["prompt", "generation", "factory", "wires", "quest"]
+const IDS = ["prompt", "generation", "ecosystem", "factory", "wires", "quest"]
 const SIMPLE_COPY = [
   "You ask. The AI reads your words as tokens and writes the answer one token at a time.",
-  "That happens in a data center: GPUs do the maths, cooling keeps them running, wires carry the answers.",
+  "Every AI answer is born in a data center: power feeds it, cooling keeps it alive, GPUs think, data gives it something to know, and connections carry the answer to you.",
+  "Take any one away and the AI stops: no power, no maths; no cooling, no GPUs; no data, nothing to know; no connection, no answer.",
   "Closer, cooler and better connected means faster answers for less money. Build the best AI factory you can afford!",
 ]
 
@@ -16,11 +17,19 @@ const sentences = (value) => value.split(/(?<=[.!?])\s+/).filter(Boolean)
 const wordCount = (value) => value.split(/\s+/).filter(Boolean).length
 const words = (scene) => `${scene.title} ${sceneCaption(scene, false)}`
 
-test("the intro is five click-through scenes: tokens, generation, the factory, the wires, the quest", () => {
-  assert.equal(SCENES.length, 5)
+/** Scene windows share one absolute timeline; they must not overlap, so sceneAt never picks the wrong one. */
+function disjoint(scenes) {
+  const sorted = [...scenes].sort((a, b) => a.start - b.start)
+  for (let i = 1; i < sorted.length; i += 1) assert.ok(sorted[i].start >= sorted[i - 1].end, `${sorted[i].id} overlaps ${sorted[i - 1].id}`)
+  for (const scene of scenes) assert.equal(sceneAt(scene.start, scenes).id, scene.id, `${scene.id} owns its window`)
+}
+
+test("the intro is six click-through scenes: tokens, generation, the ecosystem, the factory, the wires, the quest", () => {
+  assert.equal(SCENES.length, 6)
   assert.deepEqual(SCENES.map((scene) => scene.id), IDS)
-  assert.deepEqual(PATH, ["PROMPT", "GENERATION", "FACTORY", "WIRES", "QUEST"])
+  assert.deepEqual(PATH, ["PROMPT", "GENERATION", "ECOSYSTEM", "FACTORY", "WIRES", "QUEST"])
   assert.equal(DURATION, 86)
+  disjoint(SCENES)
   const quiet = new Set(["prompt", "generation"])
   SCENES.forEach((scene, index) => {
     assert.equal(scene.stage, index, `${scene.id} lights path stage ${index}`)
@@ -29,13 +38,16 @@ test("the intro is five click-through scenes: tokens, generation, the factory, t
     assert.equal(typeof scene.nerd, "string", `${scene.id} nerd`)
     const simple = sentences(scene.simple)
     assert.ok(simple.length >= 1 && simple.length <= 2, `${scene.id}: simple is one or two sentences (${simple.length})`)
-    assert.ok(simple.every((sentence) => wordCount(sentence) <= 25), `${scene.id}: simple sentences stay short`)
+    assert.ok(simple.every((sentence) => wordCount(sentence) <= 32), `${scene.id}: simple sentences stay short`)
     const nerd = sentences(scene.nerd)
     assert.ok(nerd.length >= 1 && nerd.length <= 3, `${scene.id}: nerd is at most three sentences (${nerd.length})`)
     assert.ok(wordCount(scene.nerd) <= 100, `${scene.id}: nerd stays under 100 words`)
     assert.equal(scene.note, undefined, `${scene.id}: no footnote`)
     assert.equal(scene.loop, true, `${scene.id} loops`)
-    assert.ok(index === 0 || scene.start === SCENES[index - 1].end, `${scene.id} starts where the last scene ends`)
+    assert.ok(scene.end > scene.start, scene.id)
+    /* The ecosystem cutaway was drawn later, so it owns a window after the quest; every other scene chains on. */
+    const previous = SCENES[index - 1]
+    if (index > 0 && scene.id !== "ecosystem") assert.equal(scene.start, previous.id === "ecosystem" ? SCENES[index - 2].end : previous.end, `${scene.id} starts where the last scene ends`)
     if (quiet.has(scene.id)) {
       assert.doesNotMatch(words(scene), /chunk|little pieces|prefill|decode|HBM|KV cache|vector|embedding|weights|bias|FP\d|roofline|bandwidth|ORCA|MCP|\bRAG\b/i, scene.id)
     }
@@ -61,33 +73,59 @@ test("the intro is five click-through scenes: tokens, generation, the factory, t
   assert.match(by("factory"), /air or by liquid/i)
   assert.match(by("wires"), /public internet is slow/i)
   assert.match(by("quest"), /best AI factory you can afford!/i)
-  assert.deepEqual(SCENES[4].nerd.match(/\d+\+?/g), ["300+", "50+"], "the quest quotes only the 300+ sites and 50+ metros")
+  assert.match(by("ecosystem"), /^Every AI answer is born in a data center: power feeds it, cooling keeps it alive, GPUs think, data gives it something to know, and connections carry the answer to you\.$/)
+  const quest = SCENES.find((scene) => scene.id === "quest")
+  assert.deepEqual(quest.nerd.match(/\d+\+?/g), ["300+", "50+"], "the quest quotes only the 300+ sites and 50+ metros")
   assert.equal(sceneCaption(SCENES[0], true), SCENES[0].nerd)
 })
 
-test("the booth intro is three click-through scenes with the exact copy, and nerd mode keeps all five", () => {
-  assert.equal(SIMPLE_SCENES.length, 3)
-  assert.deepEqual(SIMPLE_SCENES.map((scene) => scene.id), ["ask", "center", "build"])
-  assert.deepEqual(SIMPLE_SCENES.map((scene) => scene.title), ["1 · YOU ASK", "2 · THE DATA CENTER", "3 · YOUR QUEST"])
+test("the ecosystem cutaway names the five parts in the bar's order and lights them one at a time", () => {
+  assert.deepEqual(ECO_SCENE_PARTS.map((part) => part.id), ["power", "cooling", "compute", "data", "connections"])
+  assert.deepEqual(ECO_SCENE_PARTS.map((part) => part.name), ["POWER", "COOLING", "COMPUTE", "DATA", "CONNECTIONS"])
+  for (const part of ECO_SCENE_PARTS) {
+    assert.ok(part.note.length > 0 && part.note === part.note.toUpperCase(), `${part.id} note is a short caption`)
+    assert.ok(part.nerd.length > 0, `${part.id} has a nerd note`)
+  }
+  assert.equal(ecosystemLit(-1), 0)
+  assert.equal(ecosystemLit(0), 1)
+  assert.equal(ecosystemLit(1.7), 1)
+  assert.equal(ecosystemLit(1.8), 2)
+  assert.equal(ecosystemLit(7.2), 5)
+  assert.equal(ecosystemLit(60), 5, "never more than five")
+  const ecosystem = SCENES.find((scene) => scene.id === "ecosystem")
+  assert.ok(ecosystem.end - ecosystem.start >= 1.8 * ECO_SCENE_PARTS.length + 3, "the window is long enough to light every part and let the answer flow")
+  assert.match(ecosystem.nerd, /PUE/)
+  assert.match(ecosystem.nerd, /200 km per millisecond/)
+  assert.match(ecosystem.nerd, /take any one of the five away/i)
+})
+
+test("the booth intro is four click-through scenes with the exact copy, and nerd mode keeps all six", () => {
+  assert.equal(SIMPLE_SCENES.length, 4)
+  assert.deepEqual(SIMPLE_SCENES.map((scene) => scene.id), ["ask", "ecosystem", "takeaway", "build"])
+  assert.deepEqual(SIMPLE_SCENES.map((scene) => scene.title), ["1 · YOU ASK", "2 · THE ECOSYSTEM", "3 · TAKE ONE AWAY", "4 · YOUR QUEST"])
   assert.deepEqual(SIMPLE_SCENES.map((scene) => scene.simple), SIMPLE_COPY)
-  assert.deepEqual(SIMPLE_PATH, ["ASK", "DATA CENTER", "BUILD"])
+  assert.deepEqual(SIMPLE_PATH, ["ASK", "ECOSYSTEM", "TAKE ONE AWAY", "BUILD"])
+  disjoint(SIMPLE_SCENES)
   SIMPLE_SCENES.forEach((scene, index) => {
     assert.equal(scene.stage, index, `${scene.id} lights path stage ${index}`)
     assert.equal(scene.loop, true, `${scene.id} loops`)
-    assert.equal(scene.nerd, undefined, `${scene.id} has no nerd caption: nerd mode swaps to the five-scene set`)
-    assert.equal(sceneCaption(scene, true), scene.simple)
-    assert.ok(index === 0 || scene.start === SIMPLE_SCENES[index - 1].end, `${scene.id} starts where the last scene ends`)
+    if (scene.id === "ecosystem") {
+      assert.equal(scene.nerd, SCENES.find((item) => item.id === "ecosystem").nerd, "the cutaway is shared with the deep dive, numbers and all")
+    } else {
+      assert.equal(scene.nerd, undefined, `${scene.id} has no nerd caption: nerd mode swaps to the six-scene set`)
+      assert.equal(sceneCaption(scene, true), scene.simple)
+    }
     assert.ok(scene.end > scene.start, scene.id)
     assert.doesNotMatch(words(scene), /chunk|prefill|decode|HBM|KV cache|vector|embedding|FP\d|roofline|bandwidth|ORCA|MCP|\bRAG\b|PUE|peering|eyeball|cross connect|dark fiber/i, scene.id)
   })
   assert.equal(scenesFor(false), SIMPLE_SCENES)
   assert.equal(scenesFor(true), SCENES)
   assert.equal(scenesFor(), SIMPLE_SCENES)
-  assert.equal(SCENES.length, 5, "nerd mode keeps the deep dive")
+  assert.equal(SCENES.length, 6, "nerd mode keeps the deep dive")
   /* Flipping nerd on lands on the scene that covers the same ground; flipping off folds back. */
-  assert.deepEqual([0, 1, 2].map((i) => matchingScene(i, true)), [0, 2, 4])
-  assert.deepEqual([0, 1, 2, 3, 4].map((i) => matchingScene(i, false)), [0, 0, 1, 1, 2])
-  assert.equal(matchingScene(9, true), 4)
+  assert.deepEqual([0, 1, 2, 3].map((i) => matchingScene(i, true)), [0, 2, 2, 5])
+  assert.deepEqual([0, 1, 2, 3, 4, 5].map((i) => matchingScene(i, false)), [0, 0, 1, 3, 3, 3])
+  assert.equal(matchingScene(9, true), 5)
   assert.equal(matchingScene(-1, false), 0)
   assert.equal(matchingScene(undefined, true), 0)
   /* The simple timeline plays each scene from its own start and holds inside it. */
@@ -95,21 +133,23 @@ test("the booth intro is three click-through scenes with the exact copy, and ner
   assert.equal(sceneTime(0, 0, { scenes: SIMPLE_SCENES }).t, 0)
   const wrapped = sceneTime(1, 100, { scenes: SIMPLE_SCENES })
   assert.equal(wrapped.index, 1)
-  assert.ok(wrapped.t >= 22 && wrapped.t < 38)
-  assert.equal(sceneTime(2, 10, { scenes: SIMPLE_SCENES }).scene.id, "build")
+  assert.ok(wrapped.t >= 86 && wrapped.t < 100, `the ecosystem loops inside its own window (${wrapped.t})`)
+  assert.equal(sceneTime(2, 10, { scenes: SIMPLE_SCENES }).scene.id, "takeaway")
+  assert.equal(sceneTime(3, 10, { scenes: SIMPLE_SCENES }).scene.id, "build")
   assert.equal(sceneTime(7, 0, { scenes: SIMPLE_SCENES }).scene.id, "build")
-  const frozen = sceneTime(2, 1e9, { hold: true, scenes: SIMPLE_SCENES })
+  const frozen = sceneTime(3, 1e9, { hold: true, scenes: SIMPLE_SCENES })
   assert.equal(frozen.t, 54 - 0.001)
   for (let index = 0; index < SIMPLE_SCENES.length; index += 1) {
     assert.equal(sceneTime(index, 10, { scenes: SIMPLE_SCENES }).index, index, `${SIMPLE_SCENES[index].id} never advances on its own`)
   }
 })
 
+const PLAYER_COPY_FILES = ["js/intro.js", "js/main.js", "js/coach.js", "js/data.js", "js/presets.js", "js/steps.js", "js/eco.js", "js/rounds.js", "js/explain.js"]
+
 test("player copy uses the corrected hardware names", async () => {
   const { readFileSync } = await import("node:fs")
   const root = new URL("../", import.meta.url)
-  const files = ["js/intro.js", "js/main.js", "js/coach.js", "js/data.js", "js/presets.js"]
-  const text = files.map((file) => readFileSync(new URL(file, root), "utf8")).join("\n")
+  const text = PLAYER_COPY_FILES.map((file) => readFileSync(new URL(file, root), "utf8")).join("\n")
   assert.doesNotMatch(text, /Gaussian boson/i)
   assert.doesNotMatch(text, /over 2×|over twice/i)
   assert.equal(text.match(/NVL144/g)?.length, 1)
@@ -121,7 +161,7 @@ test("player copy uses the corrected hardware names", async () => {
 test("no player copy calls tokens or passages chunks", async () => {
   const { readFileSync } = await import("node:fs")
   const root = new URL("../", import.meta.url)
-  for (const file of ["js/intro.js", "js/main.js", "js/coach.js", "js/presets.js", "js/floor.js", "index.html"]) {
+  for (const file of [...PLAYER_COPY_FILES, "js/floor.js", "index.html"]) {
     assert.doesNotMatch(readFileSync(new URL(file, root), "utf8"), /chunk/i, file)
   }
   assert.doesNotMatch(Object.values(LESSONS).join(" "), /chunk/i)
