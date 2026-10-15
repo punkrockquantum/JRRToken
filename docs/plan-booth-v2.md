@@ -93,11 +93,20 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
 - [x] Test bans `Dell|Supermicro|HPE|Hewlett|Lenovo|Cray|PowerEdge|ThinkSystem` in player text and in every
       non-comment line of `js/`, `css/` and `index.html` (`tests/refarch.test.js`)
 
-## P7 — Results: HOW DIGITAL REALTY WOULD HAVE HELPED `TODO`
+## P7 — Results: HOW DIGITAL REALTY WOULD HAVE HELPED `DONE`
 
-- [ ] 4–6 tailored lines per result quoting real distances, capacity, architecture and time
-- [ ] Only published Digital Realty facts (metros, ServiceFabric, cross connects, lead times already in `js/data.js`)
-- [ ] Test: every story × a weak build and the best build yields 4–6 lines with no made-up numbers
+- [x] 4–6 tailored lines per result quoting real distances, capacity, architecture and time (`js/drhelp.js` `drHelp`,
+      section `[data-key="dr-help"]` in both modes, nerd appends the numbers): place (users' shares and cities vs the
+      chosen metros in km / lit-fibre ms, the data home's retrieval round trip or one-time copy), capacity (rack kW vs
+      the hall's cap, overheating, power room, fit-out, the metro with liquid capacity ready), wires (the product each
+      leg rode, COMBO parts, first word vs target, what Digital Realty would have advised), time (slowest lead part,
+      pre-built hall, the one-time copy's hours / days), a story line (ORCA's London home, the missed second metro,
+      data gravity) and the closing facts
+- [x] Only published Digital Realty facts (300+ data centers, 50+ metros, PlatformDIGITAL, ServiceFabric, ServiceFabric
+      MCP, ORCA PT-3 at the London Innovation Lab; metros, halls, lead times from `js/data.js`)
+- [x] Test: every story × a weak build and the best build, both modes, and every nerd picture (`allPresets`) yields 4–6
+      lines naming the chosen metros and the users' and data homes, with every digit traced to a data table or the
+      scored build (`tests/drhelp.test.js`); the smoke checks the section in both modes
 
 ## P8 — Smoke and ship `PARTLY DONE`
 
