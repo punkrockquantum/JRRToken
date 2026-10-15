@@ -49,15 +49,24 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
 - [x] Sanity tests (`tests/latency.test.js`): LON↔FRA ≈ 640 km ≈ 7.5 ms fibre RTT; LON↔Ashburn ≈ 5,900 km
       ≈ 69 ms fibre, ≥ 140 ms internet
 
-## P4 — Connectivity step `PARTLY DONE`
+## P4 — Connectivity step `DONE`
 
 - [x] Public internet / Peering + eyeballs / ServiceFabric tiles with per-story "why" lines (`js/steps.js` WIRE_TILES, WIRE_WHY)
 - [x] Nerd tile Cross connect + Dark fiber (metro or regional only, FIBER_MAX_KM 1,500)
 - [x] Per-leg mixes exist as a preset (`js/presets.js` MIX, `wires: "mix"`) with every product costed and the dark fiber lead
-- [ ] COMBO tile on the connectivity step (robotics, coding agent, RAG / research mixes), simple and nerd copy
-- [ ] Live TOKEN IMPACT strip per tile: first token vs target, stream smooth / stutters / stalls,
-      GPU idle %, one "why" sentence; nerd adds per-leg RTT, jitter, loss, bandwidth, P(miss), cost, lead
-      (today the nerd line shows per-leg products via `nerdLegs(result)`)
+- [x] COMBO tile where mixing pays (`js/presets.js` COMBO, `wireIds`, `hasCombo`; `js/steps.js` COMBO_HINT, WIRE_WHY.combo):
+      RAG / research "on-ramp cross connect + ServiceFabric (+MCP)", coding agent "ServiceFabric for developers,
+      on-ramp cross connect for repos, dark fiber between sites only within 1,500 km, MCP control", robotics
+      "cross connect to each plant's carrier + ServiceFabric between sites" (`legEligibility` lets a partner's
+      carrier land on a cross connect; the miles beyond are fibre physics). Chat and drug discovery have no COMBO.
+      COMBO bills every product's NRC / MRC and waits for the longest lead; best wire where offered (`tests/combo.test.js`)
+- [x] Live TOKEN IMPACT strip on every connectivity tile (`js/impact.js` `wireImpact`, `impactStrip` in `js/main.js`):
+      FIRST TOKEN vs target (green / amber / red), STREAM smooth / stutters / stalls, GPU IDLE % (`result.wireIdle`:
+      the share of the racks' token rate the wire alone throws away), one plain "why" sentence; nerd adds per-leg RTT,
+      jitter sd, loss, bandwidth, P(miss), monthly cost, one-off cost and lead time (`detailLine`, also in every
+      tile's "?" popover). Strip values equal `evaluateBuild` outputs for the same build (`tests/impact.test.js`);
+      no page scroll at the four viewports in either mode (compact layout under 1200 px: strip under art + words,
+      nerd three columns)
 
 ## P5 — Balance and two rounds `DONE`
 

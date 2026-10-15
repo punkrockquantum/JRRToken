@@ -2,6 +2,7 @@ import { DATA_HOMES, SCENARIOS, SITES, USE_CASES, byId } from "./data.js"
 import { BUILD } from "./build-info.js"
 import { DR_FOOTER, explainResult, thinkLines } from "./explain.js"
 import { ecoHint, ecoQuestion, ecoSummary, ecosystem } from "./eco.js"
+import { detailLine, wireImpact } from "./impact.js"
 import { plainCoach } from "./coach.js"
 import { createFloor } from "./floor.js"
 import { createAdvanceGate, createIntro, matchingScene, sceneCaption, scenesFor, setIntroDetail } from "./intro.js"
@@ -684,7 +685,7 @@ function bindTile(tile, onPick, learn) {
   })
 }
 
-function picture({ key, art, tag = "", label, hint = "", on, lines, nerd = "", onPick, scale = 2, locked = false }) {
+function picture({ key, art, tag = "", label, hint = "", on, lines, nerd = "", onPick, scale = 2, locked = false, extra = null }) {
   const learn = { title: label, lines, nerd }
   const tile = el("button", {
     type: "button",
@@ -699,6 +700,7 @@ function picture({ key, art, tag = "", label, hint = "", on, lines, nerd = "", o
       el("span", { class: "tile-title", text: label }),
       hint ? el("span", { class: "tile-hint", text: hint }) : null,
     ]),
+    extra,
   ])
   bindTile(tile, onPick, learn)
   const ask = el("button", {
@@ -716,30 +718,25 @@ function picture({ key, art, tag = "", label, hint = "", on, lines, nerd = "", o
   return el("div", { class: "tile-wrap" }, [tile, ask])
 }
 
-const LINK_NAMES = {
-  fabric: "ServiceFabric",
-  mcp: "ServiceFabric MCP",
-  cross: "Cross connect",
-  fiber: "Dark fiber",
-  public: "Public internet",
-  peer: "Peering",
-  eye: "Eyeball network",
-}
-
-function legWords(name = "") {
-  const plain = String(name).toLowerCase().replace(/\s*→\s*/, " to ")
-  return plain.charAt(0).toUpperCase() + plain.slice(1)
-}
-
-function nerdLegs(result) {
-  return (result?.legResults || [])
-    .filter((leg) => leg.kind && leg.kind !== "off")
-    .map((leg) => {
-      const ms = Number.isFinite(leg.rttS) ? `${Math.round(leg.rttS * 1000)} ms` : ""
-      const speed = Number.isFinite(leg.gbps) ? `${leg.gbps} Gbps` : ""
-      return [legWords(leg.name), LINK_NAMES[leg.kind] || leg.kind, ms, speed].filter(Boolean).join(" ")
-    })
-    .join(". ")
+/**
+ * TOKEN IMPACT strip on a connectivity tile: first token against the target, how the stream
+ * feels, how idle the wire leaves the GPUs, and one plain sentence. Nerd adds the per-leg line.
+ */
+function impactStrip(impact, key) {
+  const chip = (label, value, state, part) =>
+    el("span", { class: `imp-chip ${state}`, "data-part": part, "data-state": state }, [
+      el("span", { class: "imp-label", text: label }),
+      el("b", { class: "imp-value", text: value }),
+    ])
+  return el("span", { class: "impact", "data-key": `impact-${key}` }, [
+    el("span", { class: "imp-row" }, [
+      chip("FIRST TOKEN", impact.firstToken.label, impact.firstToken.state, "first"),
+      chip("STREAM", impact.stream.feel, impact.stream.state, "stream"),
+      chip("GPU IDLE", impact.idle.label, impact.idle.state, "idle"),
+    ]),
+    el("span", { class: "imp-why", "data-part": "why", text: impact.why }),
+    state.nerd ? el("span", { class: "imp-nerd", "data-part": "nerd", text: detailLine(impact.detail) }) : null,
+  ])
 }
 
 /* ---------- Scenario card, rail, ecosystem bar ---------- */
@@ -842,6 +839,7 @@ function stepPanel(stepId, result) {
   const value = stepValue(id, stepId, choices)
   const isOn = (tile) => (stepId === "location" ? value.includes(tile.id) : value === tile.id)
   const wraps = tiles.map((tile) => {
+    const impact = stepId === "wires" ? wireImpact(id, choices, tile.id, state.nerd) : null
     const wrap = picture({
       key: `${stepId}-${tile.id}`,
       art: tile.art,
@@ -850,10 +848,11 @@ function stepPanel(stepId, result) {
       hint: tile.hint,
       on: isOn(tile),
       lines: tile.lines,
-      nerd: stepId === "wires" && isOn(tile) ? nerdLegs(result) : tile.nerd || "",
+      nerd: impact ? detailLine(impact.detail) : tile.nerd || "",
       onPick: () => (tile.locked ? gotoStep(nextStep(stepId)) : pickTile(stepId, tile)),
       scale: state.nerd ? 2 : 3,
       locked: Boolean(tile.locked),
+      extra: impact ? impactStrip(impact, tile.id) : null,
     })
     if (stepId === "wires" && tile.id === "fast" && state.nerd && isOn(tile)) {
       const toggle = el("button", {
@@ -874,7 +873,8 @@ function stepPanel(stepId, result) {
     return wrap
   })
   const selected = tiles.find(isOn)
-  const nerdLine = state.nerd ? (stepId === "wires" ? nerdLegs(result) : selected?.nerd || "") : ""
+  // The wires step carries its nerd detail on every tile's TOKEN IMPACT strip, not under the grid.
+  const nerdLine = state.nerd && stepId !== "wires" ? selected?.nerd || "" : ""
   const max = maxMetros(id)
   const subtitle = stepId === "location"
     ? `${step.hint}${max > 1 ? `: pick up to ${max}` : ""}. ${metroSummary(id, choices)}`

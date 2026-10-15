@@ -856,6 +856,7 @@ export function evaluateBuild(useCaseId, build = {}) {
     : networkDelay(useCase, wire, data, reach, { unreached: bill.unreached, capGbps: bill.capGbps })
   out.netS = delay.slaS
   out.waitS = delay.meanS
+  out.jitterS = delay.jitterS
   out.userRttS = delay.userRttS
   out.trips = delay.trips
   out.publicTrips = delay.publicTrips
@@ -876,6 +877,9 @@ export function evaluateBuild(useCaseId, build = {}) {
     out.bandwidthCapped = true
   }
   out.capTok = delay.capTok
+  // The share of the racks' token rate the wire alone throws away: public stalls and drops, or a
+  // thin pipe. Shown as GPU IDLE on the connectivity tiles; cooling and power are judged elsewhere.
+  out.wireIdle = blended > 0 ? Math.min(1, Math.max(0, 1 - throughput / blended)) : 0
   throughput *= thermal * deliver
   if (planned?.throttle < 1) throughput *= planned.throttle
   out.throughput = throughput

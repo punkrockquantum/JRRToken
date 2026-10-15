@@ -309,7 +309,7 @@ export function evaluateRoutes(ctx) {
 
   for (const row of rows) {
     if (row.kind === "off") {
-      legStats.push({ id: row.leg.id, name: row.leg.name, kind: "off", kindLabel: "OFF", rttS: 0, gbps: 0, mrc: 0, nrc: 0, leadDays: 0, addedS: 0 })
+      legStats.push({ id: row.leg.id, name: row.leg.name, kind: "off", kindLabel: "OFF", rttS: 0, jitterS: 0, loss: 0, km: 0, gbps: 0, mrc: 0, nrc: 0, leadDays: 0, addedS: 0 })
       continue
     }
     const km = legKm(row.leg, reach, row.kind)
@@ -375,6 +375,9 @@ export function evaluateRoutes(ctx) {
       kind: row.kind,
       kindLabel: short,
       rttS: profile.rttS,
+      jitterS: profile.jitterS || 0,
+      loss: profile.loss || 0,
+      km,
       gbps: Number.isFinite(gbps) ? gbps : null,
       mrc: row.mrc || 0,
       nrc: row.nrc || 0,

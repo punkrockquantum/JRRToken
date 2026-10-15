@@ -905,6 +905,21 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .screen.game.nerd .step-panel .tiles.count-5, .screen.game.nerd .step-panel .tiles.count-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .screen.game .step-panel .tile-tag { display: block; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .screen.game .step-panel .tile-copy { max-width: 100%; }
+/* TOKEN IMPACT strip on connectivity tiles: three coloured chips, one plain sentence, nerd detail. */
+.impact { display: flex; flex-direction: column; gap: 4px; min-width: 0; width: 100%; flex: 0 0 auto; margin-top: 2px; }
+.imp-row { display: flex; flex-wrap: wrap; gap: 4px 6px; min-width: 0; }
+.imp-chip { display: inline-flex; flex-direction: column; gap: 1px; padding: 3px 6px; border: 1px solid var(--line-2, #3a3a66); background: var(--ink); border-left-width: 3px; min-width: 0; }
+.imp-label { font-size: 9px; line-height: 1.2; color: var(--muted); letter-spacing: 0.02em; white-space: nowrap; }
+.imp-value { font-size: 12px; line-height: 1.25; color: var(--pale); white-space: nowrap; text-transform: uppercase; }
+.imp-chip.good { border-left-color: var(--lime); }
+.imp-chip.good .imp-value { color: var(--lime); }
+.imp-chip.ok { border-left-color: var(--yellow); }
+.imp-chip.ok .imp-value { color: var(--yellow); }
+.imp-chip.bad { border-left-color: #ff7b7b; }
+.imp-chip.bad .imp-value { color: #ffb0b0; }
+.imp-why { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 12px; line-height: 1.35; color: var(--pale); overflow-wrap: anywhere; }
+.imp-nerd { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; font-size: 9px; line-height: 1.35; color: var(--cyan); overflow-wrap: anywhere; }
+.screen.game .step-panel .tiles.count-4 .tile { padding-right: 36px; }
 .screen.game .step-panel .row-nerd { white-space: normal; -webkit-line-clamp: 3; display: -webkit-box; -webkit-box-orient: vertical; }
 .step-nav { display: flex; justify-content: space-between; gap: 10px; margin-top: auto; }
 .step-nav .btn.big { min-height: 56px; padding: 8px 28px; }
@@ -1005,6 +1020,26 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
   .screen.game .step-panel .tile-title { -webkit-line-clamp: 2; }
   .screen.game .step-panel .tile-hint, .screen.game.nerd .step-panel .tile-hint { -webkit-line-clamp: 3; } /* "Users: N km · Data: M km" needs three short lines here */
   .screen.game.nerd .step-panel .tile-tag { display: none; } /* the nerd line under the tiles carries the detail */
+  /* Connectivity: the TOKEN IMPACT strip drops under art + words at full tile width; nerd gets three columns. */
+  .screen.game .step-wires .tile, .screen.game.nerd .step-wires .tile { flex-wrap: wrap; align-content: center; row-gap: 4px; }
+  /* The "?" sits top-right over the title row only, so the strip below runs the full tile width. */
+  .screen.game .step-wires .tile, .screen.game.nerd .step-wires .tile { padding-right: 10px; }
+  .screen.game .step-wires .tile-art { flex: none; }
+  .screen.game .step-wires .tile-copy { flex: 1 1 0; min-width: 0; padding-right: 30px; }
+  .screen.game .step-wires .tile .impact { flex: 1 0 100%; margin-top: 0; gap: 3px; }
+  .screen.game .step-wires .imp-row { gap: 3px 4px; }
+  .screen.game .step-wires .imp-chip { flex-direction: row; align-items: baseline; gap: 1px 5px; padding: 2px 5px; }
+  .screen.game.nerd .step-wires .imp-chip { flex-wrap: wrap; padding: 1px 4px; }
+  .screen.game.nerd .step-wires .imp-value { line-height: 1.15; }
+  .screen.game.nerd .step-wires .tile { row-gap: 3px; padding-top: 5px; padding-bottom: 5px; }
+  .screen.game.nerd .step-wires .tile .impact, .screen.game.nerd .step-wires .imp-row { gap: 2px 4px; }
+  .screen.game .step-wires .tile-hint, .screen.game.nerd .step-wires .tile-hint { -webkit-line-clamp: 1; }
+  .screen.game .step-wires .tile-title { -webkit-line-clamp: 1; }
+  .screen.game.nerd .step-wires .tiles.count-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .screen.game.nerd .step-wires .tile-title { -webkit-line-clamp: 2; }
+  .screen.game.nerd .step-wires .tile-hint, .screen.game.nerd .step-wires .tile-art { display: none; } /* the title names the product; the strip says what it does */
+  .screen.game.nerd .step-wires .tile-title { overflow-wrap: normal; }
+  .screen.game.nerd .step-wires .imp-why, .screen.game.nerd .step-wires .imp-nerd { -webkit-line-clamp: 1; }
   .workers { max-width: 48px; }
   .people-copy strong { white-space: normal; }
   .step-nav .btn.big { min-height: 48px; padding: 6px 20px; }

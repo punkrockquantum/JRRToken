@@ -85,7 +85,9 @@ test("picture presets map onto builds, and the preset board stays in the scoring
   assert.equal(choicesToBuild("drug", { helper: true }).orca, true)
   assert.equal(choicesToBuild("chat", { helper: true }).orca, false)
   assert.match(main, /nerd: false/)
-  assert.match(main, /const nerdLine = state\.nerd \? \(stepId === "wires" \? nerdLegs\(result\) : selected\?\.nerd \|\| ""\) : ""/)
+  assert.match(main, /const nerdLine = state\.nerd && stepId !== "wires" \? selected\?\.nerd \|\| "" : ""/)
+  assert.match(main, /const impact = stepId === "wires" \? wireImpact\(id, choices, tile\.id, state\.nerd\) : null/)
+  assert.match(main, /extra: impact \? impactStrip\(impact, tile\.id\) : null/)
   for (const useCase of USE_CASES) {
     const scored = allPresets(useCase.id).map((choices) => ({
       choices,
