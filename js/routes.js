@@ -32,9 +32,9 @@ export const FAT_GBPS = 10
 /**
  * A batch lab feed fills the port and is not jitter-killed. Public transit is lossier than
  * peering, so it screens fewer candidates per hour. Game assumption, tuned so drug discovery
- * on the internet lands near 1,000 and peering a little higher, both under a private pipe.
+ * on the internet lands near 900 and peering near 1,050, both under a private pipe.
  */
-const BATCH_FILL = { public: 1.9, peer: 2.02 }
+const BATCH_FILL = { public: 1.15, peer: 1.3 }
 /** Combo goodput bonuses cannot multiply score by more than this. */
 export const SYNERGY_CAP = 1.25
 const STREAM_BONUS = new Set(["chat", "rag", "code", "research"])
@@ -224,7 +224,8 @@ export function evaluateRoutes(ctx) {
     }
     let fabric = { ...blankFabric(), dest: leg.dest, ...(chosen.fabric || {}) }
     if ((kind === "fabric" || kind === "mcp") && Number.isFinite(build.bwTier)) {
-      const need = ((useCase.demand * (useCase.bytesPerToken || 64) * 8) / 1e9 / siteCount) * (leg.bw || 1)
+      // Ingress is split across metros; a tools, data or lab leg is one link carrying the whole flow.
+      const need = ((useCase.demand * (useCase.bytesPerToken || 64) * 8) / 1e9 / (leg.role === "ingress" ? siteCount : 1)) * (leg.bw || 1)
       const vc = stepSpeed(speedFor(need), build.bwTier)
       fabric = { ...fabric, vc, port: vc > 10 ? 100 : 10, redundant: build.fabricRedundant ?? fabric.redundant }
     }
@@ -240,7 +241,7 @@ export function evaluateRoutes(ctx) {
   })
 
   const ingress = rows.find((row) => row.leg.role === "ingress")
-  const needOf = (row) => ((useCase.demand * (useCase.bytesPerToken || 64) * 8) / 1e9 / siteCount) * (row.leg.bw || 1)
+  const needOf = (row) => ((useCase.demand * (useCase.bytesPerToken || 64) * 8) / 1e9 / (row.leg.role === "ingress" ? siteCount : 1)) * (row.leg.bw || 1)
   for (const row of rows) {
     if (row.kind !== "mcp") continue
     const next = mcpRightSize(row.fabric, needOf(row))

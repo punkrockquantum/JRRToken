@@ -54,14 +54,17 @@ export function searchBuilds(useCaseId) {
         if (racks > platform.supply) continue
         for (const data of DATA_TIERS) {
           for (const kv of [false, true]) {
-            for (const orca of useCase.orca ? [false, true] : [false]) {
-              for (const sites of siteSets) {
-                if (racks < sites.length) continue
-                const base = { hall: hall.id, platform: platform.id, racks, data: data.id, kv, orca, graphs: "large", sites }
-                for (const net of networkOptions(useCaseId, base)) {
-                  const build = { ...base, ...net }
-                  const result = evaluateBuild(useCaseId, build)
-                  list.push({ build, result })
+            // CPU hosts only matter beside the KV tier on long contexts, so the search tries them there.
+            for (const hosts of kv && useCase.ctx >= 32000 ? ["standard", "grace"] : ["standard"]) {
+              for (const orca of useCase.orca ? [false, true] : [false]) {
+                for (const sites of siteSets) {
+                  if (racks < sites.length) continue
+                  const base = { hall: hall.id, platform: platform.id, racks, data: data.id, kv, hosts, orca, graphs: "large", sites }
+                  for (const net of networkOptions(useCaseId, base)) {
+                    const build = { ...base, ...net }
+                    const result = evaluateBuild(useCaseId, build)
+                    list.push({ build, result })
+                  }
                 }
               }
             }

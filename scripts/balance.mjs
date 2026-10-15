@@ -6,11 +6,12 @@ const money = (value) => formatMoney(value, 0)
 const people = (fte) => Math.round(fte).toLocaleString("en-GB")
 const rows = []
 
-/* ---------- The simple board: 3 GPUs × 3 halls × 3 connections, hidden defaults applied ---------- */
+/* ---------- The simple board: 3 GPUs × 3 halls × 3 connections × 3 memory/data tiles ---------- */
 
-console.log("Simple board (nerd off): naive = Vera Rubin + public internet, typical = opening picture, best = top of the 27 tiles")
-console.log("\n| Story | Naive (air hall) | Naive (liquid hall) | Typical | Best | Best tiles | Within 2% |")
-console.log("|---|---:|---:|---:|---:|---|---:|")
+console.log("Simple board (nerd off): naive = Vera Rubin + air + public internet, maxed = last tile of every row, typical = opening picture, best = top of the 81 tiles")
+console.log("\n| Story | Naive | Maxed | Typical | Best | Best tiles | Within 2% | Near-misses (wrong hall / wire) |")
+console.log("|---|---:|---:|---:|---:|---|---:|---|")
+const bests = {}
 for (const useCase of USE_CASES) {
   const id = useCase.id
   const simple = (combo) => evaluateBuild(id, choicesToBuild(id, simpleToChoices(id, combo), false))
@@ -19,18 +20,33 @@ for (const useCase of USE_CASES) {
   const near = scored.filter((item) => item.result.score >= best.result.score * 0.98)
   const tiles = simpleTiles(id)
   const label = (row, key) => tiles[row].find((tile) => tile.id === key)?.label || key
-  const naiveAir = simple({ brains: "rubin", hall: "cool", wires: "cheap" }).score
-  const naiveLiquid = simple({ brains: "rubin", hall: "super", wires: "cheap" }).score
-  const typical = simple({ brains: "medium", hall: "cool", wires: "peer" }).score
-  const tilesLine = `${label("brains", best.combo.brains)} · ${label("halls", best.combo.hall)} · ${label("wires", best.combo.wires)}`
-  console.log(`| ${useCase.name} | ${naiveAir} | ${naiveLiquid} | ${typical} | ${best.result.score} | ${tilesLine} | ${near.length} |`)
+  const naive = simple({ brains: "rubin", hall: "cool", wires: "cheap", data: "off" }).score
+  const maxed = simple({ brains: "rubin", hall: "plus", wires: "fast", data: "plus" }).score
+  const typical = simple({ brains: "medium", hall: "cool", wires: "peer", data: "off" }).score
+  const b = best.combo
+  const misses = scored.filter((item) => item.combo.brains === b.brains && item.combo.data === b.data && ((item.combo.hall !== b.hall) !== (item.combo.wires !== b.wires)))
+  const tilesLine = `${label("brains", b.brains)} · ${label("halls", b.hall)} · ${label("wires", b.wires)} · ${label("data", b.data)}`
+  bests[id] = choicesToBuild(id, simpleToChoices(id, b), false)
+  console.log(`| ${useCase.name} | ${naive} | ${maxed} | ${typical} | ${best.result.score} | ${tilesLine} | ${near.length} | ${misses.map((item) => `${item.combo.hall}/${item.combo.wires} ${item.result.score}`).join(", ")} |`)
 }
 
-console.log("\nSimple board, every tile set (GPU / hall / connection → score)")
+console.log("\nChecks: best 1,400 and alone within 2%; maxed ≤ 300; naive 0; a near-miss in 700–1,100; optima differ in ≥ 2 of 4 decisions between any two stories")
+const ids = USE_CASES.map((item) => item.id)
+const fingerprint = (build) => [`${build.platform}x${build.racks}`, `${build.hall}/${build.sites.length}`, build.choices.wires, `${build.data}/${build.kv}/${build.hosts}/${build.orca}`]
+for (let i = 0; i < ids.length; i += 1) {
+  for (let j = i + 1; j < ids.length; j += 1) {
+    const a = fingerprint(bests[ids[i]])
+    const c = fingerprint(bests[ids[j]])
+    const differ = a.filter((part, index) => part !== c[index]).length
+    console.log(`  ${ids[i]} vs ${ids[j]}: ${differ} of 4 decisions differ${differ < 2 ? "  <-- too alike" : ""}`)
+  }
+}
+
+console.log("\nSimple board, every tile set (GPU / hall / connection / memory-data → score)")
 for (const useCase of USE_CASES) {
   const id = useCase.id
   const line = allSimple(id)
-    .map((combo) => `${combo.brains}/${combo.hall}/${combo.wires} ${evaluateBuild(id, choicesToBuild(id, simpleToChoices(id, combo), false)).score}`)
+    .map((combo) => `${combo.brains}/${combo.hall}/${combo.wires}/${combo.data} ${evaluateBuild(id, choicesToBuild(id, simpleToChoices(id, combo), false)).score}`)
     .join(", ")
   console.log(`  ${id}: ${line}`)
 }

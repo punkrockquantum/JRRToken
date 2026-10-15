@@ -102,8 +102,17 @@ const KV_USABLE = 0.9
 const HOST_KV_SHARE = 0.5
 const PREFILL_EFFICIENCY = 0.35
 const HBM_ONLY_REUSE = 0.3
+/**
+ * CPU host memory beside the KV tier parks more of a long context between turns (game value):
+ * with the KV tier on, Grace hosts recover this share of the prefill the reuse rate still
+ * misses, scaling from nothing at 32k tokens of context to the full share at 64k and beyond.
+ */
+const HOST_PARK_REUSE = 0.6
+const HOST_LONG_CTX = [32000, 64000]
 const SPILL_PENALTY = 0.4
 const LATE_GOODPUT = 0.25
+/** A fan-cooled rack in the liquid hall is still cooled by air: it runs at the air hall's PUE. */
+const AIR_PUE = byId(HALLS, "A")?.pue ?? 1.38
 
 /** In-building cross connect. Game stand-in inside the published "minimal latency" range. */
 export const CROSS_RTT_S = 0.0001
@@ -121,8 +130,22 @@ export const PARTNER_KM = 15
 /** Dark fiber is a metro or regional product in this game. */
 export const FIBER_MAX_KM = 1500
 
-/** Score thresholds for one, two, and three stars. */
-export const STAR_POINTS = [700, 1000, 1250]
+/** Score thresholds for one, two, and three stars. Three stars means within a few percent of the best picture. */
+export const STAR_POINTS = [1000, 1200, 1350]
+
+/** Share of the missed prefill that CPU host memory recovers for this context length (0 to 1). */
+export function hostParkShare(useCase, hosts, kvOn) {
+  if (!kvOn || hosts !== "grace") return 0
+  const [from, to] = HOST_LONG_CTX
+  const longness = Math.max(0, Math.min(1, ((useCase?.ctx || 0) - from) / (to - from)))
+  return HOST_PARK_REUSE * longness
+}
+
+/** The PUE a rack really runs at in this hall: cold plates earn the liquid hall's figure, fans do not. */
+export function effectivePue(platform, hall) {
+  if (!hall) return AIR_PUE
+  return platform?.cooling !== "liquid" && hall.cooling === "liquid" ? Math.max(hall.pue, AIR_PUE) : hall.pue
+}
 
 export function blankBuild(useCaseId = null) {
   const useCase = byId(USE_CASES, useCaseId)
@@ -670,16 +693,18 @@ export function evaluateBuild(useCaseId, build = {}) {
   out.siteRacks = perSiteRacks
   out.hosts = build?.hosts || "standard"
   out.itKW = racks * platform.rackKW + (storageKW + hostKW) * siteCount + edgeKW
-  out.facilityKW = out.itKW * hall.pue
-  out.siteKW = Math.max(...perSiteRacks) * platform.rackKW + storageKW
+  const pue = effectivePue(platform, hall)
+  out.pue = pue
+  out.facilityKW = out.itKW * pue
+  out.siteKW = Math.max(...perSiteRacks) * platform.rackKW + storageKW + hostKW
   out.spaceUsed = Math.max(...perSiteRacks) + storageSpace(build, useCase)
   out.spaceCap = hall.rackSpace
   const scenario = scenarioFor(useCase)
   out.scenario = scenario
   out.budget = scenario.budget
-  out.powerCapKW = (scenario.powerMW * 1000) / hall.pue
+  out.powerCapKW = (scenario.powerMW * 1000) / pue
   out.powerMW = scenario.powerMW
-  out.powerUsedMW = (out.siteKW * hall.pue) / 1000
+  out.powerUsedMW = (out.siteKW * pue) / 1000
   out.leadParts = leadParts(useCase, hall, platform, data, kvOn, orcaOn, bill)
   out.liveWeeks = Math.max(0, ...out.leadParts.map((part) => part.weeks))
   out.live = Math.max(0, HORIZON_WEEKS - out.liveWeeks) / HORIZON_WEEKS
@@ -719,8 +744,10 @@ export function evaluateBuild(useCaseId, build = {}) {
   out.parkedOnHost = decode.parkedOnHost
 
   const prefillRate = (group * platform.pflops * 1e15 * PREFILL_EFFICIENCY) / (2 * useCase.activeB * 1e9)
-  const hit = kvOn ? useCase.reuse : useCase.reuse * HBM_ONLY_REUSE
+  const parked = hostParkShare(useCase, build?.hosts, kvOn)
+  const hit = kvOn ? useCase.reuse + (1 - useCase.reuse) * parked : useCase.reuse * HBM_ONLY_REUSE
   out.hit = hit
+  out.hostPark = parked
   const prefillPerOutput = (useCase.ctx * (1 - hit)) / useCase.outTokens
   const decodeRate = Math.min(out.computeTok, out.kvTok)
   const prefillTotal = instances * prefillRate * fitMult

@@ -1,7 +1,7 @@
 /** Plain account of one finished build, plus the single tile change that would score higher. */
 import { MISSION_SITES, NETWORKS, PLATFORMS, SITES, byId } from "./data.js"
 import { STAR_POINTS, evaluateBuild, formatMoney, formatScore } from "./model.js"
-import { SIMPLE_IDS, allSimple, brainPick, choicesToBuild, cityChoices, citySites, simpleHallTile, simplePicks, simpleTiles, simpleToChoices } from "./presets.js"
+import { SIMPLE_IDS, allSimple, brainPick, choicesToBuild, cityChoices, citySites, simpleDataTile, simpleHallTile, simplePicks, simpleTiles, simpleToChoices } from "./presets.js"
 import { peopleLead, savingsLine } from "./results.js"
 
 const KINDS = {
@@ -97,6 +97,10 @@ function simpleNeighbours(useCaseId, choices) {
     if (wires === picks.wires) continue
     list.push({ kind: "wires", to: wires, choices: simpleToChoices(useCaseId, { ...picks, wires }), phrase: `Switching the connection to ${WIRES[wires]}` })
   }
+  for (const data of SIMPLE_IDS.data) {
+    if (data === picks.data) continue
+    list.push({ kind: "data", to: data, choices: simpleToChoices(useCaseId, { ...picks, data }), phrase: simpleDataTile(useCaseId, data).phrase })
+  }
   return list
 }
 
@@ -112,7 +116,7 @@ function simpleBest(useCaseId) {
   const tile = (row, id) => tiles[row].find((item) => item.id === id)
   return {
     score: best.result.score,
-    phrase: `${tile("brains", best.combo.brains)?.label || best.combo.brains} ${tile("halls", best.combo.hall)?.inWords || ""} on ${tile("wires", best.combo.wires)?.label || best.combo.wires}`,
+    phrase: `${tile("brains", best.combo.brains)?.label || best.combo.brains} ${tile("halls", best.combo.hall)?.inWords || ""} on ${tile("wires", best.combo.wires)?.label || best.combo.wires}, ${tile("data", best.combo.data)?.inWords || best.combo.data}`,
   }
 }
 

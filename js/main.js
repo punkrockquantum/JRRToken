@@ -13,7 +13,7 @@ import { validateEmail, validateName } from "./names.js"
 import { fetchLeague, recordAttempt } from "./sync.js"
 import { isMuted, loadMute, play, setMuted, unlock } from "./sound.js"
 import { spriteImg } from "./sprites.js"
-import { PRESET_IDS, STORIES, autoLibrary, brainPick, choicesToBuild, cityChoices, citySites, defaultChoices, nerdChoices, simpleChoices, simpleDefaults, simplePicks, simpleTiles, simpleToChoices } from "./presets.js"
+import { PRESET_IDS, STORIES, autoLibrary, brainPick, choicesToBuild, cityChoices, citySites, defaultChoices, nerdChoices, simpleChoices, simpleDataKind, simpleDefaults, simplePicks, simpleTiles, simpleToChoices } from "./presets.js"
 
 const LEAGUE_KEY = "token-quest-league-v1"
 const STAFF_PIN = "2510"
@@ -814,9 +814,9 @@ function hostRow(choices) {
       lines: [
         "Grace or Vera class hosts keep a big memory pool beside the GPUs.",
         "That pool can park the KV cache, so a follow-up spends less time on prefill.",
-        "They cost more and draw a little more power than a standard host.",
+        "It pays for very long contexts, past about 32k tokens; for short chats it is just extra cost.",
       ],
-      nerd: "Game value: $450k and 12 kW per site. KV parking cuts follow-up prefill.",
+      nerd: "Game value: $450k and 12 kW per site. With the KV tier on, contexts past 32k tokens skip more prefill (the full effect at 64k).",
       onPick: () => pick({ hosts: "grace" }),
     }),
     picture({
@@ -1126,18 +1126,39 @@ function simpleHallLearn(useCaseId, hall) {
   ]
   if (hall.id === "super") return base
   if (cityChoices(useCaseId)) return [base[0], ...siteLearn(useCaseId, 2).slice(0, 3)]
-  return [base[0], "The KV memory tier parks the GPU's notes on each chat, so a follow-up skips the re-read.", "Turn it on when people keep the conversation going."]
+  const rear = byId(HALLS, "R")
+  return [
+    "A water-cooled door on each rack takes the hot exhaust away. The servers stay air-cooled.",
+    `Up to ${rear.maxRackKW} kW per rack, and a better PUE than plain fans, so more of a small power room reaches the GPUs.`,
+    "Air-cooled Blackwell racks fit. NVL72 and Vera Rubin still need the liquid hall.",
+  ]
+}
+
+const SIMPLE_DATA_ART = { kv: { off: "gremlin", on: "chest", plus: "rackAir" }, index: { off: "chest", on: "iconBook", plus: "scroll" }, lab: { off: "chest", on: "vault", plus: "orca" } }
+const SIMPLE_DATA_LEARN = {
+  kv: {
+    off: ["Without a KV cache tier the GPUs re-read the whole conversation on every turn.", "Fine for one-off questions. Costly when people keep talking.", "Prefill is the re-read; it eats GPU time before the first word."],
+    on: ["The KV cache tier parks the GPU's notes on each chat, so a follow-up skips the re-read.", "Turn it on when people keep the conversation going.", `Game value: ${formatMoney(KV_TIER.capex, 0)} and ${KV_TIER.kw} kW per site.`],
+    plus: ["Grace or Vera class hosts keep a big CPU memory pool beside the GPUs.", "It parks very long contexts, past about 32k tokens, so agents skip even more prefill.", "For short chats it is just extra cost and power."],
+  },
+  index: {
+    off: ["With no shared index the app has nothing to search, so the model answers from memory alone.", "Answers are weaker and the lookup is slow.", "Storage is not fetching the answer; it is feeding the prompt."],
+    on: ["The app embeds the question and searches the vector index, then pastes the best passages into the prompt.", "The model never searches mid-thought.", "The fastest lookup before the model runs."],
+    plus: ["The vector index finds the passages; the KV cache tier remembers the prompt they built.", "A follow-up question skips the re-read of those passages.", "Two small cabinets beside the GPUs."],
+  },
+  lab: {
+    off: ["Each server keeps its own small drives.", "The lab's candidate libraries and checkpoints have no shared home, so the GPUs wait on them.", "Fine for a chatbot, not for a screening pipeline."],
+    on: ["File and object storage holds the candidate libraries and model checkpoints.", "Checkpoints load into GPU memory at start-up, not on every token.", "The GPUs always have the next batch ready."],
+    plus: ["ORCA PT-3 is a photonic quantum accelerator in two cabinets beside the GPUs.", "GPUs build the binding graph; ORCA samples it and finds strong binders about twice as often.", "It costs money and a few months; it only pays when the GPUs are there."],
+  },
 }
 
 /** What the simple board decided for the player, shown as small chips so nothing is hidden. */
-function includedChips(useCaseId, choices) {
-  const uc = byId(USE_CASES, useCaseId)
+function includedChips(useCaseId) {
   const chips = []
-  if (choices.memory) chips.push("KV memory on")
-  const library = autoLibrary(useCaseId)
-  if (library === "smart") chips.push("Vector index included")
+  const library = simpleDataKind(useCaseId) === "kv" ? autoLibrary(useCaseId) : "none"
   if (library === "basic") chips.push("File & object storage included")
-  if (uc?.orca) chips.push("ORCA PT-3 included")
+  if (library === "smart") chips.push("Vector index included")
   return chips
 }
 
@@ -1176,10 +1197,24 @@ function simpleRows(choices) {
     onPick: () => choose({ wires: tile.id }),
     scale: 3,
   }))
+  const kind = simpleDataKind(id)
+  const data = tiles.data.map((tile) => picture({
+    key: `data-${tile.id}`,
+    art: SIMPLE_DATA_ART[kind][tile.id],
+    label: tile.label,
+    hint: tile.hint,
+    on: picks.data === tile.id,
+    lines: SIMPLE_DATA_LEARN[kind][tile.id],
+    onPick: () => choose({ data: tile.id }),
+    scale: 3,
+  }))
+  const dataTitle = kind === "kv" ? "MEMORY" : kind === "index" ? "DATA" : "DATA + QPU"
+  const dataHint = kind === "kv" ? "What the GPUs remember between turns" : kind === "index" ? "Where the documents live" : "Shared data and the quantum helper"
   return [
     choiceRow("brains", "GPU", "The computers that run the AI", gpus),
     choiceRow("home", "DATA HALL", "Cooling and where the racks live", halls),
     choiceRow("wires", "CONNECTION", "How answers travel", wires),
+    choiceRow("data", dataTitle, dataHint, data),
   ]
 }
 
@@ -1345,7 +1380,7 @@ function gameScreen() {
     wireRow(choices, result),
     uc.orca ? orcaRow(choices) : null,
   ].filter(Boolean) : simpleRows(choices)
-  const chips = state.nerd ? [] : includedChips(uc.id, choices)
+  const chips = state.nerd ? [] : includedChips(uc.id)
   return el("section", { class: `screen game${state.nerd ? " nerd" : " simple"}` }, [
     el("div", { class: "story", "data-key": "story" }, [
       spriteImg(story.sprite, 4),

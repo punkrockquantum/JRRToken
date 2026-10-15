@@ -17,6 +17,7 @@ import {
   nerdChoices,
   simpleChoices,
   simpleDefaults,
+  simpleDataKind,
   simplePicks,
   simpleTiles,
   simpleToChoices,
@@ -34,7 +35,7 @@ const simpleScore = (id, combo) => evaluateBuild(id, choicesToBuild(id, simpleTo
 test("the simple view offers at most four tiles per row and Vera Rubin ×1 in every story", () => {
   assert.deepEqual(PRESET_IDS.brains, ["small", "medium", "big", "rubin"])
   assert.deepEqual(PRESET_IDS.wires, ["cheap", "peer", "fast", "private"])
-  assert.deepEqual(PRESET_IDS.homes, ["cool", "super"])
+  assert.deepEqual(PRESET_IDS.homes, ["cool", "rear", "super"])
   assert.ok(PRESET_IDS.nerdBrains.includes("huge"), "the HUGE trap stays a nerd-mode option")
   for (const { id } of USE_CASES) assert.deepEqual(brainPick(id, "rubin"), { platform: "vr", racks: 1 }, id)
 })
@@ -45,8 +46,9 @@ test("Vera Rubin ×1 fits the budget and the liquid hall but only research comes
     const best = presetBest(id)
     assert.equal(rubin.overBudget, false, id)
     assert.ok(!rubin.warnings.some((line) => /liquid cooling|overheat/i.test(line)), id)
-    assert.ok(rubin.score > 0, `${id} rubin ${rubin.score}`)
     assert.ok(rubin.score < best, `${id} rubin ${rubin.score} vs ${best}`)
+    if (id === "rag" || id === "drug") assert.ok(rubin.overPower, `${id}: a 210 kW rack does not fit the small power room`)
+    else assert.ok(rubin.score > 0, `${id} rubin ${rubin.score}`)
     if (id !== "research") assert.ok(rubin.score < best * 0.9, `${id} rubin ${rubin.score} should not optimise`)
   }
 })
@@ -57,8 +59,8 @@ test("connection tiles follow real-world order: public < peering < ServiceFabric
     const built = ["cheap", "peer", "fast"].map((wires) => score(id, { ...base, wires }))
     const [cheap, peer, fast] = built.map((result) => result.score)
     if (id === "drug") {
-      assert.ok(cheap >= 900 && cheap <= 1100, `drug internet ${cheap} should be viable`)
-      assert.ok(peer >= 1000 && peer <= 1150, `drug peering ${peer}`)
+      assert.ok(cheap >= 800 && cheap <= 1100, `drug internet ${cheap} should be viable`)
+      assert.ok(peer >= 1000 && peer <= 1300, `drug peering ${peer}`)
       assert.equal(built[0].bandwidthCapped, true)
       assert.equal(built[0].slaMet, true)
       assert.ok(built[0].pMiss < 0.05, `batch work is not SLA-killed (${built[0].pMiss})`)
@@ -68,7 +70,7 @@ test("connection tiles follow real-world order: public < peering < ServiceFabric
     assert.ok(cheap < peer, `${id} public ${cheap} vs peering ${peer}`)
     assert.ok(peer < fast, `${id} peering ${peer} vs ServiceFabric ${fast}`)
     if (id === "drug") {
-      assert.ok(fast >= 1300 && fast <= 1400, `drug ServiceFabric ${fast}`)
+      assert.ok(fast >= 1300 && fast <= 1430, `drug ServiceFabric ${fast}`)
       const networkLine = (index, wires) => explainResult(built[index], { ...base, wires }, { nerd: true }).lines.find((item) => item.id === "network").text
       const onInternet = networkLine(0, "cheap")
       assert.match(onInternet, /Public internet was fine for your batch lab data, but a private link would have screened \d+% more candidates/)
@@ -114,17 +116,23 @@ test("nerd mode docks its panel as a column instead of covering the tiles", () =
   assert.match(main, /\.filter\(Boolean\) : simpleRows\(choices\)/)
 })
 
-/* ---------- The simple board: three decisions, three real tiles each ---------- */
+/* ---------- The simple board: four decisions, three real tiles each ---------- */
 
-test("the simple board is three rows of three real tiles with a short hint on every tile", () => {
-  assert.deepEqual(SIMPLE_IDS, { brains: ["medium", "big", "rubin"], halls: ["cool", "super", "plus"], wires: ["cheap", "peer", "fast"] })
+const DATA_LABELS = {
+  kv: ["KV cache OFF", "KV cache ON", "KV cache ON + CPU host memory"],
+  index: ["No index", "Vector index", "Vector index + KV cache"],
+  lab: ["Local only", "File & object", "File & object + ORCA PT-3"],
+}
+
+test("the simple board is four rows of three real tiles with a short hint on every tile", () => {
+  assert.deepEqual(SIMPLE_IDS, { brains: ["medium", "big", "rubin"], halls: ["cool", "super", "plus"], wires: ["cheap", "peer", "fast"], data: ["off", "on", "plus"] })
   for (const { id } of USE_CASES) {
     const tiles = simpleTiles(id)
-    assert.deepEqual(Object.keys(tiles), ["brains", "halls", "wires"], id)
+    assert.deepEqual(Object.keys(tiles), ["brains", "halls", "wires", "data"], id)
     for (const row of Object.values(tiles)) {
       assert.equal(row.length, 3, id)
       for (const tile of row) {
-        assert.ok(tile.label.length > 0 && tile.label.length <= 28, `${id} label "${tile.label}"`)
+        assert.ok(tile.label.length > 0 && tile.label.length <= 30, `${id} label "${tile.label}"`)
         const words = tile.hint.split(/[\s,+]+/).filter(Boolean).length
         assert.ok(words >= 3 && words <= 6, `${id} hint "${tile.hint}" has ${words} words`)
         assert.doesNotMatch(`${tile.label} ${tile.hint}`, /TB\/s|PFLOPS|\bPUE\b|\bms\b|\$/, `${id} ${tile.label}`)
@@ -133,9 +141,14 @@ test("the simple board is three rows of three real tiles with a short hint on ev
     assert.deepEqual(tiles.wires.map((tile) => tile.label), ["Public internet", "Peering + eyeballs", "ServiceFabric"], id)
     assert.deepEqual(tiles.halls.slice(0, 2).map((tile) => tile.label), ["Air-cooled hall", "Liquid-cooled hall"], id)
     assert.equal(tiles.brains[2].label, "Vera Rubin NVL72 ×1", id)
-    assert.equal(allSimple(id).length, 27, id)
+    assert.deepEqual(tiles.data.map((tile) => tile.label), DATA_LABELS[simpleDataKind(id)], id)
+    assert.equal(allSimple(id).length, 81, id)
   }
+  assert.deepEqual(["chat", "code", "robot", "rag", "research", "drug"].map(simpleDataKind), ["kv", "kv", "kv", "index", "index", "lab"])
   assert.deepEqual(simpleTiles("chat").brains.map((tile) => tile.label), ["HGX B300 ×6", "GB200 NVL72 ×2", "Vera Rubin NVL72 ×1"])
+  assert.deepEqual(simpleTiles("code").brains.map((tile) => tile.label), ["HGX B300 ×6", "GB200 NVL72 ×3", "Vera Rubin NVL72 ×1"])
+  assert.deepEqual(simpleTiles("drug").brains.map((tile) => tile.label), ["HGX B300 ×4", "GB200 NVL72 ×2", "Vera Rubin NVL72 ×1"])
+  assert.deepEqual(simpleTiles("robot").brains.map((tile) => tile.label), ["HGX H100 ×2", "HGX H200 ×2", "Vera Rubin NVL72 ×1"])
   assert.equal(simpleTiles("chat").halls[2].label, "Liquid-cooled in 2 metros")
   assert.match(simpleTiles("chat").halls[2].hint, /London \+ Frankfurt/)
   assert.equal(simpleTiles("code").halls[2].label, "Liquid-cooled in 2 metros")
@@ -144,34 +157,39 @@ test("the simple board is three rows of three real tiles with a short hint on ev
   assert.match(simpleTiles("robot").halls[2].inWords, /^in air-cooled halls in Frankfurt and Amsterdam$/)
   assert.deepEqual([simpleToChoices("robot", { hall: "plus" }).home, simpleToChoices("robot", { hall: "plus" }).cities], ["cool", 2])
   assert.deepEqual([simpleToChoices("chat", { hall: "plus" }).home, simpleToChoices("chat", { hall: "plus" }).cities], ["super", 2])
-  for (const id of ["rag", "research", "drug"]) assert.equal(simpleTiles(id).halls[2].label, "Liquid-cooled + KV memory", id)
+  for (const id of ["rag", "research", "drug"]) {
+    assert.equal(simpleTiles(id).halls[2].label, "Rear-door hall", id)
+    assert.deepEqual([simpleToChoices(id, { hall: "plus" }).home, simpleToChoices(id, { hall: "plus" }).cities], ["rear", 1], id)
+  }
 })
 
-test("the simple board applies its hidden defaults: memory where reuse is high, storage auto, ORCA on for drug", () => {
+test("the fourth row maps onto memory, hosts, storage and ORCA, and the simple board snaps anything else onto it", () => {
   for (const { id, orca } of USE_CASES) {
     const defaults = simpleDefaults(id)
-    assert.equal(defaults.brains, "medium", id)
-    assert.equal(defaults.home, "cool", id)
-    assert.equal(defaults.wires, "peer", id)
-    assert.equal(defaults.cities, 1, id)
-    assert.equal(defaults.helper, Boolean(orca), id)
+    assert.deepEqual([defaults.brains, defaults.home, defaults.wires, defaults.cities], ["medium", "cool", "peer", 1], id)
+    assert.equal(defaults.memory, false, `${id} the opening picture has no memory tier`)
+    assert.equal(defaults.helper, false, `${id} ORCA is a choice, not a default`)
     const build = choicesToBuild(id, defaults, false)
-    assert.equal(build.orca, Boolean(orca), `${id} ORCA follows the story`)
+    assert.equal(build.orca, false, id)
     assert.equal(build.hosts, "standard", id)
     assert.equal(build.routes.control?.kind ?? "off", "off", `${id} MCP stays off on the simple board`)
-    const meddled = choicesToBuild(id, { ...defaults, library: "none", hosts: "dpu", mcp: true, helper: !orca }, false)
-    assert.equal(meddled.data, build.data, `${id} storage is automatic`)
-    assert.equal(meddled.orca, build.orca, `${id} ORCA is automatic`)
-    assert.equal(meddled.hosts, "standard", `${id} hosts are automatic`)
+    const meddled = choicesToBuild(id, { ...defaults, hosts: "dpu", mcp: true, helper: !orca }, false)
+    assert.equal(meddled.hosts, "standard", `${id} hosts snap onto the tile`)
+    assert.equal(meddled.orca, false, `${id} ORCA snaps onto the tile`)
+    assert.equal(meddled.routes.control?.kind ?? "off", "off", id)
   }
-  assert.equal(choicesToBuild("drug", simpleDefaults("drug"), false).orca, true)
-  assert.equal(choicesToBuild("rag", simpleDefaults("rag"), false).data, "vector")
-  assert.equal(choicesToBuild("chat", simpleDefaults("chat"), false).data, "local")
-  assert.deepEqual(["chat", "code", "robot"].map((id) => simpleDefaults(id).memory), [true, true, true])
-  assert.deepEqual(["rag", "research", "drug"].map((id) => simpleDefaults(id).memory), [false, false, false])
-  assert.equal(simpleToChoices("rag", { hall: "plus" }).memory, true, "the third hall tile adds KV memory for single-site stories")
-  assert.equal(simpleToChoices("chat", { hall: "plus" }).cities, 2, "the third hall tile adds a second metro for multi-site stories")
-  assert.equal(simpleToChoices("chat", { hall: "plus" }).memory, true, "chat keeps its memory default")
+  const chat = (data) => choicesToBuild("chat", simpleToChoices("chat", { data }), false)
+  assert.deepEqual([chat("off").kv, chat("on").kv, chat("plus").kv], [false, true, true])
+  assert.deepEqual([chat("off").hosts, chat("on").hosts, chat("plus").hosts], ["standard", "standard", "grace"])
+  assert.deepEqual([chat("off").data, chat("plus").data], ["local", "local"], "chat storage stays a hidden default")
+  assert.equal(choicesToBuild("code", simpleToChoices("code", { data: "on" }), false).data, "file", "code keeps file storage as its hidden default")
+  const rag = (data) => choicesToBuild("rag", simpleToChoices("rag", { data }), false)
+  assert.deepEqual([rag("off").data, rag("on").data, rag("plus").data], ["local", "vector", "vector"])
+  assert.deepEqual([rag("off").kv, rag("on").kv, rag("plus").kv], [false, false, true])
+  const drug = (data) => choicesToBuild("drug", simpleToChoices("drug", { data }), false)
+  assert.deepEqual([drug("off").data, drug("on").data, drug("plus").data], ["local", "file", "file"])
+  assert.deepEqual([drug("off").orca, drug("on").orca, drug("plus").orca], [false, false, true])
+  assert.equal(drug("plus").kv, false, "drug discovery never buys the KV tier on the simple board")
 })
 
 test("simple picks round-trip through nerd mode and back without changing the build", () => {
@@ -188,37 +206,67 @@ test("simple picks round-trip through nerd mode and back without changing the bu
     }
     const huge = simpleChoices(id, { ...expertChoices(id), brains: "huge", hosts: "dpu", mcp: true })
     assert.equal(huge.brains, "big", `${id} HUGE snaps to the big tile`)
-    assert.equal(huge.hosts, "standard", id)
+    assert.notEqual(huge.hosts, "dpu", id)
     assert.equal(huge.mcp, false, id)
   }
 })
 
-test("simple-space balance: naive scores nothing, the thoughtful build lands near 1,400 and is the only winner", () => {
-  const expected = {
-    chat: { best: ["big", "plus", "fast"], typical: [700, 950] },
-    rag: { best: ["big", "plus", "fast"], typical: [400, 650] },
-    code: { best: ["big", "plus", "fast"], typical: [350, 600] },
-    research: { best: ["big", "plus", "fast"], typical: [300, 500] },
-    drug: { best: ["big", "super", "fast"], typical: [450, 700] },
-    robot: { best: ["big", "plus", "fast"], typical: [500, 800] },
+/** The resulting hardware behind a simple combo, for comparing optima across stories. */
+function hardware(id, combo) {
+  const build = choicesToBuild(id, simpleToChoices(id, combo), false)
+  return {
+    gpu: `${build.platform}x${build.racks}`,
+    hall: `${build.hall}/${build.sites.length}`,
+    wire: combo.wires,
+    data: `${build.data}/${build.kv ? "kv" : "nokv"}/${build.hosts}/${build.orca ? "orca" : "noorca"}`,
   }
+}
+
+test("simple-space balance: story-specific optima, one winner, max-everything and naive fail, near-misses feel close", () => {
+  const expected = {
+    chat: { best: ["big", "plus", "fast", "on"], typical: [250, 450] },
+    rag: { best: ["medium", "plus", "fast", "plus"], typical: [5, 300] }, // no index: the DATA light is red
+    code: { best: ["big", "plus", "fast", "plus"], typical: [30, 400] }, // an MoE on 8-GPU air racks, one coast, no memory
+    research: { best: ["big", "super", "fast", "plus"], typical: [200, 500] },
+    drug: { best: ["medium", "plus", "fast", "plus"], typical: [300, 700] },
+    robot: { best: ["big", "plus", "fast", "on"], typical: [300, 700] },
+  }
+  const bests = {}
   for (const { id } of USE_CASES) {
     const scored = allSimple(id).map((combo) => ({ combo, score: simpleScore(id, combo).score }))
     const best = scored.reduce((a, b) => (b.score > a.score ? b : a))
-    const naiveAir = simpleScore(id, { brains: "rubin", hall: "cool", wires: "cheap" }).score
-    const naiveLiquid = simpleScore(id, { brains: "rubin", hall: "super", wires: "cheap" }).score
-    const typical = simpleScore(id, { brains: "medium", hall: "cool", wires: "peer" }).score
-    assert.deepEqual([best.combo.brains, best.combo.hall, best.combo.wires], expected[id].best, `${id} best is ${JSON.stringify(best)}`)
-    assert.ok(best.score >= 1355 && best.score <= 1410, `${id} best ${best.score}`)
-    assert.ok(naiveAir <= 5, `${id} naive air ${naiveAir}`)
-    if (id === "drug") assert.ok(naiveLiquid >= 500 && naiveLiquid <= 700, `drug internet is viable for batch lab data: ${naiveLiquid}`)
-    else assert.ok(naiveLiquid <= 40, `${id} naive liquid ${naiveLiquid}`)
+    bests[id] = best.combo
+    const naive = simpleScore(id, { brains: "rubin", hall: "cool", wires: "cheap", data: "off" }).score
+    const maxed = simpleScore(id, { brains: "rubin", hall: "plus", wires: "fast", data: "plus" }).score
+    const typical = simpleScore(id, { brains: "medium", hall: "cool", wires: "peer", data: "off" }).score
+    assert.deepEqual([best.combo.brains, best.combo.hall, best.combo.wires, best.combo.data], expected[id].best, `${id} best is ${JSON.stringify(best)}`)
+    assert.ok(best.score >= 1390 && best.score <= 1410, `${id} best ${best.score}`)
+    assert.equal(naive, 0, `${id} naive ${naive}`)
+    assert.ok(maxed <= 300, `${id} max everything ${maxed}`)
     const [lo, hi] = expected[id].typical
     assert.ok(typical >= lo && typical <= hi, `${id} typical ${typical} outside ${lo}-${hi}`)
     const near = scored.filter((item) => item.score >= best.score * 0.98)
     assert.ok(near.length >= 1 && near.length <= 2, `${id} has ${near.length} combos within 2% of the best`)
+    // Right GPU and right fourth row, wrong hall or wrong wire: close enough to feel it, never three stars.
+    const b = best.combo
+    const nearMisses = scored.filter((item) => item.combo.brains === b.brains && item.combo.data === b.data
+      && ((item.combo.hall !== b.hall) !== (item.combo.wires !== b.wires)))
+    assert.equal(nearMisses.length, 4, id)
+    for (const miss of nearMisses) assert.ok(miss.score < 1350, `${id} near-miss ${JSON.stringify(miss.combo)} ${miss.score} earns three stars`)
+    assert.ok(nearMisses.some((miss) => miss.score >= 700 && miss.score <= 1100), `${id} no near-miss lands in 700-1,100: ${nearMisses.map((miss) => miss.score).join(", ")}`)
+  }
+  // The best pictures differ by story: at least two of the four decisions change between any two stories.
+  const ids = USE_CASES.map((item) => item.id)
+  for (let i = 0; i < ids.length; i += 1) {
+    for (let j = i + 1; j < ids.length; j += 1) {
+      const a = hardware(ids[i], bests[ids[i]])
+      const b = hardware(ids[j], bests[ids[j]])
+      const differ = ["gpu", "hall", "wire", "data"].filter((key) => a[key] !== b[key])
+      assert.ok(differ.length >= 2, `${ids[i]} and ${ids[j]} share too much: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`)
+    }
   }
 })
+
 
 test("the results headline ties the outcome to a data-center decision in plain words", () => {
   const banned = /\bms\b|tok\/s|TB\/s|\bkW\b|PUE|Gbps/
@@ -236,7 +284,7 @@ test("the results headline ties the outcome to a data-center decision in plain w
       assert.equal(explainResult(result, choices).headline, line)
     }
   }
-  const chatBest = simpleToChoices("chat", { brains: "big", hall: "plus", wires: "fast" })
+  const chatBest = simpleToChoices("chat", { brains: "big", hall: "plus", wires: "fast", data: "on" })
   const chat = evaluateBuild("chat", choicesToBuild("chat", chatBest, false))
   assert.match(headline(chat, chatBest, bestChange("chat", chatBest)), /^Your liquid-cooled hall in London and Frankfurt answered \d+% of shoppers in a blink over ServiceFabric: close, cool and connected\.$/)
   const hot = simpleToChoices("chat", { brains: "big", hall: "cool", wires: "fast" })
@@ -247,10 +295,10 @@ test("the results headline ties the outcome to a data-center decision in plain w
   assert.match(headline(evaluateBuild("chat", choicesToBuild("chat", far, false)), far), /One metro in London kept \d+% of shoppers too far away/)
   const late = simpleToChoices("robot", { brains: "rubin", hall: "super", wires: "fast" })
   assert.match(headline(evaluateBuild("robot", choicesToBuild("robot", late, false)), late), /Vera Rubin NVL72 arrived in week \d+, \d+ weeks after the deadline/)
-  const lab = simpleToChoices("drug", { brains: "big", hall: "super", wires: "fast" })
-  assert.match(headline(evaluateBuild("drug", choicesToBuild("drug", lab, false)), lab), /screened 100% of the lab's candidates over ServiceFabric, with ORCA PT-3/)
+  const lab = simpleToChoices("drug", { brains: "medium", hall: "plus", wires: "fast", data: "plus" })
+  assert.match(headline(evaluateBuild("drug", choicesToBuild("drug", lab, false)), lab), /screened 9\d% of the lab's candidates over ServiceFabric, with ORCA PT-3/)
   const stuck = simpleToChoices("robot", { brains: "rubin", hall: "plus", wires: "cheap" })
-  assert.match(bestChange("robot", stuck).text, /^No single change rescues this\. HGX H200 ×2 in air-cooled halls in Frankfurt and Amsterdam on ServiceFabric would score about 1,[34]\d\d\.$/)
+  assert.match(bestChange("robot", stuck).text, /^No single change rescues this\. HGX H200 ×2 in air-cooled halls in Frankfurt and Amsterdam on ServiceFabric, with the KV cache on would score about 1,[34]\d\d\.$/)
   assert.equal(DR_FOOTER, "Built in a Digital Realty data center: power, cooling and connections ready.")
 })
 
@@ -262,13 +310,14 @@ test("the simple screens are wired: three featured stories plus MORE, simple row
   assert.match(main, /choiceRow\("brains", "GPU"/)
   assert.match(main, /choiceRow\("home", "DATA HALL"/)
   assert.match(main, /choiceRow\("wires", "CONNECTION"/)
+  assert.match(main, /choiceRow\("data", dataTitle, dataHint, data\)/)
   assert.match(main, /function simpleFeel\(result\)/)
   const simpleFeel = main.slice(main.indexOf("function simpleFeel("), main.indexOf("function gauge("))
   assert.match(simpleFeel, /gauge\("MONEY"/)
   assert.match(simpleFeel, /gauge\("TIME"/)
   assert.doesNotMatch(simpleFeel, /gauge\("POWER"|gauge\("SPEED"|gauge\("CROWD"|gauge\("PRICE"|peopleBadge/)
   assert.match(main, /state\.nerd \? feel\(result\) : simpleFeel\(result\)/)
-  assert.match(main, /"ORCA PT-3 included"/)
+  assert.doesNotMatch(main, /"ORCA PT-3 included"/, "ORCA is a tile now, not a hidden default")
   assert.match(main, /"data-key": "headline", text: explained\.headline/)
   assert.match(main, /"data-key": "dr-footer"/)
   assert.match(main, /text: DR_FOOTER/)

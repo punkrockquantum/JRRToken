@@ -254,7 +254,8 @@ export const ORCA = {
   tag: "QUANTUM ACCELERATOR",
   kw: 6,
   capex: 5000000,
-  leadWeeks: 20,
+  // Two cabinets installed beside the GPUs: a shorter lead than a new GPU rack (game value).
+  leadWeeks: 14,
   space: 2,
   qumodes: 128,
   small: 1.3,
@@ -384,7 +385,7 @@ export const USE_CASES = [
       { id: "inter", name: "INTER-SITE", hint: "only with 2–3 metros", role: "inter", dest: "metro", trips: 0.4, bw: 0.35, jitter: 0.5, sensitive: true, critical: true, when: "multi" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "internet", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.38394,
+    parCost: 0.38414437209943497,
     worth: 2,
     bytesPerToken: 40,
     toolCalls: 0,
@@ -417,7 +418,7 @@ export const USE_CASES = [
       { id: "store", name: "SITE → DOCUMENTS", hint: "retrieval round trips", role: "data", dest: "cloud", trips: 2, bw: 1, jitter: 0.8, sensitive: true, critical: true, when: "always" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "cloud", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 1.2167,
+    parCost: 1.431458896192811,
     worth: 8,
     bytesPerToken: 500,
     toolCalls: 0,
@@ -442,7 +443,7 @@ export const USE_CASES = [
     kvMBPerTok: 0.12,
     tps: 60,
     ttft: 3,
-    demand: 250000,
+    demand: 420000,
     netDest: { user: "internet", retrieval: "cloud", tool: "partner" },
     netWhy: "Developers arrive from the internet. Tool calls and repos are a separate, chatty path.",
     legs: [
@@ -451,7 +452,7 @@ export const USE_CASES = [
       { id: "inter", name: "INTER-SITE", hint: "only with 2–3 metros", role: "inter", dest: "metro", trips: 1, bw: 0.3, jitter: 0.5, sensitive: true, critical: true, when: "multi" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "partner", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.6168795154317753,
+    parCost: 0.50328740196819,
     worth: 10,
     bytesPerToken: 180,
     toolCalls: 8,
@@ -484,7 +485,7 @@ export const USE_CASES = [
       { id: "data", name: "SITE → DATA / CLOUD", hint: "retrieval · tool trips", role: "data", dest: "cloud", trips: 10, bw: 0.7, jitter: 0.7, sensitive: true, critical: true, when: "always" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "internet", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.2023,
+    parCost: 0.20227373483791453,
     worth: 6,
     bytesPerToken: 160,
     toolCalls: 10,
@@ -509,7 +510,7 @@ export const USE_CASES = [
     kvMBPerTok: 0.05,
     tps: 40,
     ttft: 20,
-    demand: 2000000,
+    demand: 1300000,
     netDest: { user: "partner", retrieval: "partner" },
     netWhy: "The lab ships bulk data to the site. ORCA sits in the same hall as the GPUs.",
     legs: [
@@ -519,7 +520,7 @@ export const USE_CASES = [
       { id: "orca", name: "GPU ↔ ORCA", hint: "same-hall hand-off", role: "orca", dest: "partner", trips: 1, bw: 0.15, jitter: 0.2, sensitive: false, critical: false, when: "orca" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "partner", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.041940085592011414,
+    parCost: 0.047474797906270426,
     worth: 1.15,
     bytesPerToken: 220,
     toolCalls: 0,
@@ -553,7 +554,7 @@ export const USE_CASES = [
       { id: "inter", name: "INTER-SITE", hint: "only with 2 metros", role: "inter", dest: "metro", trips: 0.4, bw: 0.3, jitter: 1, sensitive: true, critical: true, when: "multi" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "partner", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.13557,
+    parCost: 0.1355531280199725,
     worth: 2,
     bytesPerToken: 48,
     toolCalls: 0,
@@ -575,10 +576,13 @@ export const USE_CASES = [
  */
 export const SCENARIOS = {
   chat: { where: "Shoppers in London and Frankfurt", budget: 9_000_000, powerMW: 0.6, deadlineWeeks: 16, pricePerM: 0.55 },
-  rag: { where: "Staff at a London head office", budget: 8_500_000, powerMW: 0.5, deadlineWeeks: 20, pricePerM: 1.9 },
-  code: { where: "Developers on the US east and west coasts", budget: 9_000_000, powerMW: 0.6, deadlineWeeks: 26, pricePerM: 1.1 },
+  // A head-office suite with a small power room: the right racks fit it, the biggest do not.
+  rag: { where: "Staff at a London head office", budget: 8_500_000, powerMW: 0.27, deadlineWeeks: 20, pricePerM: 1.9 },
+  // Agents with 64k contexts on two coasts: the deepest pockets and the most demand on the board.
+  code: { where: "Developers on the US east and west coasts", budget: 12_500_000, powerMW: 0.6, deadlineWeeks: 26, pricePerM: 1.1 },
   research: { where: "Analysts in London and Paris", budget: 9_000_000, powerMW: 0.8, deadlineWeeks: 36, pricePerM: 0.4 },
-  drug: { where: "A lab in Cambridge, UK", budget: 8_000_000, powerMW: 0.7, deadlineWeeks: 30, pricePerM: 0.1 },
+  // A lab's share of a hall: a few air-cooled racks of power, so cooling efficiency decides what fits.
+  drug: { where: "A lab in Cambridge, UK", budget: 8_000_000, powerMW: 0.18, deadlineWeeks: 30, pricePerM: 0.1 },
   robot: { where: "Factory floors near Frankfurt and Amsterdam", budget: 9_000_000, powerMW: 0.5, deadlineWeeks: 16, pricePerM: 0.8 },
 }
 
@@ -600,12 +604,12 @@ export const HORIZON_WEEKS = 52
  */
 export const FTE_HOURS = 1800
 export const HUMAN_WORK = {
-  chat: { tokensPerTask: 300, humanMinutes: 1.5, share: 0.35, loadedCost: 55_000, fteCap: 25_000, savingsPar: 678521449 },
-  rag: { tokensPerTask: 400, humanMinutes: 4, share: 0.4, loadedCost: 90_000, fteCap: 10_000, savingsPar: 530452420.0149035 },
-  code: { tokensPerTask: 800, humanMinutes: 25, share: 0.5, loadedCost: 160_000, fteCap: 8_000, savingsPar: 822875190.6740854 },
-  research: { tokensPerTask: 4000, humanMinutes: 90, share: 0.5, loadedCost: 130_000, fteCap: 3_000, savingsPar: 257211644.2215515 },
-  drug: { tokensPerTask: 500, humanMinutes: 3, share: 0.6, loadedCost: 150_000, fteCap: 2_000, savingsPar: 287768261.6 },
-  robot: { tokensPerTask: 64, humanMinutes: 2, share: 0.3, loadedCost: 75_000, fteCap: 1_500, savingsPar: 85895704 },
+  chat: { tokensPerTask: 300, humanMinutes: 1.5, share: 0.35, loadedCost: 55_000, fteCap: 25_000, savingsPar: 678517249.1702592 },
+  rag: { tokensPerTask: 400, humanMinutes: 4, share: 0.4, loadedCost: 90_000, fteCap: 10_000, savingsPar: 523494447.6593566 },
+  code: { tokensPerTask: 800, humanMinutes: 25, share: 0.5, loadedCost: 160_000, fteCap: 8_000, savingsPar: 844267506.5266552 },
+  research: { tokensPerTask: 4000, humanMinutes: 90, share: 0.5, loadedCost: 130_000, fteCap: 3_000, savingsPar: 257058937.0215515 },
+  drug: { tokensPerTask: 500, humanMinutes: 3, share: 0.6, loadedCost: 150_000, fteCap: 2_000, savingsPar: 289723463.36 },
+  robot: { tokensPerTask: 64, humanMinutes: 2, share: 0.3, loadedCost: 75_000, fteCap: 1_500, savingsPar: 88566089.54648635 },
 }
 
 export const SITES = [
