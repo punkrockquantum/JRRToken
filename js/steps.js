@@ -208,10 +208,17 @@ export function qpuNotNeeded(useCaseId) {
   return QPU_NOT_NEEDED[useCaseId] || "This job has no sampling problem for a QPU to solve."
 }
 
+const km = (value) => `${Math.round(value).toLocaleString("en-GB")} km`
+
+/** Two different figures on every metro tile: the trip to the users and the trip to the model and data. */
 function metroHint(offer) {
-  const users = Math.round(offer.usersKm)
-  const data = Math.round(offer.dataKm)
-  return `${users.toLocaleString("en-GB")} km to users · ${data.toLocaleString("en-GB")} km to data`
+  return `Users: ${km(offer.usersKm)} · Data: ${km(offer.dataKm)}`
+}
+
+/** Nerd line: the farthest user region, then the metro's power, price and fit-out terms. */
+function metroNerd(offer) {
+  const farthest = offer.worstCity ? `Farthest users: ${offer.worstCity} ${km(offer.worstKm)}. ` : ""
+  return `${farthest}Power ×${offer.powerMult}, price ×${offer.priceMult}, liquid fit-out +${offer.liquidWeeks} wk (game values).`
 }
 
 function metroLines(useCaseId, offer) {
@@ -244,7 +251,7 @@ export function stepTiles(useCaseId, stepId, nerd = false) {
       tag: offer.note.toUpperCase(),
       art: "user",
       lines: metroLines(useCaseId, offer),
-      nerd: `Power ×${offer.powerMult}, price ×${offer.priceMult}, liquid fit-out +${offer.liquidWeeks} wk (game values).`,
+      nerd: metroNerd(offer),
       why: metroWhy(useCaseId, offer),
       offer,
     }))

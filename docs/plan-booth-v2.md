@@ -24,13 +24,20 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
 - [x] Learn toasts and tile "why" pops (`flashWhy`, hold-to-learn)
 - [x] Tests: `tests/eco.test.js`, `tests/simple.test.js`, `tests/game.test.js`
 
-## P3 — Location distances and latency physics `PARTLY DONE`
+## P3 — Location distances and latency physics `DONE`
 
 - [x] Haversine `kmBetween` (`js/model.js`)
-- [x] Digital Realty metro lat/lon (`js/data.js` SITES) and data-home lat/lon (DATA_HOMES)
-- [x] Users and data distances per metro tile: "N km to users · M km to data" (`metroOffers`, `stepTiles`; `tests/sites.test.js`)
+- [x] Digital Realty metro lat/lon (`js/data.js` SITES), user regions (USER_BASES) and data-home lat/lon (DATA_HOMES)
+- [x] Users and data distances per metro tile: "Users: N km · Data: M km" (`metroOffers`, `metroHint`; `tests/sites.test.js`)
+      — users km is the share-weighted average over the story's regions, data km is to the model / data home,
+      and the two differ for every story × metro (asserted). Nerd line adds "Farthest users: city N km".
+      The drug story's data home is the lab's cloud tenancy in Dublin so Cambridge users ≠ data.
 - [x] Model transfer hours + egress $/GB folded into go-live (`modelTransfer`, EGRESS_PER_GB, lead parts)
-- [ ] Tiny map on the location step (users, data home, candidate metros)
+- [x] Tiny map on the location step (`js/map.js`, `tinyMap` in `js/main.js`): users, data home, candidate metros,
+      links with km from the chosen metros; frame fits users + metros, a far data home is pinned to the edge
+      (◀ Ashburn); labels placed below / above / right / left without collisions (`tests/map.test.js`)
+- [x] `storyLegs` / `dataTrips` in `js/latency.js`: request leg uses the USERS distance, retrieval / tool
+      trips use the DATA distance, `slaExempt` bulk legs reported as `bulkBps`
 - [x] `js/latency.js` physics module: 4.9 µs/km, inflation 1.2 fibre / 2.0 internet, per-option
       overheads (OPTIONS), `ttftS` = users RTT + trips × data RTT + store + queue + prefill,
       `firstToken` over legs with `slaExempt` skips, jitter pacing (`pacedStepS`, `streamFeel`),

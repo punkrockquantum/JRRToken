@@ -246,13 +246,21 @@ export function siteReach(useCaseId, siteIds) {
 }
 
 /** Distance from one metro to a story's users (share-weighted) and to its data home. */
+/**
+ * Great-circle distances from one metro: the share-weighted average to the story's user
+ * regions, the farthest user region (what the slowest user feels), and the model and data home.
+ */
 export function metroDistances(useCaseId, siteId) {
   const site = byId(SITES, siteId)
-  if (!site) return { usersKm: 0, dataKm: 0 }
+  if (!site) return { usersKm: 0, dataKm: 0, worstKm: 0, worstCity: "" }
   const places = USER_BASES[useCaseId]?.places || []
   const usersKm = places.reduce((sum, place) => sum + place.share * kmBetween(place, site), 0)
+  const worst = places.reduce((far, place) => {
+    const km = kmBetween(place, site)
+    return !far || km > far.km ? { km, city: place.city } : far
+  }, null) || { km: 0, city: "" }
   const home = DATA_HOMES[useCaseId]
-  return { usersKm, dataKm: home ? kmBetween(site, home) : 0 }
+  return { usersKm, dataKm: home ? kmBetween(site, home) : 0, worstKm: worst.km, worstCity: worst.city }
 }
 
 /** The metros Digital Realty offers this story, with what is available in each. */

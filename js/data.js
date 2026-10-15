@@ -604,7 +604,9 @@ export const DATA_HOMES = {
   rag: { city: "Frankfurt", lat: 50.11, lon: 8.68, kind: "cloud", label: "the company's cloud tenancy in Frankfurt", what: "70 GB of weights and 30 TB of documents", corpusTB: 30 },
   code: { city: "Ashburn", lat: 39.04, lon: -77.49, kind: "cloud", label: "a cloud region in Northern Virginia (Ashburn)", what: "400 GB of weights and 80 TB of repos", corpusTB: 80 },
   research: { city: "Paris", lat: 48.86, lon: 2.35, kind: "cloud", label: "a sovereign cloud region in Paris", what: "700 GB of weights and 400 TB of papers", corpusTB: 400 },
-  drug: { city: "Cambridge", lat: 52.2, lon: 0.12, kind: "own", label: "the lab's own server room in Cambridge", what: "15 GB of models and 250 TB of candidate libraries", corpusTB: 250 },
+  // The scientists sit in Cambridge; their candidate libraries live in a public cloud region in Dublin,
+  // so every metro is a different distance from the users and from the data.
+  drug: { city: "Dublin", lat: 53.35, lon: -6.26, kind: "cloud", label: "the lab's cloud tenancy in Dublin", what: "15 GB of models and 250 TB of candidate libraries", corpusTB: 250 },
   robot: { city: "Frankfurt", lat: 50.11, lon: 8.68, kind: "own", label: "the carmaker's training cluster in Frankfurt", what: "8 GB of weights and 12 TB of driving logs", corpusTB: 12 },
 }
 

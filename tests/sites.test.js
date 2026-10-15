@@ -4,8 +4,8 @@ import { dirname, join } from "node:path"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
 import { searchBuilds } from "../js/balance.js"
-import { DATA_HOMES, TRAIN_BONUS_CAP, USE_CASES } from "../js/data.js"
-import { defaultSitePlans, evaluateBuild, metroOffers } from "../js/model.js"
+import { DATA_HOMES, TRAIN_BONUS_CAP, USER_BASES, USE_CASES } from "../js/data.js"
+import { defaultSitePlans, evaluateBuild, kmBetween, metroDistances, metroOffers } from "../js/model.js"
 import { choicesToBuild, expertChoices } from "../js/presets.js"
 import { explainResult } from "../js/explain.js"
 import { stepTiles } from "../js/steps.js"
@@ -26,18 +26,32 @@ test("closer to people is the site lesson: every metro tile says how far it is f
   for (const { id } of USE_CASES) {
     const offers = metroOffers(id)
     assert.equal(offers.length, 4, `${id} short list`)
+    const km = (value) => `${Math.round(value).toLocaleString("en-GB")} km`
     for (const tile of stepTiles(id, "location")) {
       const offer = offers.find((item) => item.id === tile.id)
       assert.ok(offer, `${id} ${tile.id} is on the short list`)
-      assert.equal(tile.hint, `${Math.round(offer.usersKm).toLocaleString("en-GB")} km to users · ${Math.round(offer.dataKm).toLocaleString("en-GB")} km to data`)
+      /* Two different figures on every tile, both from the haversine table. */
+      const users = metroDistances(id, tile.id)
+      assert.notEqual(Math.round(users.usersKm), Math.round(users.dataKm), `${id} ${tile.id}: users ${Math.round(users.usersKm)} km and data ${Math.round(users.dataKm)} km must differ`)
+      assert.equal(tile.hint, `Users: ${km(offer.usersKm)} · Data: ${km(offer.dataKm)}`)
+      assert.match(tile.hint, /^Users: [\d,]+ km · Data: [\d,]+ km$/)
       assert.match(tile.lines[1], /^About [\d,]+ km from the users and [\d,]+ km from /)
+      assert.ok(tile.nerd.startsWith(`Farthest users: ${users.worstCity} ${km(users.worstKm)}. `), `${id} ${tile.id} nerd line names the farthest region: ${tile.nerd}`)
+      assert.ok(users.worstKm >= users.usersKm - 1e-9)
+      /* The weighted average is the share-weighted haversine, and the data figure is the plain haversine. */
+      const expected = USER_BASES[id].places.reduce((sum, place) => sum + place.share * kmBetween(place, offer.site), 0)
+      assert.ok(Math.abs(expected - offer.usersKm) < 1e-9, `${id} ${tile.id} users km`)
+      assert.ok(Math.abs(kmBetween(offer.site, DATA_HOMES[id]) - offer.dataKm) < 1e-9, `${id} ${tile.id} data km`)
     }
     const home = DATA_HOMES[id]
     const nearest = offers.reduce((a, b) => (b.dataKm < a.dataKm ? b : a))
-    /* Chat's weights live in a US cloud region: no European metro is beside them, so the copy is part of the story. */
+    /* Chat and code keep their weights in a US cloud region; the European stories have a metro beside the data. */
     if (id === "chat") assert.ok(nearest.dataKm > 5000, `chat: every metro is an ocean away from ${home.city} (${Math.round(nearest.dataKm)} km)`)
+    else if (id === "drug") assert.ok(nearest.dataKm > 300 && nearest.dataKm < 500, `drug: the libraries sit in a Dublin cloud region, about 460 km from London (${Math.round(nearest.dataKm)} km)`)
     else assert.ok(nearest.dataKm <= 80, `${id}: one metro on the list sits beside ${home.city} (${Math.round(nearest.dataKm)} km)`)
   }
+  const drug = Object.fromEntries(metroOffers("drug").map((offer) => [offer.id, offer]))
+  assert.ok(Math.abs(drug.lon.usersKm - 79) < 10 && Math.abs(drug.lon.dataKm - 464) < 20, `London is 79 km from the Cambridge lab and 464 km from its Dublin data (${Math.round(drug.lon.usersKm)}, ${Math.round(drug.lon.dataKm)})`)
   const chat = Object.fromEntries(metroOffers("chat").map((offer) => [offer.id, offer]))
   assert.ok(chat.lon.usersKm < chat.par.usersKm && chat.fra.usersKm < chat.par.usersKm, "London and Frankfurt are nearer the shoppers than Paris")
   assert.ok(Math.abs(chat.lon.dataKm - 5917) < 60, `London is about 5,900 km from the weights in Ashburn (${Math.round(chat.lon.dataKm)})`)

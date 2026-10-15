@@ -1,13 +1,14 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { DATA_HOMES, EGRESS_PER_GB, SITES } from "../js/data.js"
+import { DATA_HOMES, EGRESS_PER_GB, SITES, USE_CASES } from "../js/data.js"
 import {
   FIBRE_S_PER_KM,
   INFLATION,
   LATE_GOODPUT,
   OPTIONS,
   OPTION_IDS,
+  dataTrips,
   egressUsd,
   fibreRttS,
   firstToken,
@@ -21,13 +22,14 @@ import {
   normalCdf,
   pMiss,
   pacedStepS,
+  storyLegs,
   streamFeel,
   tokenImpact,
   transferHours,
   ttftS,
   usableBps,
 } from "../js/latency.js"
-import { kmBetween } from "../js/model.js"
+import { kmBetween, metroDistances, metroOffers } from "../js/model.js"
 
 const site = (id) => SITES.find((row) => row.id === id)
 const near = (actual, expected, tolerance, message) => assert.ok(Math.abs(actual - expected) <= tolerance, `${message}: ${actual} vs ${expected} ±${tolerance}`)
@@ -61,6 +63,46 @@ test("sanity: London to Ashburn is about 5,900 km, 69 ms on fibre and at least 1
   const internet = legRtt(km, "internet")
   assert.ok(internet.jitterS > 0.04 && internet.loss > 0, "the internet path is jittery and lossy")
   assert.ok(internet.pathKm > fibreRttS(km) / (2 * FIBRE_S_PER_KM), "the internet path is longer than the fibre route")
+})
+
+test("more known pairs: Frankfurt–Ashburn ≈ 6,500 km, Amsterdam–London ≈ 360 km, Dallas–Ashburn ≈ 1,900 km", () => {
+  near(kmBetween(site("fra"), site("iad")), 6500, 150, "FRA-IAD km")
+  near(kmBetween(site("ams"), site("lon")), 360, 15, "AMS-LON km")
+  near(kmBetween(site("dfw"), site("iad")), 1900, 100, "DFW-IAD km")
+  near(kmBetween(site("lon"), site("fra")), 640, 15, "LON-FRA km")
+  near(kmBetween(site("lon"), DATA_HOMES.chat), 5900, 150, "LON-Ashburn km")
+  assert.equal(kmBetween(site("lon"), site("lon")), 0)
+  near(kmBetween(site("ams"), site("lon")), kmBetween(site("lon"), site("ams")), 1e-9, "symmetry")
+  /* One-way ms = km × inflation × 0.0049. */
+  near(legRtt(1000, "fiber").rttS * 1000, 2 * 1000 * 1.2 * 0.0049, 1e-9, "1,000 km of lit fibre")
+  near(legRtt(1000, "internet").rttS * 1000, 2 * 1000 * 2.0 * 0.0049 + 25, 1e-9, "1,000 km of public internet")
+})
+
+test("every story's legs use the USERS distance for the request and the DATA distance for the trips", () => {
+  for (const useCase of USE_CASES) {
+    for (const offer of metroOffers(useCase.id)) {
+      const distance = metroDistances(useCase.id, offer.id)
+      const legs = storyLegs(useCase.id, offer.id, "fabric")
+      assert.equal(legs[0].id, "users")
+      near(legs[0].km, distance.usersKm, 1e-9, `${useCase.id} ${offer.id} users leg`)
+      assert.equal(legs[0].trips, 1)
+      const data = legs.find((leg) => leg.id === "data")
+      const trips = dataTrips(useCase)
+      if (trips > 0) {
+        near(data.km, distance.dataKm, 1e-9, `${useCase.id} ${offer.id} data leg`)
+        assert.equal(data.trips, trips)
+      } else assert.equal(data, undefined, `${useCase.id} has no data trips`)
+      const worst = storyLegs(useCase.id, offer.id, "fabric", { worst: true })
+      near(worst[0].km, distance.worstKm, 1e-9, "worst-case users leg")
+      assert.ok(distance.worstKm >= distance.usersKm - 1e-9, "the farthest region is at least the weighted average")
+      const impact = tokenImpact({ legs, targetS: useCase.ttft, prefillS: 0.05 })
+      near(impact.firstTokenS, 0.05 + legs.reduce((sum, leg) => sum + (leg.slaExempt ? 0 : leg.trips * legRtt(leg.km, "fabric").rttS), 0), 1e-9, `${useCase.id} ${offer.id} first token`)
+    }
+  }
+  assert.ok(dataTrips(USE_CASES.find((item) => item.id === "code")) >= 8, "the coding agent makes eight tool trips")
+  assert.equal(dataTrips(USE_CASES.find((item) => item.id === "chat")), 0, "chat has no retrieval trips")
+  const drug = storyLegs("drug", "lon", "internet")
+  assert.ok(drug.some((leg) => leg.slaExempt && leg.id === "lab"), "the lab feed rides along as an exempt leg")
 })
 
 test("a leg carries its option's overheads; a cross connect is 100 µs whatever the metro", () => {

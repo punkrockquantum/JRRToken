@@ -870,7 +870,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .step-head .fine { margin: 4px 0 0; font-size: var(--fs-s); color: var(--pale); line-height: 1.4; }
 
 /* The tiny map on the LOCATION step: users, the data home, the metros on offer, and the chosen trips. */
-.map-wrap { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); gap: 10px; align-items: center; margin: 0; padding: 6px 8px; background: var(--ink); border: 2px solid var(--panel-2); }
+.map-wrap { display: grid; grid-template-columns: minmax(240px, 400px) minmax(0, 1fr); gap: 10px; align-items: center; margin: 0; padding: 6px 8px; background: var(--ink); border: 2px solid var(--panel-2); }
 .tiny-map { display: block; width: 100%; height: auto; aspect-ratio: 240 / 150; background: var(--night); }
 .tiny-map text { font-family: inherit; font-size: 8px; fill: var(--muted); text-anchor: middle; pointer-events: none; }
 .tiny-map .map-link { stroke-width: 1.5; stroke-dasharray: 3 2; opacity: 0.8; }

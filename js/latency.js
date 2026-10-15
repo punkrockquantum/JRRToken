@@ -7,8 +7,8 @@
  * behind a tile before the score moves.
  */
 
-import { EGRESS_PER_GB } from "./data.js"
-import { kmBetween } from "./model.js"
+import { EGRESS_PER_GB, USE_CASES } from "./data.js"
+import { kmBetween, metroDistances } from "./model.js"
 
 /** Light in glass travels about 204,000 km/s: 4.9 µs per km, one way. */
 export const FIBRE_S_PER_KM = 4.9e-6
@@ -169,12 +169,36 @@ export function goLiveDays(leadDays, tb, gbps) {
   return Math.max(0, leadDays) + (Number.isFinite(hours) ? Math.ceil(hours / 24) : Infinity)
 }
 
+/** How many times the model goes back to the data per answer: retrieval and tool legs, not the user's own trip. */
+export function dataTrips(useCase) {
+  return (useCase?.legs || [])
+    .filter((leg) => (leg.role === "data" || leg.role === "tools") && leg.when !== "optional")
+    .reduce((sum, leg) => sum + (Number(leg.trips) || 0), 0)
+}
+
+/**
+ * The legs one metro gives one story on one option: the users' request leg over the USERS
+ * distance, the retrieval or tool trips over the DATA distance, and any bulk lab feed as an
+ * exempt leg. `worst` swaps the share-weighted users distance for the farthest region.
+ */
+export function storyLegs(useCaseId, metroId, optionId, { worst = false } = {}) {
+  const useCase = USE_CASES.find((item) => item.id === useCaseId)
+  const distance = metroDistances(useCaseId, metroId)
+  const legs = [{ id: "users", km: worst ? distance.worstKm : distance.usersKm, optionId, trips: 1 }]
+  const trips = dataTrips(useCase)
+  if (trips > 0) legs.push({ id: "data", km: distance.dataKm, optionId, trips })
+  for (const leg of useCase?.legs || []) {
+    if (leg.slaExempt) legs.push({ id: leg.id, km: distance.dataKm, optionId, trips: Number(leg.trips) || 0, slaExempt: true })
+  }
+  return legs
+}
+
 /**
  * Everything one option does to one story, in one object: first token versus target, stream
  * feel, GPU idle share, P(miss) and the usable rate. `legs` are {km, optionId, trips, slaExempt}.
  */
 export function tokenImpact({ legs = [], targetS = 1, stepS = 0.02, streams = 1, storeS = 0, queueS = 0, prefillS = 0 } = {}) {
-  const resolved = legs.map((leg) => ({ ...legRtt(leg.km, leg.optionId), trips: leg.trips, slaExempt: Boolean(leg.slaExempt) }))
+  const resolved = legs.map((leg) => ({ ...legRtt(leg.km, leg.optionId), id: leg.id, trips: leg.trips, slaExempt: Boolean(leg.slaExempt) }))
   const first = firstToken(resolved, { storeS, queueS, prefillS })
   const miss = pMiss(first.meanS, first.jitterS, targetS)
   const users = resolved[0] || legRtt(0, "fabric")

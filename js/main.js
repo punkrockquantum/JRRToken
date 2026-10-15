@@ -918,23 +918,22 @@ function tinyMap(id, choices) {
   const svg = svgEl("svg", { class: "tiny-map", viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": `Map: ${mapCaption(id, picked)}` }, [
     ...links.map((link) => svgEl("line", { class: `map-link ${link.kind}`, x1: link.from.x, y1: link.from.y, x2: link.to.x, y2: link.to.y })),
     ...points.map((p) => {
-      const above = p.y < height / 2
-      const labelY = above ? p.y - 9 : p.y + 15
+      const label = p.labelText ? svgEl("text", { x: p.labelX, y: p.labelY, text: p.labelText }) : null
       if (p.kind === "users") {
         return svgEl("g", { class: "map-users" }, [
           svgEl("circle", { cx: p.x, cy: p.y, r: 4 + Math.round(5 * (p.share || 0)) }),
-          svgEl("text", { x: p.x, y: labelY, text: p.label }),
+          label,
         ])
       }
       if (p.kind === "data") {
         return svgEl("g", { class: "map-data" }, [
           svgEl("rect", { x: p.x - 5, y: p.y - 5, width: 10, height: 10, transform: `rotate(45 ${p.x} ${p.y})` }),
-          svgEl("text", { x: p.x, y: labelY, text: p.label }),
+          label,
         ])
       }
       return svgEl("g", { class: `map-metro${p.on ? " on" : ""}`, "data-metro": p.id }, [
         svgEl("circle", { cx: p.x, cy: p.y, r: p.on ? 5 : 3.5 }),
-        svgEl("text", { x: p.x, y: labelY, text: p.label }),
+        label,
       ])
     }),
   ])

@@ -203,7 +203,7 @@ test("every step offers three tiles on the simple board, a short list of metros,
     const location = stepTiles(id, "location")
     assert.equal(location.length, 4, `${id} short list`)
     for (const tile of location) {
-      assert.match(tile.hint, /^[\d,]+ km to users · [\d,]+ km to data$/, `${id} ${tile.label} ${tile.hint}`)
+      assert.match(tile.hint, /^Users: [\d,]+ km · Data: [\d,]+ km$/, `${id} ${tile.label} ${tile.hint}`)
       assert.ok(tile.lines.length === 3, `${id} ${tile.label} lines`)
       assert.match(tile.why, /^[A-Z][^.]+\./, `${id} ${tile.label} why`)
     }
