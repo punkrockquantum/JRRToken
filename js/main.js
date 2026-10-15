@@ -1,6 +1,7 @@
 import { DATA_HOMES, PLATFORMS, SCENARIOS, SITES, USE_CASES, byId } from "./data.js"
 import { designCard, designFor, designLines, designsFor, referenceDesign } from "./refarch.js"
 import { BUILD } from "./build-info.js"
+import { drHelp } from "./drhelp.js"
 import { DR_FOOTER, explainResult, thinkLines } from "./explain.js"
 import { ecoHint, ecoQuestion, ecoSummary, ecosystem } from "./eco.js"
 import { detailLine, wireImpact } from "./impact.js"
@@ -1382,6 +1383,7 @@ function showResult() {
   const story = STORIES[uc.id]?.line || ""
   const blocked = blockedReason(result)
   const explained = explainResult(result, state.plan.choices, { nerd: state.nerd })
+  const helped = drHelp(result, state.plan.choices, { nerd: state.nerd })
   const improvable = canImprove(rounds)
   const hint = roundHint(result)
   const banner = newHigh
@@ -1433,6 +1435,11 @@ function showResult() {
       el("h3", { text: explained.title }),
       el("ul", {}, explained.lines.map((line) => el("li", { "data-line": line.id, text: line.show }))),
     ]) : null,
+    /* Both modes: how Digital Realty would have helped this build; nerd mode adds the numbers. */
+    el("section", { class: "explain dr-help", "data-key": "dr-help", "aria-label": helped.title }, [
+      el("h3", { text: helped.title }),
+      el("ul", {}, helped.lines.map((line) => el("li", { "data-line": line.id, text: line.show }))),
+    ]),
     people,
     state.nerd && !improvable ? el("div", { class: "coach" }, [spriteImg("prof", 3), el("p", { text: plainCoach(result) })]) : null,
     el("p", { class: "beat-line", "data-key": "beat-line", text: beatLine(players, rank) }),

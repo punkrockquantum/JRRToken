@@ -379,12 +379,24 @@ try {
     if (!(Number(String(score).replace(/,/g, "")) >= 1350)) throw new Error(`A thoughtful shopper build should score near 1,400 after GO, saw ${score}`)
     const resultText = await text("#result")
     if (/ada@example\.com/i.test(resultText)) throw new Error("Results showed the player email")
-    for (const part of ["ROUND 1 SCORE", "Round 1:", "WHAT YOU GOT RIGHT", "IMPROVE IT", "NEXT PLAYER", "DIGITAL REALTY"]) if (!resultText.includes(part)) throw new Error(`Round-one results lack ${part}`)
+    for (const part of ["ROUND 1 SCORE", "Round 1:", "WHAT YOU GOT RIGHT", "IMPROVE IT", "NEXT PLAYER", "DIGITAL REALTY", "HOW DIGITAL REALTY WOULD HAVE HELPED"]) if (!resultText.includes(part)) throw new Error(`Round-one results lack ${part}`)
     if (await has('[data-key="explain"]')) throw new Error("Simple results should not show the full explanation")
+    /* HOW DIGITAL REALTY WOULD HAVE HELPED sits in both modes: four to six lines naming the chosen metros. */
+    const drLines = async (mode) => {
+      const lines = await evaluate(`[...document.querySelectorAll('[data-key="dr-help"] li')].map((li) => li.textContent)`)
+      if (lines.length < 4 || lines.length > 6) throw new Error(`${mode}: HOW DIGITAL REALTY WOULD HAVE HELPED should have 4-6 lines, saw ${lines.length}`)
+      if (!/London|Frankfurt/.test(lines[0])) throw new Error(`${mode}: the DR place line should name the metro: ${lines[0]}`)
+      if (!/300\+ data centers in 50\+ metros/.test(lines[lines.length - 1])) throw new Error(`${mode}: the DR closing line should quote the published facts: ${lines[lines.length - 1]}`)
+      return lines
+    }
+    const simpleDr = await drLines("simple")
     await setNerd(true)
     await waitFor(`!!document.querySelector('[data-key="explain"]')`, "nerd explanation")
     const bullets = await evaluate(`document.querySelectorAll('[data-key="explain"] li').length`)
     if (bullets < 5 || bullets > 7) throw new Error(`Explanation should have 5-7 bullets, saw ${bullets}`)
+    const nerdDr = await drLines("nerd")
+    if (!(nerdDr[0].length > simpleDr[0].length)) throw new Error("Nerd mode should add numbers to the DR place line")
+    console.log(`dr-help ${tag}: ${simpleDr.length} lines simple, ${nerdDr.length} nerd`)
     await setNerd(false)
     const syncLine = await readSyncLine("first run")
     if (booth) noteAttempt(syncLine, "first run")

@@ -438,6 +438,9 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .explain h3 { margin: 0 0 6px; font-size: var(--fs-s); color: var(--cyan); }
 .explain ul { margin: 0; padding-left: 18px; }
 .explain li { margin: 0 0 4px; font-size: var(--fs-s); line-height: 1.4; color: var(--pale); }
+/* HOW DIGITAL REALTY WOULD HAVE HELPED: the same box in both modes, in the brand cyan. */
+.explain.dr-help { border-color: var(--cyan); }
+.explain.dr-help li[data-line="facts"] { color: var(--cyan); }
 .dialog.result .row.end { margin-top: 4px; }
 /* Simple results: score, one headline lesson, people-power, one next step, and the DR line. */
 .dialog.result.simple { width: min(860px, 100%); gap: 12px; }
