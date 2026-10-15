@@ -7,16 +7,19 @@ import { SITES, USE_CASES, byId } from "../js/data.js"
 import { DR_FOOTER, bestChange, explainResult, headline } from "../js/explain.js"
 import { FIBER_MAX_KM, evaluateBuild, kmBetween } from "../js/model.js"
 import {
+  COMBO,
   PRESET_IDS,
   SIMPLE_IDS,
   allPresets,
   brainPick,
   choicesToBuild,
   expertChoices,
+  hasCombo,
   memoryChoices,
   memoryTile,
   nerdChoices,
   simpleChoices,
+  wireIds,
 } from "../js/presets.js"
 import { allSimple, describeChoices, simpleDefaults, stepValue } from "../js/steps.js"
 
@@ -32,7 +35,7 @@ const combo = (id, patch) => ({ ...simpleDefaults(id), ...patch })
 
 test("the simple view offers three tiles a step and Vera Rubin ×1 in every story", () => {
   assert.deepEqual(PRESET_IDS.brains, ["small", "medium", "big", "rubin"])
-  assert.deepEqual(PRESET_IDS.wires, ["cheap", "peer", "fast", "private"])
+  assert.deepEqual(PRESET_IDS.wires, ["cheap", "peer", "fast", "private", "combo"])
   assert.deepEqual(PRESET_IDS.homes, ["cool", "rear", "super"])
   assert.ok(PRESET_IDS.nerdBrains.includes("huge"), "the HUGE trap stays a nerd-mode option")
   assert.deepEqual(SIMPLE_IDS, { brains: ["medium", "big", "rubin"], home: ["cool", "rear", "super"], memory: ["off", "on", "plus"], wires: ["cheap", "peer", "fast"], library: ["none", "basic", "smart"] })
@@ -132,10 +135,17 @@ test("the memory step maps onto the KV tier and the hosts beside it, and the sim
     const meddled = choicesToBuild(id, { ...defaults, hosts: "dpu", mcp: true, helper: !orca, brains: "huge", home: "row", wires: "private" }, false)
     assert.equal(meddled.hosts, "standard", `${id} hosts snap onto the tile`)
     assert.equal(meddled.orca, false, `${id} ORCA snaps onto the tile`)
-    assert.equal(meddled.routes.control?.kind ?? "off", "off", id)
     assert.equal(meddled.platform, brainPick(id, "big").platform, `${id} HUGE snaps onto the big tile`)
     assert.equal(meddled.hall, "R", `${id} in-row cooling snaps onto the rear-door hall`)
-    assert.equal(meddled.routes.users?.kind ?? meddled.routes.lab?.kind, "fabric", `${id} own fibre snaps onto ServiceFabric`)
+    if (hasCombo(id)) {
+      /* Own fibre snaps onto the COMBO tile, whose legs (and its MCP control leg where it has one) are the tile's own. */
+      assert.equal(meddled.choices.wires, "combo", `${id} own fibre snaps onto COMBO`)
+      assert.equal(meddled.routes.control?.kind ?? "off", COMBO[id].legs.control, id)
+      assert.equal(meddled.routes.users?.kind, COMBO[id].legs.users, id)
+    } else {
+      assert.equal(meddled.routes.control?.kind ?? "off", "off", id)
+      assert.equal(meddled.routes.users?.kind ?? meddled.routes.lab?.kind, "fabric", `${id} own fibre snaps onto ServiceFabric`)
+    }
   }
   assert.deepEqual(memoryChoices("off"), { memory: false, hosts: "standard" })
   assert.deepEqual(memoryChoices("on"), { memory: true, hosts: "standard" })
@@ -198,12 +208,14 @@ const STEP_KEYS = ["location", "gpu", "cooling", "memory", "wires", "storage", "
 test("simple-space balance: story-specific optima, one winner, max-everything and naive fail, near-misses feel close", () => {
   const expected = {
     chat: { best: { metros: ["lon", "fra"], brains: "big", home: "super", memory: "on", wires: "fast", library: "none" }, typical: [250, 450] },
-    rag: { best: { metros: ["fra"], brains: "medium", home: "rear", memory: "on", wires: "fast", library: "smart" }, typical: [5, 300] }, // no index on the home metro: DATA and POWER are red
-    code: { best: { metros: ["iad", "sjc"], brains: "big", home: "super", memory: "plus", wires: "fast", library: "basic" }, typical: [30, 400] },
-    research: { best: { metros: ["par"], brains: "big", home: "super", memory: "on", wires: "fast", library: "smart" }, typical: [100, 500] },
+    rag: { best: { metros: ["fra"], brains: "medium", home: "rear", memory: "on", wires: "combo", library: "smart" }, typical: [5, 300] }, // no index on the home metro: DATA and POWER are red
+    code: { best: { metros: ["iad", "sjc"], brains: "big", home: "super", memory: "plus", wires: "combo", library: "basic" }, typical: [30, 400] },
+    research: { best: { metros: ["par"], brains: "big", home: "super", memory: "on", wires: "combo", library: "smart" }, typical: [100, 500] },
     drug: { best: { metros: ["lon"], brains: "medium", home: "rear", memory: "off", wires: "fast", library: "basic", helper: true }, typical: [300, 700] },
-    robot: { best: { metros: ["fra", "ams"], brains: "big", home: "rear", memory: "on", wires: "fast", library: "none" }, typical: [300, 700] },
+    robot: { best: { metros: ["fra", "ams"], brains: "big", home: "rear", memory: "on", wires: "combo", library: "none" }, typical: [300, 700] },
   }
+  /* Robots: ServiceFabric everywhere is within 3% of the COMBO, so that one near-miss also keeps three stars. */
+  const threeStarAllowance = { robot: 2 }
   const bests = {}
   for (const { id } of USE_CASES) {
     const scored = allSimple(id).map((picks) => ({ picks, score: simpleScore(id, picks).score }))
@@ -229,7 +241,7 @@ test("simple-space balance: story-specific optima, one winner, max-everything an
     assert.ok(misses.length >= 10, `${id} has ${misses.length} one-step misses`)
     assert.ok(misses.some((miss) => miss.score >= 700 && miss.score <= 1100), `${id} no one-step miss lands in 700-1,100: ${misses.map((miss) => miss.score).join(", ")}`)
     const threeStar = misses.filter((miss) => miss.score >= 1350)
-    assert.ok(threeStar.length <= 1, `${id}: ${threeStar.length} one-step misses still earn three stars`)
+    assert.ok(threeStar.length <= (threeStarAllowance[id] || 1), `${id}: ${threeStar.length} one-step misses still earn three stars`)
   }
   // The best pictures differ by story: at least two of the six decisions change between any two stories.
   const ids = USE_CASES.map((item) => item.id)
@@ -272,7 +284,7 @@ test("the results headline ties the outcome to a data-center decision in plain w
   const lab = combo("drug", { brains: "medium", home: "rear", wires: "fast", library: "basic", helper: true })
   assert.match(headline(evaluateBuild("drug", choicesToBuild("drug", lab, false)), lab), /screened 9\d% of the lab's candidates over ServiceFabric, with ORCA PT-3/)
   const stuck = combo("robot", { metros: ["fra", "ams"], brains: "rubin", home: "rear", wires: "cheap" })
-  assert.match(bestChange("robot", stuck).text, /^No single change rescues this\. NVIDIA HGX H200 ×2, rear door heat exchanger in Frankfurt \+ Amsterdam, with the KV cache on, on ServiceFabric, local only storage would score about 1,[34]\d\d\.$/)
+  assert.match(bestChange("robot", stuck).text, /^No single change rescues this\. NVIDIA HGX H200 ×2, rear door heat exchanger in Frankfurt \+ Amsterdam, with the KV cache on, on COMBO, local only storage would score about 1,[34]\d\d\.$/)
   assert.equal(DR_FOOTER, "Built in a Digital Realty data center: power, cooling and connections ready.")
 })
 

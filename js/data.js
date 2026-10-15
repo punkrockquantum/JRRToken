@@ -560,7 +560,7 @@ export const USE_CASES = [
       { id: "inter", name: "INTER-SITE", hint: "only with 2 metros", role: "inter", dest: "metro", trips: 0.4, bw: 0.3, jitter: 1, sensitive: true, critical: true, when: "multi" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "partner", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.13461246037975866,
+    parCost: 0.1315125223528696, // recalibrated so the COMBO (plant carriers on cross connects) best scores 1,400
     worth: 2,
     bytesPerToken: 48,
     toolCalls: 0,

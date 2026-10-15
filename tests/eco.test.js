@@ -7,7 +7,7 @@ import { USE_CASES } from "../js/data.js"
 import { ECO_PARTS, ecoHint, ecoQuestion, ecoSummary, ecosystem } from "../js/eco.js"
 import { upsertEntry } from "../js/league.js"
 import { evaluateBuild } from "../js/model.js"
-import { choicesToBuild } from "../js/presets.js"
+import { COMBO, choicesToBuild, hasCombo, wireIds } from "../js/presets.js"
 import { MAX_ROUNDS, canImprove, finalScore, roundEntry, roundHint, roundLine } from "../js/rounds.js"
 import { BUILD_STEP_IDS, STEPS, STEP_IDS, allSimple, applyTile, describeChoices, nextStep, prevStep, qpuRelevant, simpleDefaults, stepIndex, stepTiles, stepValue, untouchedSteps } from "../js/steps.js"
 
@@ -209,7 +209,8 @@ test("every step offers three tiles on the simple board, a short list of metros,
     }
     for (const stepId of ["gpu", "cooling", "memory", "wires", "storage"]) {
       const tiles = stepTiles(id, stepId)
-      assert.equal(tiles.length, 3, `${id} ${stepId}`)
+      /* CONNECTIVITY adds a fourth tile, COMBO, only where a mixture pays (RAG, coding, research, robots). */
+      assert.equal(tiles.length, stepId === "wires" && hasCombo(id) ? 4 : 3, `${id} ${stepId}`)
       assert.ok(stepTiles(id, stepId, true).length >= tiles.length, `${id} ${stepId} nerd offers at least the simple tiles`)
       for (const tile of tiles) {
         assert.ok(tile.label.length > 0 && tile.label.length <= 32, `${id} ${stepId} label "${tile.label}"`)
@@ -221,7 +222,14 @@ test("every step offers three tiles on the simple board, a short list of metros,
         assert.ok(tile.patch && Object.keys(tile.patch).length > 0, `${id} ${stepId} ${tile.id} sets something`)
       }
     }
-    assert.deepEqual(stepTiles(id, "wires").map((tile) => tile.label), ["Public internet", "Peering + eyeballs", "ServiceFabric"], id)
+    assert.deepEqual(stepTiles(id, "wires").map((tile) => tile.label), ["Public internet", "Peering + eyeballs", "ServiceFabric", ...(hasCombo(id) ? ["COMBO"] : [])], id)
+    if (hasCombo(id)) {
+      const comboTile = stepTiles(id, "wires").find((tile) => tile.id === "combo")
+      assert.deepEqual(comboTile.parts, COMBO[id].parts, `${id} COMBO names its legs`)
+      assert.ok(comboTile.lines.length === COMBO[id].parts.length + 1, `${id} COMBO learn lines list every leg`)
+      assert.ok(comboTile.why.length > 0, `${id} COMBO why`)
+    }
+    assert.deepEqual(hasCombo(id), ["rag", "code", "research", "robot"].includes(id), `${id}: COMBO only where mixing pays`)
     assert.deepEqual(stepTiles(id, "cooling").map((tile) => tile.label), ["Air-cooled hall", "Rear-door hall", "Liquid-cooled hall"], id)
     assert.deepEqual(stepTiles(id, "memory").map((tile) => tile.label), ["KV cache OFF", "KV cache ON", "KV cache ON + CPU host memory"], id)
     assert.deepEqual(stepTiles(id, "storage").map((tile) => tile.label), ["Local only", "File & object", "Vector index"], id)
@@ -277,13 +285,14 @@ test("the simple space is every metro set times three tiles on five steps, times
   for (const { id, orca } of USE_CASES) {
     const combos = allSimple(id)
     const metroSets = new Set(combos.map((combo) => combo.metros.join("+")))
-    assert.equal(combos.length, metroSets.size * 243 * (orca ? 2 : 1), id)
+    const perSet = 81 * wireIds(id).length
+    assert.equal(combos.length, metroSets.size * perSet * (orca ? 2 : 1), id)
     assert.ok(combos.every((combo) => combo.mcp === false && combo.metros.length >= 1), id)
   }
   assert.equal(allSimple("chat").length, 14 * 243, "four metros, up to three at a time")
-  assert.equal(allSimple("rag").length, 4 * 243)
+  assert.equal(allSimple("rag").length, 4 * 324, "a fourth connectivity tile, COMBO")
   assert.equal(allSimple("drug").length, 4 * 243 * 2)
-  assert.equal(allSimple("robot").length, 10 * 243, "four metros, up to two at a time")
+  assert.equal(allSimple("robot").length, 10 * 324, "four metros, up to two at a time")
 })
 
 /* ---------- The game screen wiring ---------- */

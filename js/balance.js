@@ -37,6 +37,7 @@ export function networkOptions(useCaseId, build) {
   if (useCaseId === "code") plans.push({ users: "fabric", tools: "cross", inter: "fabric", control: "mcp" }, { users: "fabric", tools: "fabric", inter: "fiber", control: "mcp" })
   if (useCaseId === "chat") plans.push({ users: "fabric", inter: "fiber", control: "off" }, { users: "fabric", inter: "fabric", control: "mcp" })
   if (useCaseId === "drug") plans.push({ lab: "fabric", orca: "cross", control: "off" }, { lab: "fiber", orca: "cross", control: "off" }, { lab: "public", orca: "cross", control: "off" })
+  if (useCaseId === "robot") plans.push({ users: "cross", inter: "fabric", control: "off" }, { users: "cross", inter: "fiber", control: "off" })
   const options = []
   for (const assign of plans) {
     for (const bwTier of [0, 1]) {

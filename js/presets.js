@@ -53,10 +53,36 @@ const MIX = {
   robot: { all: "fabric", control: "off" },
 }
 
+/**
+ * The COMBO tile: one product per leg, only for the stories where mixing pays in the model.
+ * `inter: "fiber"` is dark fiber between the player's metros when they are within fibre reach
+ * (FIBER_MAX_KM), ServiceFabric otherwise. A chatbot and a batch screen have no mix to make.
+ *
+ * Robots: each plant's carrier circuit lands in the Digital Realty building, so the hand-off is
+ * a cross connect and the miles beyond it are fibre physics; the model and the other site ride
+ * ServiceFabric. Dark fiber between the sites was tried and loses here: 12 weeks of lead and
+ * its up-front cost buy no first-token time for a 50 ms robot loop.
+ * Coding agents: the repos and tools are on a cloud on-ramp in the building (cross connect),
+ * developers arrive over ServiceFabric, an MCP agent configures the control leg, and dark fiber
+ * joins the metros where they are close enough.
+ * RAG and research: a cross connect to the on-ramp beside the documents, ServiceFabric for the
+ * people, MCP on the control leg.
+ */
+export const COMBO = {
+  rag: { legs: { users: "fabric", store: "cross", control: "mcp" }, parts: ["Staff → ServiceFabric", "Documents → Cross connect to the cloud on-ramp", "Control → MCP agent-configured"] },
+  code: { legs: { users: "fabric", tools: "cross", inter: "fiber", control: "mcp" }, parts: ["Developers → ServiceFabric", "Repos & tools → Cross connect to the on-ramp", "Sites → Dark fiber when close, else ServiceFabric", "Control → MCP agent-configured"] },
+  research: { legs: { users: "fabric", data: "cross", control: "mcp" }, parts: ["Analysts → ServiceFabric", "Papers & weights → Cross connect to the cloud on-ramp", "Control → MCP agent-configured"] },
+  robot: { legs: { users: "cross", inter: "fabric", control: "off" }, parts: ["Robots → Cross connect to each plant's carrier", "Sites → ServiceFabric", "Model & data → stay in the hall, no WAN leg"] },
+}
+
+export function hasCombo(useCaseId) {
+  return Boolean(COMBO[useCaseId])
+}
+
 const BRAIN_IDS = ["small", "medium", "big", "rubin"]
 const NERD_BRAIN_IDS = ["small", "medium", "big", "rubin", "huge"]
 const LIBRARY_IDS = ["none", "basic", "smart"]
-const WIRE_IDS = ["cheap", "peer", "fast", "private"]
+const WIRE_IDS = ["cheap", "peer", "fast", "private", "combo"]
 const HOME_IDS = ["cool", "rear", "super"]
 const NERD_HOME_IDS = ["cool", "row", "rear", "super"]
 
@@ -74,6 +100,12 @@ export const NERD_IDS = {
   memory: ["off", "on", "plus", "dpu"],
   wires: WIRE_IDS,
   library: LIBRARY_IDS,
+}
+
+/** The CONNECTIVITY tiles a story offers: COMBO only where mixing pays. */
+export function wireIds(useCaseId, nerd = false) {
+  const base = nerd ? ["cheap", "peer", "fast", "private"] : SIMPLE_IDS.wires
+  return hasCombo(useCaseId) ? [...base, "combo"] : base
 }
 
 /** Which metros a story may use, and how many. */
@@ -127,7 +159,9 @@ export function simpleChoices(useCaseId, choices = {}) {
   const picked = { ...defaultChoices(useCaseId), ...choices }
   const brains = { small: "medium", huge: "big" }[picked.brains] || (SIMPLE_IDS.brains.includes(picked.brains) ? picked.brains : "medium")
   const home = picked.home === "row" ? "rear" : SIMPLE_IDS.home.includes(picked.home) ? picked.home : "cool"
-  const wires = picked.wires === "private" || picked.wires === "mix" ? "fast" : SIMPLE_IDS.wires.includes(picked.wires) ? picked.wires : "peer"
+  const wires = wireIds(useCaseId).includes(picked.wires)
+    ? picked.wires
+    : picked.wires === "private" || picked.wires === "mix" || picked.wires === "combo" ? (hasCombo(useCaseId) ? "combo" : "fast") : "peer"
   const memory = memoryTile(picked) === "dpu" ? "plus" : memoryTile(picked)
   const library = SIMPLE_IDS.library.includes(picked.library) ? picked.library : "none"
   const { sitePlans, ...rest } = picked
@@ -144,17 +178,9 @@ export function simpleChoices(useCaseId, choices = {}) {
   }
 }
 
-/** Stories whose documents or tools sit beside the GPUs in the same building. */
-const IN_BUILDING = new Set(["rag", "research", "code"])
-
-/**
- * Nerd tile that reproduces a simple pick exactly. The simple ServiceFabric tile also puts
- * the documents or tools leg on an in-building cross connect, which the nerd board calls
- * "Cross connect + Dark fiber" for those stories.
- */
+/** The nerd board keeps every simple pick as it is: the wires tiles mean the same thing in both modes. */
 export function nerdChoices(useCaseId, choices) {
   const next = { ...defaultChoices(useCaseId), ...choices }
-  if (next.wires === "fast" && IN_BUILDING.has(useCaseId)) next.wires = "private"
   next.metros = cleanMetros(useCaseId, next.metros)
   return next
 }
@@ -166,11 +192,11 @@ export function nerdChoices(useCaseId, choices) {
  */
 const EXPERTS = {
   chat: { metros: ["lon", "fra"], brains: "big", memory: true, hosts: "standard", home: "super", wires: "fast", library: "none" },
-  rag: { metros: ["fra"], brains: "medium", memory: true, hosts: "standard", home: "rear", wires: "private", library: "smart" },
-  code: { metros: ["iad", "sjc"], brains: "big", memory: true, hosts: "grace", home: "super", wires: "private", library: "basic" },
-  research: { metros: ["par"], brains: "big", memory: true, hosts: "standard", home: "super", wires: "private", library: "smart" },
+  rag: { metros: ["fra"], brains: "medium", memory: true, hosts: "standard", home: "rear", wires: "combo", library: "smart" },
+  code: { metros: ["iad", "sjc"], brains: "big", memory: true, hosts: "grace", home: "super", wires: "combo", library: "basic" },
+  research: { metros: ["par"], brains: "big", memory: true, hosts: "standard", home: "super", wires: "combo", library: "smart" },
   drug: { metros: ["lon"], brains: "medium", memory: false, hosts: "standard", home: "rear", wires: "private", library: "basic", helper: true },
-  robot: { metros: ["fra", "ams"], brains: "big", memory: true, hosts: "standard", home: "rear", wires: "fast", library: "none" },
+  robot: { metros: ["fra", "ams"], brains: "big", memory: true, hosts: "standard", home: "rear", wires: "combo", library: "none" },
 }
 
 export function expertChoices(useCaseId) {
@@ -184,10 +210,11 @@ export function expertChoices(useCaseId) {
  * peering puts users on eyeball ISPs, cross connect + dark fiber lights your own glass between
  * your sites and to partners in the building, and users still arrive over ServiceFabric.
  */
-function assignRoutes(useCase, sites, helper, wires, mcp = false, { inBuilding = false } = {}) {
+function assignRoutes(useCase, sites, helper, wires, mcp = false) {
   const control = mcp ? "mcp" : "off"
   // Eyeball networks are where consumers live. A factory, lab or company cloud is reached through an exchange.
   const consumers = useCase.legs.some((leg) => leg.role === "ingress" && leg.dest === "internet")
+  const combo = COMBO[useCase.id]?.legs
   const assign = wires === "cheap"
     ? { all: "public", control: "off" }
     : wires === "peer"
@@ -196,7 +223,9 @@ function assignRoutes(useCase, sites, helper, wires, mcp = false, { inBuilding =
         ? { all: "eye", control: "off" }
         : wires === "mix"
           ? MIX[useCase.id]
-          : { all: "fabric", control }
+          : wires === "combo" && combo
+            ? combo
+            : { all: "fabric", control }
   const places = sites.map((id) => byId(SITES, id)).filter(Boolean)
   const regional = places.every((a) => places.every((b) => kmBetween(a, b) <= FIBER_MAX_KM))
   const routes = {}
@@ -211,11 +240,16 @@ function assignRoutes(useCase, sites, helper, wires, mcp = false, { inBuilding =
       else if (leg.when === "optional") kind = control
       else kind = "fabric"
     }
+    if (kind === "fiber" && leg.role === "inter" && !regional) kind = "fabric"
     if (leg.role === "orca" && (wires === "cheap" || wires === "peer" || wires === "eye")) kind = "cross"
-    if (inBuilding && wires === "fast" && (leg.role === "data" || leg.role === "tools")) kind = "cross"
     routes[leg.id] = { kind, fabric: { ...blankFabric(), dest: leg.dest }, backup: null }
   }
   return routes
+}
+
+/** True when a choice set's COMBO puts an MCP agent on the control leg. */
+export function comboMcp(useCaseId, wires) {
+  return wires === "combo" && COMBO[useCaseId]?.legs.control === "mcp"
 }
 
 /** The computers behind one BRAINS tile. */
@@ -235,7 +269,7 @@ export function choicesToBuild(useCaseId, choices, nerd = false) {
   const [platform, racks] = BRAINS[useCaseId][picked.brains] || BRAINS[useCaseId].big
   const sites = cleanMetros(useCaseId, picked.metros)
   const helper = Boolean(useCase?.orca && picked.helper)
-  const routes = assignRoutes(useCase, sites, helper, picked.wires, Boolean(picked.mcp), { inBuilding: !nerd })
+  const routes = assignRoutes(useCase, sites, helper, picked.wires, Boolean(picked.mcp))
   const build = {
     hall: { cool: "A", rear: "R", row: "I", super: "B" }[picked.home] || "A",
     hosts: picked.hosts || "standard",
@@ -248,8 +282,8 @@ export function choicesToBuild(useCaseId, choices, nerd = false) {
     network: routeNetworkId(routes),
     fabric: { ...blankFabric(), dest: useCase?.netDest?.user || "internet" },
     routes,
-    bwTier: picked.wires === "fast" || picked.wires === "private" ? 1 : 0,
-    fabricRedundant: ["mix", "private", "fast"].includes(picked.wires),
+    bwTier: picked.wires === "fast" || picked.wires === "private" || picked.wires === "combo" ? 1 : 0,
+    fabricRedundant: ["mix", "private", "fast", "combo"].includes(picked.wires),
     sites,
     choices: picked,
   }
@@ -289,7 +323,7 @@ export function allPresets(useCaseId) {
       for (const hosts of memory ? ["standard", "grace"] : ["standard"]) {
         for (const home of HOME_IDS) {
           for (const metros of metroLists) {
-            for (const wires of WIRE_IDS) {
+            for (const wires of wireIds(useCaseId, true)) {
               for (const helper of helpers) {
                 list.push({ metros, brains, memory, hosts, library, home, wires, helper })
               }

@@ -135,6 +135,8 @@ export function legEligibility(leg, kind, reach) {
   if (kind === "cross") {
     if (leg.role === "inter") return { ok: false, reason: "Cross Connect stays in one building. These sites are in different metros." }
     if (leg.role === "orca" || leg.role === "data" || leg.role === "tools") return { ok: true, reason: "In this building: a cloud on-ramp or a same-hall hand-off." }
+    // A factory or lab (a named partner) brings its own carrier circuit into the building; the hand-off is a cross connect and the miles beyond it are fibre physics.
+    if (leg.role === "ingress" && leg.dest === "partner" && km <= FIBER_MAX_KM) return { ok: true, reason: "The partner's carrier lands in this building; beyond the hand-off it is fibre physics." }
     if (km > CAMPUS_KM) return { ok: false, reason: `Cross Connect stays in one building. This path is about ${Math.round(km).toLocaleString("en-GB")} km.` }
     return { ok: true, reason: "Both ends are in this building." }
   }

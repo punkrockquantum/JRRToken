@@ -6,7 +6,7 @@
  */
 import { DATA_HOMES, DOES, HALLS, KV_TIER, ORCA, PLATFORMS, SITES, USE_CASES, byId } from "./data.js"
 import { formatMoney, metroOffers } from "./model.js"
-import { NERD_IDS, SIMPLE_IDS, brainPick, cleanMetros, defaultChoices, maxMetros, memoryChoices, memoryTile, metroSets } from "./presets.js"
+import { COMBO, NERD_IDS, SIMPLE_IDS, brainPick, cleanMetros, defaultChoices, maxMetros, memoryChoices, memoryTile, metroSets, wireIds } from "./presets.js"
 
 export const STEPS = [
   { id: "location", title: "LOCATION", hint: "Which Digital Realty metros", short: "WHERE" },
@@ -155,15 +155,24 @@ const WIRE_TILES = {
   peer: { label: "Peering + eyeballs", hint: "straight into home networks", art: "user", lines: ["Peering swaps traffic directly with other networks at an internet exchange.", "Eyeball networks are the ISPs your users are already on, so the path to them is short.", "It is the realistic middle option: better than the open internet, not as steady as a private link."] },
   fast: { label: "ServiceFabric", hint: "private lane, fast and steady", art: "token", lines: ["ServiceFabric is a private, on-demand link to clouds, partners and your other metros.", "A connection can go live in minutes once the port exists, and the delay stays predictable.", "Documents and tools in the same building ride a cross connect, so that hop is tiny."] },
   private: { label: "Cross connect + Dark fiber", hint: "your own glass in the building and between sites", art: "chest", lines: ["A cross connect is your own fibre to a partner in the same building, so the delay is tiny.", "Dark fiber is your own glass between nearby metros, so it pays off with two or three sites.", "Users still reach you over ServiceFabric. Too far for fibre, and the link between sites uses ServiceFabric too."] },
+  combo: { label: "COMBO", hint: "the right product on each leg", art: "gem", lines: ["Traffic has legs: people arriving, data being fetched, your sites talking to each other.", "A combo puts the right product on each leg instead of one product everywhere.", "You pay every product's set-up and monthly fee, and dark fiber waits out its lead time."] },
+}
+
+/** The COMBO tile's hint and learn lines name the legs for this story. */
+const COMBO_HINT = {
+  rag: "on-ramp cross connect + ServiceFabric",
+  code: "on-ramp cross connect + ServiceFabric + MCP",
+  research: "on-ramp cross connect + ServiceFabric",
+  robot: "plant cross connects + ServiceFabric",
 }
 
 const WIRE_WHY = {
   chat: { cheap: "Shoppers on a jittery road leave before the first word.", peer: "Eyeball networks reach shoppers' ISPs directly: a short, shared path.", fast: "A private lane keeps every answer steady, and reaches the weights' cloud region.", private: "Your own glass between metros, ServiceFabric for shoppers." },
-  rag: { cheap: "Staff reach you from the company cloud; the open internet adds jitter to every lookup.", peer: "An exchange gets staff closer, but the documents still cross a shared path.", fast: "ServiceFabric reaches the company cloud privately; an on-ramp in the building makes retrieval tiny.", private: "A cross connect to the cloud on-ramp in this building: the shortest retrieval hop." },
-  code: { cheap: "Eight tool-call trips per task on a jittery road stall the agents.", peer: "Peering helps coders arrive; the repos still cross a shared path eight times.", fast: "Private links to coders, repos and the other coast keep eight trips steady.", private: "Cross connect to the repos' on-ramp, dark fiber where the metros are close." },
-  research: { cheap: "Ten tool trips per report on the open internet add seconds.", peer: "Analysts arrive faster; the paper corpus still rides a shared path.", fast: "Private paths to analysts and the sovereign cloud keep ten trips predictable.", private: "A cross connect to the cloud on-ramp makes the paper lookups tiny." },
+  rag: { cheap: "Staff reach you from the company cloud; the open internet adds jitter to every lookup.", peer: "An exchange gets staff closer, but the documents still cross a shared path.", fast: "ServiceFabric reaches the company cloud privately, but every lookup still travels to its region.", private: "A cross connect to the cloud on-ramp in this building: the shortest retrieval hop.", combo: "Staff arrive over ServiceFabric; the documents are one cross connect away on the on-ramp in this building." },
+  code: { cheap: "Eight tool-call trips per task on a jittery road stall the agents.", peer: "Peering helps coders arrive; the repos still cross a shared path eight times.", fast: "Private links to coders, repos and the other coast keep eight trips steady, each still a trip to the repos' region.", private: "Cross connect to the repos' on-ramp, dark fiber where the metros are close.", combo: "Eight tool trips land on an on-ramp cross connect in the building; coders ride ServiceFabric, MCP sizes the rest." },
+  research: { cheap: "Ten tool trips per report on the open internet add seconds.", peer: "Analysts arrive faster; the paper corpus still rides a shared path.", fast: "Private paths to analysts and the sovereign cloud keep ten trips predictable, each still a trip to the cloud region.", private: "A cross connect to the cloud on-ramp makes the paper lookups tiny.", combo: "Ten paper lookups ride a cross connect to the on-ramp in the building; analysts arrive over ServiceFabric." },
   drug: { cheap: "Batch data does not mind jitter, but a thin shared pipe screens fewer candidates an hour.", peer: "An exchange carries more bulk data than transit; a fat private pipe carries the most.", fast: "A fat ServiceFabric pipe from the lab keeps the GPUs fed with candidates.", private: "Dark fiber from the lab: the fattest feed, if the lab is close enough." },
-  robot: { cheap: "Robots need 50 ms; the open internet cannot promise it.", peer: "Factories are not on eyeball networks; an exchange still shares the path.", fast: "A private path from each plant keeps the 50 ms promise.", private: "Dark fiber to a plant is possible; ServiceFabric does it without the dig." },
+  robot: { cheap: "Robots need 50 ms; the open internet cannot promise it.", peer: "Factories are not on eyeball networks; an exchange still shares the path.", fast: "A private path from each plant keeps the 50 ms promise.", private: "Dark fiber to a plant is possible; ServiceFabric does it without the dig.", combo: "Each plant's carrier lands in the building on a cross connect: the steadiest 50 ms loop; the rest rides ServiceFabric." },
 }
 
 const LIBRARY_TILES = {
@@ -297,7 +306,16 @@ export function stepTiles(useCaseId, stepId, nerd = false) {
     return ids.memory.map((id) => ({ id, ...MEMORY_TILES[id], why: MEMORY_WHY[useCaseId]?.[id] || DOES.kv, patch: memoryChoices(id) }))
   }
   if (stepId === "wires") {
-    return ids.wires.map((id) => ({ id, ...WIRE_TILES[id], why: WIRE_WHY[useCaseId]?.[id] || "", patch: { wires: id } }))
+    return wireIds(useCaseId, nerd).map((id) => {
+      const tile = { id, ...WIRE_TILES[id], why: WIRE_WHY[useCaseId]?.[id] || "", patch: { wires: id } }
+      if (id === "combo") {
+        const combo = COMBO[useCaseId]
+        tile.hint = COMBO_HINT[useCaseId] || tile.hint
+        tile.lines = [...combo.parts.map((part) => `${part}.`), WIRE_TILES.combo.lines[2]]
+        tile.parts = combo.parts
+      }
+      return tile
+    })
   }
   if (stepId === "storage") {
     return ids.library.map((id) => ({ id, ...LIBRARY_TILES[id], why: LIBRARY_WHY[useCaseId]?.[id] || DOES[{ none: "local", basic: "file", smart: "vector" }[id]], patch: { library: id } }))
@@ -352,7 +370,7 @@ export function allSimple(useCaseId) {
     for (const brains of SIMPLE_IDS.brains) {
       for (const home of SIMPLE_IDS.home) {
         for (const memory of SIMPLE_IDS.memory) {
-          for (const wires of SIMPLE_IDS.wires) {
+          for (const wires of wireIds(useCaseId)) {
             for (const library of SIMPLE_IDS.library) {
               for (const helper of qpu) list.push({ metros, brains, home, wires, library, helper, ...memoryChoices(memory), mcp: false })
             }
