@@ -32,7 +32,7 @@
   --purple: #b080ff;
   --pixel: "Press Start 2P", monospace;
   /* One type scale for the whole kiosk: 12px at 1600 wide, 14px at 1920. */
-  --fs: clamp(11px, 0.73vw, 14px);
+  --fs: clamp(12px, 0.73vw, 14px);
   --fs-s: clamp(10px, 0.63vw, 12px);
   --fs-l: clamp(14px, 1vw, 20px);
   --gap: clamp(8px, 0.8vw, 16px);
@@ -51,7 +51,9 @@ body {
 }
 img.sprite, canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
 button, input { font: inherit; color: inherit; }
-button { cursor: pointer; }
+/* Tablet-friendly buttons: no 300 ms tap delay, no grey tap flash, no text selection when a visitor taps twice. */
+button { cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+button, .tile, .story-card, .rail-btn, .eco-part, .learn-pop b { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 :focus-visible { outline: 4px solid var(--yellow); outline-offset: 2px; }
 ::selection { background: var(--yellow); color: var(--ink); }
 h1, h2, b, strong { font-weight: 400; }
@@ -59,7 +61,8 @@ h1, h2, b, strong { font-weight: 400; }
   position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
 }
 
-#app { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+/* 100vh first for older Safari, then dvh so the iPad toolbar never pushes the footer off screen. */
+#app { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 #stage { flex: 1; min-height: 0; overflow: hidden; }
 
 /* ---------- Top bar ---------- */
@@ -71,7 +74,7 @@ h1, h2, b, strong { font-weight: 400; }
   background: var(--ink);
   border-bottom: 4px solid var(--yellow);
 }
-.logo { border: 0; background: none; padding: 0; color: var(--yellow); font-size: var(--fs); }
+.logo { min-height: 44px; border: 0; background: none; padding: 0; color: var(--yellow); font-size: var(--fs); }
 .hud { display: flex; flex-wrap: wrap; gap: 14px; margin: 0 auto; font-size: var(--fs-s); line-height: 1.6; color: var(--line); }
 .hud b { color: var(--red); }
 .hud .hot { color: var(--pale); }
@@ -102,7 +105,7 @@ h1, h2, b, strong { font-weight: 400; }
 .btn.big { min-height: 64px; padding: 10px 20px; font-size: var(--fs); background: var(--green); color: var(--ink); }
 .btn.run { background: var(--yellow); font-size: var(--fs-l); min-height: 64px; width: 100%; }
 .btn.ghost { background: var(--panel-2); color: var(--line); }
-.btn.tiny { min-height: 36px; padding: 6px 10px; font-size: var(--fs-s); }
+.btn.tiny { min-height: 44px; padding: 6px 10px; font-size: var(--fs-s); }
 button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 
 /* ---------- Layout: every screen fills the stage and never scrolls ---------- */
@@ -251,8 +254,10 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .caption p { margin: 6px 0 0; color: var(--line); }
 .caption.deep p { font-size: 14px; line-height: 1.45; }
 .caption-live { min-height: 1.6em; color: var(--lime); }
-.scene-dots { display: flex; gap: 8px; justify-content: center; }
-.dot { width: 22px; height: 22px; background: var(--panel-2); border: 3px solid var(--ink); }
+.scene-dots { display: flex; gap: 22px; justify-content: center; }
+/* Small dots, finger-sized halos: 22px drawn, 44px to tap. */
+.dot { position: relative; width: 22px; height: 22px; padding: 0; background: var(--panel-2); border: 3px solid var(--ink); }
+.dot::after { content: ""; position: absolute; inset: -11px; }
 .dot[aria-current="true"] { background: var(--yellow); }
 .intro .row { margin: 0; flex: none; min-height: 68px; justify-content: flex-end; }
 
@@ -477,11 +482,6 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 @keyframes bob { 50% { transform: translateY(-4px); } }
 .blink { animation: blink 0.9s steps(1) infinite; }
 
-@media (max-width: 1180px) {
-  .screen.game { grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
-  .scouter { grid-column: 1; grid-row: auto; }
-  #stage { overflow: auto; }
-}
 @media (max-width: 900px) {
   .title-screen { grid-template-columns: 1fr; height: auto; }
   .hud { gap: 10px; }
@@ -521,21 +521,21 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .screen.game.nerd .choices { gap: 4px; }
 .screen.game.nerd .feel { grid-column: 3; }
 .screen.game.nerd .choice-row { grid-template-columns: 120px minmax(0, 1fr); }
-/* Nerd tiles are narrow, so their icons show at half size: an exact 2:1 of the scale-2 art, still crisp. */
-.screen.game.nerd .tile-art img { zoom: 0.5; }
 .mcp-toggle {
   position: absolute;
   z-index: 1;
   right: 3px;
   bottom: 3px;
-  height: 20px;
-  padding: 0 4px;
+  min-width: 44px;
+  height: 30px;
+  padding: 0 6px;
   font-family: var(--pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: var(--cyan);
   background: var(--ink);
   border: 2px solid var(--cyan);
 }
+.mcp-toggle::after { content: ""; position: absolute; inset: -7px; }
 .mcp-toggle.on { color: var(--ink); background: var(--yellow); border-color: var(--yellow); }
 .stories {
   height: 100%;
@@ -569,7 +569,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
   cursor: pointer;
 }
 .story-card strong { font-size: 13px; color: var(--yellow); }
-.story-card span { font-size: 11px; line-height: 1.35; color: var(--line); }
+.story-card span { font-size: 12px; line-height: 1.35; color: var(--line); }
 .story-card:hover, .story-card:focus { border-color: var(--yellow); }
 /* Simple mode: three big cards a visitor can read from a step back, then MORE for the rest. */
 .stories.simple { grid-template-rows: auto auto minmax(0, 1fr) auto; }
@@ -595,8 +595,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .site-plan { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 0 0 6px; }
 .site-plan b { min-width: 88px; font-size: 11px; }
 .step {
-  min-width: 36px;
-  min-height: 28px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 2px 6px;
   font: inherit;
   font-size: 10px;
@@ -679,17 +679,19 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
   z-index: 1;
   top: 3px;
   right: 3px;
-  width: 22px;
-  height: 22px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   font-family: var(--pixel);
-  font-size: 11px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 26px;
   text-align: center;
   color: var(--cyan);
   background: var(--ink);
   border: 2px solid var(--cyan);
 }
+/* The drawn box stays small; the finger-sized hit area (44×44) is the invisible halo around it. */
+.learn-btn::after { content: ""; position: absolute; inset: -7px; }
 .learn-btn:hover { background: var(--panel-2); }
 .row-nerd { grid-column: 2; margin: 0; min-width: 0; color: var(--cyan); font-size: 9px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .learn-pop {
@@ -838,7 +840,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .rail-step { min-width: 0; }
 .rail-btn {
   width: 100%;
-  min-height: 36px;
+  min-height: 44px; /* a finger-sized step button on an iPad */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -887,24 +889,22 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .map-legend .legend.data::before { background: var(--purple); transform: rotate(45deg); }
 .map-legend .legend.metro::before { background: var(--cyan); border-radius: 50%; }
 .map-legend .map-caption { flex-basis: 100%; color: var(--pale); }
-@media (max-width: 1100px) {
-  .map-wrap { grid-template-columns: minmax(0, 1fr); }
-  .tiny-map { max-width: 240px; }
-}
 .screen.game .step-panel .tiles { display: grid; grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; height: auto; min-height: 0; flex: 1 1 auto; align-content: start; }
 .screen.game .step-panel .tiles.count-1 { grid-template-columns: minmax(0, 1fr); }
 .screen.game .step-panel .tiles.count-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .screen.game .step-panel .tiles.count-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .screen.game .step-panel .tiles.count-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-.screen.game .step-panel .tile { min-height: 110px; height: 100%; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 8px; padding: 10px 30px 10px 12px; }
-.screen.game .step-panel .tile-title { font-size: var(--fs); line-height: 1.35; -webkit-line-clamp: 3; }
-.screen.game .step-panel .tile-hint { font-size: var(--fs-s); line-height: 1.4; -webkit-line-clamp: 3; }
+/* Tile text never drops under 12px of pixel font and clips with an ellipsis instead of spilling. */
+.screen.game .step-panel .tile { min-height: 110px; height: 100%; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 8px; padding: 10px 40px 10px 12px; }
+.screen.game .step-panel .tile-title { font-size: max(12px, var(--fs)); line-height: 1.35; -webkit-line-clamp: 3; }
+.screen.game .step-panel .tile-hint { font-size: max(12px, var(--fs-s)); line-height: 1.4; -webkit-line-clamp: 3; }
 .screen.game .step-panel .tile.locked { border-style: dashed; border-color: var(--cyan); }
-.screen.game.nerd .step-panel .tile { min-height: 96px; padding: 8px 28px 8px 10px; gap: 6px; }
-.screen.game.nerd .step-panel .tile-title { font-size: var(--fs-s); }
-.screen.game.nerd .step-panel .tile-hint { font-size: 9px; }
-.screen.game.nerd .step-panel .tile-art img { zoom: 1; }
-.screen.game .step-panel .tile-tag { display: block; }
+.screen.game.nerd .step-panel .tile { min-height: 96px; padding: 8px 40px 8px 10px; gap: 6px; }
+.screen.game.nerd .step-panel .tile-title { font-size: 12px; }
+.screen.game.nerd .step-panel .tile-hint { font-size: 12px; -webkit-line-clamp: 2; }
+.screen.game.nerd .step-panel .tiles.count-5, .screen.game.nerd .step-panel .tiles.count-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.screen.game .step-panel .tile-tag { display: block; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.screen.game .step-panel .tile-copy { max-width: 100%; }
 .screen.game .step-panel .row-nerd { white-space: normal; -webkit-line-clamp: 3; display: -webkit-box; -webkit-box-orient: vertical; }
 .step-nav { display: flex; justify-content: space-between; gap: 10px; margin-top: auto; }
 .step-nav .btn.big { min-height: 56px; padding: 8px 28px; }
@@ -914,12 +914,13 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .review-row strong { font-size: var(--fs-s); color: var(--line); line-height: 1.35; }
 .review-row.untouched strong { color: var(--pale); }
 .untouched-tag { color: var(--orange); }
-.btn.small { min-height: 32px; padding: 4px 10px; font-size: 9px; }
+.btn.small { min-height: 44px; min-width: 44px; padding: 4px 10px; font-size: 9px; }
 .review-go { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; margin-top: auto; }
 .review-go .btn.run { min-height: 72px; min-width: 200px; font-size: clamp(20px, 1.6vw, 30px); }
-.step-review .review-rows { gap: 4px; }
-.step-review .review-row { padding: 3px 10px; }
-.step-review .eco-bar.detail .eco-part { padding: 3px 8px; }
+.step-review .review-rows { gap: 3px; }
+.step-review .review-row { padding: 1px 10px; }
+.step-review .eco-bar.detail { gap: 3px; }
+.step-review .eco-bar.detail .eco-part { padding: 2px 8px; }
 .target { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 6px 10px; background: var(--ink); border: 3px solid var(--panel-2); }
 .target .fine { margin: 0; color: var(--muted); font-size: 9px; }
 .target-step { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-s); color: var(--pale); }
@@ -970,7 +971,69 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .dialog.result .people-card { padding: 8px 12px; }
 .dialog.result .people-lead { font-size: var(--fs); }
 .dialog.result .beat-line { font-size: var(--fs); }
-@media (max-width: 1180px) {
-  .screen.game, .screen.game.simple, .screen.game.nerd { grid-template-columns: 1fr; grid-template-rows: auto; }
-  .screen.game .scenario, .screen.game .eco-strip, .screen.game .step-panel, .screen.game .feel, .screen.game.nerd .think, .screen.game.nerd .eco-strip { grid-column: 1; grid-row: auto; }
+/* ---------- Compact board for an iPad in landscape (1180×820, 1024×768): same two / three columns, tighter ---------- */
+@media (max-width: 1200px) {
+  .screen, .intro { padding: 8px 12px 8px; }
+  .top { gap: 10px; padding: 4px 12px; }
+  .hud { gap: 10px; }
+  .screen.game, .screen.game.simple { padding: 6px 12px; gap: 6px 8px; grid-template-columns: minmax(0, 1fr) minmax(260px, 0.5fr); }
+  .screen.game.nerd { grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.5fr) minmax(220px, 0.5fr); }
+  .screen.game .scenario { gap: 6px 10px; padding: 4px 10px; grid-template-columns: minmax(150px, 230px) minmax(0, 1fr) auto auto; }
+  .sc-who { gap: 8px; }
+  .sc-who h1, .sc-who .story-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .scenario .sc-facts { gap: 4px; }
+  .scenario .sc-fact { padding: 3px 6px; }
+  /* The ecosystem bar and the rail take the full width in the plain game, so every part keeps its whole name. */
+  .screen.game:not(.nerd) .eco-strip { grid-column: 1 / -1; }
+  .screen.game:not(.nerd) .feel { grid-row: 3; }
+  .screen.game.nerd .eco-part img { display: none; }
+  .screen.game.nerd .eco-part b { font-size: 9px; }
+  .eco-bar { gap: 4px; }
+  .eco-part { gap: 6px; padding: 3px 6px; }
+  .rail { gap: 3px; }
+  .step-panel { gap: 8px; padding: 8px 10px; }
+  .step-head .fine { margin-top: 2px; }
+  .map-wrap { grid-template-columns: minmax(140px, 160px) minmax(0, 1fr); gap: 8px; padding: 4px 6px; }
+  @media (min-height: 800px) { .map-wrap { grid-template-columns: minmax(180px, 230px) minmax(0, 1fr); } }
+  .sc-who > div { min-width: 0; }
+  .screen.game .step-panel .tiles { gap: 8px; flex: 1 0 auto; }
+  .screen.game .step-panel .tiles.count-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .screen.game .step-panel .tiles.count-5, .screen.game .step-panel .tiles.count-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .screen.game.nerd .step-panel .tiles.count-5, .screen.game.nerd .step-panel .tiles.count-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Tiles lie down: art on the left, words on the right, so two rows of tiles fit under the map. */
+  .screen.game .step-panel .tile, .screen.game.nerd .step-panel .tile { min-height: 80px; flex-direction: row; align-items: center; gap: 10px; padding: 6px 44px 6px 10px; }
+  .screen.game .step-panel .tile-title { -webkit-line-clamp: 2; }
+  .screen.game .step-panel .tile-hint, .screen.game.nerd .step-panel .tile-hint { -webkit-line-clamp: 3; } /* "Users: N km · Data: M km" needs three short lines here */
+  .screen.game.nerd .step-panel .tile-tag { display: none; } /* the nerd line under the tiles carries the detail */
+  .workers { max-width: 48px; }
+  .people-copy strong { white-space: normal; }
+  .step-nav .btn.big { min-height: 48px; padding: 6px 20px; }
+  .step-review .review-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 8px; }
+  .review-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto auto; gap: 0 6px; padding: 2px 4px 2px 8px; }
+  .review-row > .fine:first-child { grid-column: 1; grid-row: 1; }
+  .review-row strong { grid-column: 1; grid-row: 2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .review-row .untouched-tag { grid-column: 1; grid-row: 3; white-space: nowrap; }
+  .review-row .btn { grid-column: 2; grid-row: 1 / span 3; }
+  .step-review .eco-bar.detail { display: none; } /* the bar above the rail already shows the five lights */
+  .step-review .review-go { margin-top: auto; }
+  .review-go .btn.run { min-height: 60px; min-width: 160px; font-size: clamp(16px, 1.6vw, 22px); }
+  .feel, .feel.simple { gap: 6px; padding: 8px; }
+  .feel.simple .meter-bar { height: 16px; }
+  .feel .meter-bar { height: 10px; }
+  .round-badge { padding: 2px 6px; gap: 4px 8px; flex-wrap: wrap; }
+  .feel.simple .crowd { min-height: 56px; padding: 4px 6px; }
+  .feel.simple .coach p { line-height: 1.4; }
+  .feel .btn.big, .feel.simple .btn.big { min-height: 52px; }
+  .feel .btn.nerd-toggle { display: none; } /* the top bar has NERD MODE; the narrow column keeps the room */
+  .people-badge { min-height: 52px; }
+  .people-copy strong, .people-copy .fine { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .target { gap: 4px 10px; padding: 4px 8px; }
+  .target > .fine { display: none; }
+  /* Nerd mode already has a CROWD gauge; the gremlin row goes so the coach and REVIEW stay on screen. */
+  .feel:not(.simple) .crowd { display: none; }
+  .feel:not(.simple) .coach { gap: 6px; padding: 4px 6px; }
+  .feel:not(.simple) .coach p { line-height: 1.4; }
+  .feel:not(.simple) .coach img { width: 32px; height: auto; }
+  .toast { bottom: 96px; }
+  .stories { padding: 10px 12px 8px; }
 }

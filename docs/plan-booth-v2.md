@@ -84,8 +84,16 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
 - [ ] Only published Digital Realty facts (metros, ServiceFabric, cross connects, lead times already in `js/data.js`)
 - [ ] Test: every story × a weak build and the best build yields 4–6 lines with no made-up numbers
 
-## P8 — Smoke and ship `TODO`
+## P8 — Smoke and ship `PARTLY DONE`
 
-- [ ] Smoke both viewports (booth 1600×1000 and the small kiosk) through the whole flow, both rounds
+- [x] iPad-ready: `scripts/smoke.mjs` walks 1920×1080, 1600×1000, 1180×820 and 1024×768 in both modes with the
+      layout audit (overlap, spill, viewport, covered centre, text overflow, panel scroll, 44 px tap targets,
+      12 px tile text). Compact board under 1200 px wide (`css/game.css` `@media (max-width: 1200px)`): same
+      two / three columns, tiles lie art-beside-words, nerd tile sets in two columns, review rows in two
+      columns without the detail bar, side NERD button and nerd gremlin row dropped, `100vh` → `100dvh`,
+      `touch-action: manipulation`, no tap highlight, no selection or callout on tiles, `?` and scene dots
+      carry a 44 px halo. A touch-emulated pass (iPad UA, DPR 2) confirmed tap picks, `?` opens on tap,
+      a 700 ms hold opens the popover without changing the pick.
+- [ ] Smoke both kiosk viewports through the whole flow, both rounds (passes today; re-run before shipping)
 - [ ] 1600×1000 screenshots of title, intro, each step, results, league (kept out of the repo in `.shots/`)
 - [ ] Stamp the build and final commit

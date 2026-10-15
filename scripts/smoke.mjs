@@ -3,9 +3,10 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from "node:path"
 
 /**
- * Walks the booth flow in headless Chrome at both kiosk viewports, in simple and nerd mode:
- * title → intro → stories → every build step → review → GO → results → IMPROVE IT → results →
- * league. Every screen passes a layout audit (nothing scrolls, overlaps, spills or covers a tile)
+ * Walks the booth flow in headless Chrome at the kiosk viewports and the two iPad landscape
+ * sizes, in simple and nerd mode: title → intro → stories → every build step → review → GO →
+ * results → IMPROVE IT → results → league. Every screen passes a layout audit (nothing scrolls,
+ * overlaps, spills or covers a tile; every control is finger-sized; tile text stays readable)
  * and, when the booth server is up, the sync line, the workbook and the staff reset are checked.
  *
  *   SHOTS=.shots node scripts/smoke.mjs      screenshots per screen
@@ -15,7 +16,7 @@ const chrome = process.env.CHROME || "/Applications/Google Chrome.app/Contents/M
 const base = process.env.GAME_URL || "http://127.0.0.1:8080/"
 const shots = process.env.SHOTS || ""
 const port = 9333
-const VIEWPORTS = (process.env.VIEWPORTS || "1920x1080,1600x1000").split(",").map((v) => v.split("x").map(Number))
+const VIEWPORTS = (process.env.VIEWPORTS || "1920x1080,1600x1000,1180x820,1024x768").split(",").map((v) => v.split("x").map(Number))
 const browser = spawn(chrome, ["--headless=new", "--disable-gpu", "--no-sandbox", "--autoplay-policy=no-user-gesture-required", `--remote-debugging-port=${port}`, "--window-size=1920,1080", "about:blank"], { stdio: "ignore" })
 
 const SIMPLE_COPY = [
@@ -55,7 +56,9 @@ const FITS = `(() => {
  * boxes intersect; (b) an element spilling more than 2px outside its parent (absolutely
  * positioned or animated elements and content inside the one scroll container excepted);
  * (c) anything outside the viewport; (d) a tile or button whose centre is covered by something
- * else; (e) tile or label text that overflows without a clip; (f) a panel that scrolls.
+ * else; (e) tile or label text that overflows without a clip; (f) a panel that scrolls;
+ * (g) a tap target under 44×44 CSS px (an invisible ::after halo counts); (h) tile or story text
+ * under 12px, anything else under 9px of the pixel font.
  */
 const OVERLAP = `(() => {
   const sel = '.tile, .panel, .gauge, .eco-bar *, .rail-step, .step-panel, .story-card, .scouter, .coach, #result:not([hidden]) *, .side *, button, .map-wrap, .review-row, .target, .scenario *'
@@ -90,6 +93,8 @@ const OVERLAP = `(() => {
     if ((el.scrollWidth > el.clientWidth + 2 || el.scrollHeight > el.clientHeight + 2) && cs.overflow !== 'hidden' && cs.overflowY !== 'hidden' && cs.textOverflow !== 'ellipsis') out.push('(e) ' + name(el) + ' text overflows ' + (el.scrollWidth - el.clientWidth) + 'x' + (el.scrollHeight - el.clientHeight) + 'px: ' + el.textContent.trim().slice(0, 40))
   }
   for (const box of document.querySelectorAll('.step-panel, .side, .screen, #result:not([hidden]) .dialog')) if (visible(box) && (!resultOpen || box.closest('#result')) && box.scrollHeight > box.clientHeight + 2) out.push('(f) ' + name(box) + ' scrolls by ' + (box.scrollHeight - box.clientHeight) + 'px')
+  for (const el of document.querySelectorAll('button, .tile, .story-card')) { if (!visible(el) || el.disabled || el.closest('.sr-only')) continue; if (resultOpen && !el.closest('#result')) continue; const r = rect(el); const halo = getComputedStyle(el, '::after'); const extra = halo.position === 'absolute' && halo.content !== 'none' ? -2 * parseFloat(halo.top) : 0; if (r.w + extra < 44 || r.h + extra < 44) out.push('(g) ' + name(el) + ' ' + fmt(r) + ' tap target under 44px') }
+  for (const el of document.querySelectorAll('.tile *, .eco-part *, .rail-step *, .coach *, .meter *, .review-row *, .sc-fact *, .map-wrap figcaption *, .btn, .story-card *')) { if (!visible(el) || !el.textContent.trim() || el.children.length) continue; const fs = parseFloat(getComputedStyle(el).fontSize); const floor = el.matches('.tile-title, .tile-hint, .story-card strong, .story-card span') ? 12 : 9; if (fs < floor) out.push('(h) ' + name(el) + ' font ' + fs + 'px (floor ' + floor + '): ' + el.textContent.trim().slice(0, 30)) }
   return [...new Set(out)].join(' | ')
 })()`
 
@@ -359,7 +364,8 @@ try {
     await click('[data-key="step-review"]')
     await waitFor(`!!document.querySelector('[data-key="run"]')`, "review")
     const review = await text('[data-key="step-panel"]')
-    for (const part of ["London + Frankfurt", "NVIDIA GB200 NVL72", "ServiceFabric", "TARGET"]) if (!review.includes(part)) throw new Error(`Review lacks ${part}: ${review}`)
+    /* "1,350" is the three-star target; the word TARGET itself is tucked away on the compact iPad board. */
+    for (const part of ["London + Frankfurt", "NVIDIA GB200 NVL72", "ServiceFabric", "1,350"]) if (!review.includes(part)) throw new Error(`Review lacks ${part}: ${review}`)
     const greens = await evaluate(`document.querySelectorAll('.step-panel .eco-bar.detail .eco-part.green').length`)
     if (greens !== 5) throw new Error(`The thoughtful shopper build should light all five parts green, saw ${greens}`)
     await bothModes("5-review")
