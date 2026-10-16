@@ -200,12 +200,15 @@ free tier shows an interstitial page on the first visit.
 ## One URL on workers.dev
 
 One Cloudflare Worker, `tokenquest` (`deploy/intake-worker/`), serves the whole game **and** its `/api`
-on the same origin, with the player sheet kept in a separate **private** GitHub repo:
+on the same origin, behind one team password (see "Team access"), with the player sheet kept in a
+separate **private** GitHub repo:
 
 ```
 https://tokenquest.<account-subdomain>.workers.dev
+  every request first passes the team-access gate (session cookie, else the login page)
   /, /js/*, /css/*, /assets/*, /404.html   Workers Static Assets, uploaded from dist/ (npm run build:worker)
-  /api/attempt  /api/league  /api/health    the Worker script (run_worker_first = ["/api/*"])
+  /login  /logout                          the gate (Worker secrets ACCESS_PASSWORD, SESSION_SECRET)
+  /api/attempt  /api/league  /api/health    the Worker script (run_worker_first = true)
         |  GitHub Contents API, fine-grained PAT (Worker secret GITHUB_TOKEN)
         v
   private repo punkrockquantum/token-quest-players
@@ -225,17 +228,21 @@ routes = [{ pattern = "tokenquest.example.com", custom_domain = true }]
 
 Because the game and the API share an origin, `js/sync.js` uses its same-origin default (no
 `INTAKE_URL`, no CORS) and the results screen's `ATTEMPT n · BEST · RANK` line comes from the Worker,
-exactly as at the booth. The GitHub Pages copy at https://punkrockquantum.github.io/JRRToken/ keeps
-working as the local-league demo; it can also post to the Worker's API if its build gets
-`INTAKE_URL` (see "Pages too" below).
+exactly as at the booth. The GitHub Pages copy at https://punkrockquantum.github.io/JRRToken/ is a
+static host, so it cannot be put behind the password; once the Worker is live, switch Pages off or
+make it a redirect (see "Team access").
 
 ### Finish it (two logins: Cloudflare and GitHub)
 
 ```sh
-# 1. Cloudflare login + the one Worker secret: the fine-grained PAT for the private players repo
+# 1. Cloudflare login + the three Worker secrets (typed or piped in; none of them lives in a file or commit)
+cd deploy/intake-worker && npx wrangler login
+npx wrangler secret put ACCESS_PASSWORD                      # the team password colleagues type to play
+openssl rand -hex 32 | npx wrangler secret put SESSION_SECRET  # random key that signs the 14-day session cookie
+npx wrangler secret put GITHUB_TOKEN                         # fine-grained PAT for the private players repo
 #    (https://github.com/settings/personal-access-tokens/new -> Only select repositories ->
 #     token-quest-players -> Repository permissions -> Contents: Read and write; expire it after the event)
-cd deploy/intake-worker && npx wrangler login && npx wrangler secret put GITHUB_TOKEN && cd ../..
+cd ../..
 
 # 2. Build dist/ (same-origin, no base path) and deploy the game + API as one Worker
 npm run deploy:worker                     # prints https://tokenquest.<account-subdomain>.workers.dev
@@ -243,8 +250,10 @@ npm run deploy:worker                     # prints https://tokenquest.<account-s
 # 3. Check it
 npx wrangler whoami                       # account name, id and the account subdomain
 curl -s https://tokenquest.<account-subdomain>.workers.dev/api/health
-#    -> {"ok":true,"service":"tokenquest","configured":true,"repo":"punkrockquantum/token-quest-players",...}
-#       "configured":false means step 1's secret is missing; a 503 means the token or repo name is wrong
+#    -> {"ok":true,"service":"tokenquest","gate":true,"configured":true}
+#       "gate":false means ACCESS_PASSWORD is missing (the game is open);
+#       "configured":false means GITHUB_TOKEN is missing (games play, the sheet waits)
+curl -sI https://tokenquest.<account-subdomain>.workers.dev/ | head -1     # HTTP/2 200, the login page
 ```
 
 Play one game at the URL and watch `PLAYERS.md` in the private repo update (the first line reads
@@ -267,22 +276,64 @@ gh secret set CLOUDFLARE_ACCOUNT_ID --repo punkrockquantum/JRRToken --body <32-h
 gh workflow run deploy-worker.yml --repo punkrockquantum/JRRToken --ref cursor/token-quest-datacenter-game
 ```
 
-The Worker's own secret (`GITHUB_TOKEN`) is set once with `wrangler secret put` and survives every deploy;
-`wrangler.toml` carries only plain variables (`PLAYERS_REPO`, `PLAYERS_BRANCH`, `ALLOWED_ORIGINS`, rate
-limits). The workflow pins `wranglerVersion: "4.151.1"`; bump it together with the local `npx wrangler@4`.
+The Worker's secrets (`ACCESS_PASSWORD`, `SESSION_SECRET`, `GITHUB_TOKEN`) are set once with `wrangler
+secret put` and survive every deploy; `wrangler.toml` carries only plain variables (`PLAYERS_REPO`,
+`PLAYERS_BRANCH`, `ALLOWED_ORIGINS`, rate limits). The workflow pins `wranglerVersion: "4.151.1"`; bump it
+together with the local `npx wrangler@4`.
+
+### Team access
+
+Colleagues go to the URL, type the team password once, and play. The password is checked on the server
+(the Worker), never in the browser's JavaScript, so nothing in `dist/` or this repo reveals it.
+
+- **Login.** Any request without a valid session cookie gets a small 8-bit login page instead of the game
+  (`200`, inline CSS only, one password field, **ENTER**). The form posts to `/login` on the same origin;
+  the Worker compares the password in constant time and, if it matches, sets `tq_session` (`HttpOnly`,
+  `Secure`, `SameSite=Lax`, `Path=/`, 14 days) and redirects to `/`. The cookie is
+  `base64url(expiry) + "." + HMAC-SHA256(expiry, SESSION_SECRET)`: nothing to look up, nothing stored, and
+  it cannot be forged or extended without the secret. A wrong password gets the page back with
+  "Wrong password" after a one-second delay, and each IP gets 10 tries a minute (`RATE_LIMIT_LOGINS_PER_MINUTE`;
+  the page then says "Too many tries"). `GET /logout` clears the cookie.
+- **The API is behind the same cookie.** `/api/attempt` and `/api/league` answer `401 unauthorised` without
+  it, so the public Internet cannot post rows to the sheet or read the league. The one exception is
+  `GET /api/health`, which stays public but only says `{ ok, service, gate, configured }` (no repo name, no
+  counts) until the caller is logged in. The game's own `fetch` calls carry the cookie automatically.
+- **Two secrets, no files.** `ACCESS_PASSWORD` is the team password; `SESSION_SECRET` is a random key
+  (`openssl rand -hex 32`) that signs the cookies. Set both with `npx wrangler secret put <NAME>` from
+  `deploy/intake-worker/` (the value is typed or piped on the terminal). Neither is written into
+  `wrangler.toml`, the workflow, a test or any document in this repo; in docs it is just "the team
+  password". If `SESSION_SECRET` is ever missing the Worker derives a signing key from the password so the
+  gate never silently opens; `/api/health` then shows `"session":"derived"` as a reminder to set it.
+- **Rotation.** A new password: `npx wrangler secret put ACCESS_PASSWORD` (takes effect at once; existing
+  sessions stay valid until they expire). Log everyone out: `openssl rand -hex 32 | npx wrangler secret put
+  SESSION_SECRET` (every cookie becomes invalid immediately). Open the game to the world (local dev,
+  or after the event): `npx wrangler secret delete ACCESS_PASSWORD`; health then reports `"gate":false`.
+- **What it is not.** One shared password is a team door, not per-person authentication: anyone the
+  password is passed on to can play, and the limiter is per IP per isolate (a venue's Wi-Fi shares one
+  IP, so a colleague who mistypes ten times waits a minute). For a hard cap or named logins put the Worker
+  behind Cloudflare Access instead.
+- **GitHub Pages cannot be gated.** https://punkrockquantum.github.io/JRRToken/ is a static copy of the
+  same game: no server, so no password, and the gate's `SameSite=Lax` cookie never travels there, so its
+  posts to the Worker's API are refused (`401`) even with `INTAKE_URL` set. Once the Worker is live either
+  disable Pages (repo → Settings → Pages → Source: None) or make `pages.yml` publish a one-line
+  `index.html` with `<meta http-equiv="refresh" content="0; url=https://tokenquest.<account-subdomain>.workers.dev/">`
+  and nothing else, so old links land on the gated game.
+- **The kiosk laptop is unchanged.** `server/**` has no gate: the booth server serves the game to the
+  venue's local network exactly as before.
 
 ### How dist/ is served
 
 - `npm run build:worker` = `node scripts/build-static.mjs --base= --intake=`: the normal static build with
   no base path and no intake injection, into `dist/` (git-ignored). `wrangler.toml` points `[assets]
   directory` at `../../dist`, `binding = "ASSETS"`, `not_found_handling = "404-page"` (unknown paths get
-  `dist/404.html` with a real 404, so the staff panel's probes stay honest) and
-  `run_worker_first = ["/api/*"]` (only the API reaches the script; the script's own fallback for other
-  paths is `env.ASSETS.fetch(request)`).
-- `dist/_headers` (from `deploy/static/_headers`) is parsed by Workers Static Assets, not uploaded: HTML,
-  JS and CSS are `no-store` (a redeploy shows on the next load) and the fonts are cached for a year.
-  Workers add `ETag` and `Cache-Control: public, max-age=0, must-revalidate` where `_headers` says
-  nothing. These rules apply to asset responses only; the API sets its own `no-store`.
+  `dist/404.html` with a real 404, so the staff panel's probes stay honest) and `run_worker_first = true`
+  (every request passes through the script so the gate can check the cookie first; the script then hands
+  the request to `env.ASSETS.fetch(request)`).
+- Cache rules: because the script runs first, Workers Static Assets skips `dist/_headers`, so the Worker
+  applies the same rules itself: HTML, JS and CSS are `no-store` (a redeploy shows on the next load), the
+  fonts are cached for a year, every asset gets `X-Content-Type-Options: nosniff` and
+  `Referrer-Policy: no-referrer`, and the `ETag` from the asset server is kept. The API and the login page
+  set their own `no-store`.
 - Validate the config without deploying: `npm run build:worker && npx wrangler@4 deploy --dry-run
   --outdir /tmp/tq-wrangler-dry -c deploy/intake-worker/wrangler.toml` (no login needed).
 
@@ -321,22 +372,26 @@ Updated 2026-10-16T14:12:03.000Z · 2 players · 3 games
 | 2026-10-16 14:05 | Ada Lovelace | ada@example.com | Chat + RAG | 900 |
 ```
 
-- **Pages too (optional).** The GitHub Pages copy collects nothing unless its build gets the Worker's
-  URL: `gh variable set INTAKE_URL --repo punkrockquantum/JRRToken --body https://tokenquest.<account-subdomain>.workers.dev`
+- **Pages too (only while the gate is off).** The GitHub Pages copy collects nothing unless its build gets
+  the Worker's URL: `gh variable set INTAKE_URL --repo punkrockquantum/JRRToken --body https://tokenquest.<account-subdomain>.workers.dev`
   then re-run `pages.yml`. `scripts/build-static.mjs` then injects
   `<script>window.TOKEN_QUEST_INTAKE = "..."</script>` into `dist/index.html` and `js/sync.js` posts
   cross-origin to the Worker, whose `ALLOWED_ORIGINS` already lists `https://punkrockquantum.github.io`.
-  `gh variable delete INTAKE_URL` + re-run switches it off again. The kiosk laptop is untouched either way:
-  `js/sync.js` only leaves its own origin when `window.TOKEN_QUEST_INTAKE` is defined, and only the
-  static build ever defines it.
+  With `ACCESS_PASSWORD` set those posts are refused (`401`: the session cookie does not cross sites), so
+  with the gate on, redirect or disable Pages instead (see "Team access"). `gh variable delete INTAKE_URL`
+  + re-run switches the injection off again. The kiosk laptop is untouched either way: `js/sync.js` only
+  leaves its own origin when `window.TOKEN_QUEST_INTAKE` is defined, and only the static build ever
+  defines it.
 
-Optional smoke test straight at the API (then delete the row from `players.json` in the private repo; the
-next real game rewrites `PLAYERS.md`):
+Optional smoke test straight at the API (log in first so curl has the cookie; then delete the row from
+`players.json` in the private repo; the next real game rewrites `PLAYERS.md`):
 
 ```sh
-curl -s -X POST https://tokenquest.<account-subdomain>.workers.dev/api/attempt \
-  -H 'Content-Type: application/json' \
+URL=https://tokenquest.<account-subdomain>.workers.dev
+curl -s -o /dev/null -c /tmp/tq.jar -X POST "$URL/login" -H "Origin: $URL" --data-urlencode "password=$(cat)"   # type it, then Ctrl-D
+curl -s -b /tmp/tq.jar -X POST "$URL/api/attempt" -H 'Content-Type: application/json' \
   -d '{"name":"Test Player","email":"test@example.com","score":1,"consent":true,"consentAt":"2026-10-16T12:00:00Z"}'
+rm /tmp/tq.jar
 ```
 
 To take it all down: `npx wrangler delete -c deploy/intake-worker/wrangler.toml`, delete or archive the
@@ -351,15 +406,15 @@ Cloudflare API token.
   the PAT.
 - The kiosk laptop's `data/` and Desktop workbook stay completely separate from this sheet: the booth
   posts to its own server, the hosted game posts to the Worker, and nothing merges them.
-- The URL is public, so the limits matter: JSON only, 16 KB body cap, `consent` must be literally `true`,
-  a browser `Origin` other than the site's own must be on `ALLOWED_ORIGINS`, and each IP gets a token
-  bucket (20 attempts and 60 reads per minute by default). That bucket lives in the Worker's memory, so
-  it is per IP *per isolate*: good enough against a careless script, not a hard cap. For a hard cap add a
-  WAF rate-limiting rule for the Worker in the Cloudflare dashboard. Remember a venue's Wi-Fi shares one
-  public IP.
-- Anyone who finds the URL can still post a valid-looking row; junk is deleted by editing `players.json`
-  in the private repo. The same attempt re-posted by the browser's retry queue (same email, `playedAt`
-  and score) is recognised and not duplicated.
+- The URL is public, so the limits matter: the team password in front of everything but `/api/health`,
+  JSON only, 16 KB body cap, `consent` must be literally `true`, a browser `Origin` other than the site's
+  own must be on `ALLOWED_ORIGINS`, and each IP gets a token bucket (20 attempts, 60 reads and 10 login
+  tries per minute by default). That bucket lives in the Worker's memory, so it is per IP *per isolate*:
+  good enough against a careless script, not a hard cap. For a hard cap add a WAF rate-limiting rule for
+  the Worker in the Cloudflare dashboard. Remember a venue's Wi-Fi shares one public IP.
+- Anyone who has the team password can still post a valid-looking row; junk is deleted by editing
+  `players.json` in the private repo. The same attempt re-posted by the browser's retry queue (same email,
+  `playedAt` and score) is recognised and not duplicated.
 - GitHub's Contents API gives 5,000 requests an hour to the token; a game costs two to four. The free
   Workers plan allows 100,000 requests a day and 10 ms of CPU per request, comfortable for thousands of
   games; `players.json` grows about 400 bytes per game.
@@ -367,7 +422,7 @@ Cloudflare API token.
 ### Verify locally
 
 ```sh
-npm run test:intake                                   # tests/intake.test.js + tests/sync.test.js
+npm run test:intake                                   # tests/intake.test.js + tests/gate.test.js + tests/sync.test.js
 for f in deploy/intake-worker/src/*.mjs; do node --check "$f"; done
 npm run build:worker && ! grep -q TOKEN_QUEST_INTAKE dist/index.html   # same-origin build, nothing injected
 npx wrangler@4 deploy --dry-run --outdir /tmp/tq-wrangler-dry -c deploy/intake-worker/wrangler.toml

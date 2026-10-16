@@ -1,16 +1,19 @@
 # Token Quest on one URL: this Worker serves the game (static assets built into ../../dist by
 # `npm run build:worker`) and the /api/* JSON routes on the same origin,
-# https://tokenquest.<account-subdomain>.workers.dev
+# https://tokenquest.<account-subdomain>.workers.dev, behind a team password.
 #
-# Deploy from the repo root (the first time: `cd deploy/intake-worker && npx wrangler login &&
-# npx wrangler secret put GITHUB_TOKEN && cd ../..`):
+# Deploy from the repo root. The first time, log in and set the three secrets (never in files):
+#   cd deploy/intake-worker && npx wrangler login
+#   npx wrangler secret put ACCESS_PASSWORD        # the team password colleagues type to play
+#   openssl rand -hex 32 | npx wrangler secret put SESSION_SECRET   # signs the 14-day session cookie
+#   npx wrangler secret put GITHUB_TOKEN           # fine-grained PAT for the private players repo
+#   cd ../.. && npm run deploy:worker              # = npm run build:worker && npx wrangler deploy -c deploy/intake-worker/wrangler.toml
 #
-#   npm run deploy:worker        # = npm run build:worker && npx wrangler deploy -c deploy/intake-worker/wrangler.toml
-#
-# Everything here is a plain variable (no secrets in this file). Full steps: HOSTING.md, section
-# "One URL on workers.dev". workers.dev names are always <worker>.<account-subdomain>.workers.dev;
-# a bare https://tokenquest.workers.dev is not something Cloudflare hands out. To put the game on a
-# domain you own instead, add (after the zone is on Cloudflare):
+# Everything here is a plain variable (no secrets in this file). Full steps: HOSTING.md, sections
+# "One URL on workers.dev" and "Team access". workers.dev names are always
+# <worker>.<account-subdomain>.workers.dev; a bare https://tokenquest.workers.dev is not something
+# Cloudflare hands out. To put the game on a domain you own instead, add (after the zone is on
+# Cloudflare):
 #   routes = [{ pattern = "tokenquest.example.com", custom_domain = true }]
 name = "tokenquest"
 main = "src/worker.mjs"
@@ -24,9 +27,10 @@ directory = "../../dist"
 binding = "ASSETS"
 # Unknown paths get dist/404.html with a 404 status (so the staff panel's /api probes stay honest).
 not_found_handling = "404-page"
-# Only the API reaches the script; every other request is answered straight from the assets, with
-# the cache rules in dist/_headers (HTML/JS/CSS no-store, fonts one year).
-run_worker_first = ["/api/*"]
+# Every request goes through the script so the team-access gate can check the session cookie before
+# any game file is served. The script applies the cache rules itself (HTML/JS/CSS no-store, fonts one
+# year), because Workers skip dist/_headers when the script runs first.
+run_worker_first = true
 
 [vars]
 # The PRIVATE repo that holds players.json and PLAYERS.md (names + emails live only there).
@@ -39,6 +43,8 @@ ALLOWED_ORIGINS = "https://punkrockquantum.github.io, http://127.0.0.1:8099"
 # the attempt limit comfortably above "games per minute at the booth".
 RATE_LIMIT_ATTEMPTS_PER_MINUTE = "20"
 RATE_LIMIT_READS_PER_MINUTE = "60"
+# Login tries per IP per minute (each wrong password also costs the caller a one-second delay).
+RATE_LIMIT_LOGINS_PER_MINUTE = "10"
 
 # Optional: persisted Workers Logs in the dashboard (`npx wrangler tail` streams them live without
 # this). The Worker never logs names or email addresses, only method, path, status and timing.

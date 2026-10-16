@@ -12,7 +12,7 @@
     "export": "node scripts/serve.mjs --export",
     "test": "node --test",
     "test:server": "node --test tests/server.test.js tests/xlsx.test.js",
-    "test:intake": "node --test tests/intake.test.js tests/sync.test.js",
+    "test:intake": "node --test tests/intake.test.js tests/gate.test.js tests/sync.test.js",
     "build:worker": "node scripts/build-static.mjs --base= --intake=",
     "deploy:worker": "npm run build:worker && npx --yes wrangler@4 deploy -c deploy/intake-worker/wrangler.toml",
     "balance": "node scripts/balance.mjs",

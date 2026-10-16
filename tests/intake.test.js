@@ -341,7 +341,7 @@ test("every accepted POST commits players.json and PLAYERS.md before answering o
   assert.ok(!JSON.stringify(league).includes("@"), "the league never carries emails")
 
   const health = await (await get(handler, "/api/health")).json()
-  assert.deepEqual(health, { ok: true, service: SERVICE, configured: true, repo: REPO, branch: "main", sheet: PLAYERS_MD, attempts: 5, players: 3 })
+  assert.deepEqual(health, { ok: true, service: SERVICE, gate: false, configured: true, session: null, repo: REPO, branch: "main", sheet: PLAYERS_MD, attempts: 5, players: 3 })
 })
 
 test("a 409 from the Contents API (someone else wrote first) re-reads, re-applies and succeeds", async () => {
@@ -570,7 +570,7 @@ test("one origin: the game is served from env.ASSETS, /api/* by the handler, and
   const health = await handler.fetch(new Request(`${INTAKE}/api/health`), environment)
   assert.equal(health.status, 200)
   assert.equal(health.headers.get("Content-Type"), "application/json; charset=utf-8")
-  assert.deepEqual(await health.json(), { ok: true, service: SERVICE, configured: true, repo: REPO, branch: "main", sheet: PLAYERS_MD, attempts: 0, players: 0 })
+  assert.deepEqual(await health.json(), { ok: true, service: SERVICE, gate: false, configured: true, session: null, repo: REPO, branch: "main", sheet: PLAYERS_MD, attempts: 0, players: 0 })
   assert.equal((await handler.fetch(new Request(`${INTAKE}/api/nothing`), environment)).status, 404)
   assert.equal((await (await handler.fetch(new Request(`${INTAKE}/api/nothing`), environment)).json()).error, "not_found")
   const noExport = await handler.fetch(new Request(`${INTAKE}/api/export.xlsx`), environment)

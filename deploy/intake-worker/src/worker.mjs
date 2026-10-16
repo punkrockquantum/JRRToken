@@ -3,37 +3,49 @@
  * from dist/, binding ASSETS) and, on the same origin, the small JSON API that keeps the player
  * sheet in a separate PRIVATE GitHub repo (players.json + PLAYERS.md).
  *
- * Routing (wrangler.toml): `run_worker_first = ["/api/*"]`, so only /api/* reaches this script;
- * every other path is answered straight from the uploaded assets (dist/404.html for unknown paths,
- * dist/_headers for cache rules). The ASSETS fallback below only matters when the script is run
- * first for other paths (or under `wrangler dev`): it just hands the request to the asset server.
+ * Routing (wrangler.toml): `run_worker_first = true`, so EVERY request passes through this script:
+ * the team-access gate first, then either the uploaded assets (env.ASSETS: index.html, js/, css/,
+ * assets/, dist/404.html for unknown paths) or the /api routes. The script re-applies the cache
+ * rules from deploy/static/_headers itself, because Workers skip _headers when the script runs first.
+ *
+ * Team access (gate.mjs): when the ACCESS_PASSWORD secret is set, anything but /api/health needs a
+ * valid `tq_session` cookie. Without one, GET/HEAD requests get the 8-bit login page (200) and /api
+ * requests get 401 unauthorised. POST /login (same-origin form, per-IP limited, constant-time
+ * compare, 1 s delay on a miss) sets the cookie (HttpOnly, Secure, SameSite=Lax, 14 days) and
+ * redirects to /; GET /logout clears it. Without ACCESS_PASSWORD the game is open (local dev).
  *
  * API (same contract as the kiosk server, see js/sync.js in the game repo):
  *   POST /api/attempt   JSON body -> { ok, attempts, best, latest, rank, players, newBest }
- *                       400 invalid_attempt · 413 too_large · 415 unsupported_media_type · 429 rate_limited
- *                       503 store_unavailable (the sheet could not be written: the client queues and retries)
- *                       503 not_configured    (no GITHUB_TOKEN yet: same client behaviour, nothing is lost)
+ *                       400 invalid_attempt · 401 unauthorised · 413 too_large · 415 unsupported_media_type
+ *                       429 rate_limited · 503 store_unavailable (the sheet could not be written: the client
+ *                       queues and retries) · 503 not_configured (no GITHUB_TOKEN yet: same client behaviour)
  *   GET  /api/league    { ok, players: [{ rank, name, attempts, best, latest, bestUseCase, fteEquivalent,
  *                         firstPlayedAt, lastPlayedAt }], attempts }      (never includes emails)
- *   GET  /api/health    { ok, service, configured, repo, branch, sheet, attempts, players }
- *                       200 with configured:false while the secret is missing; 503 when GitHub is unreachable
+ *   GET  /api/health    public: { ok, service, gate, configured }; with a session also
+ *                       { session, repo, branch, sheet, attempts, players }; 503 when GitHub is unreachable
  *
  * Every accepted attempt is committed to players.json AND PLAYERS.md before the 200 goes out:
  * nothing is deferred to ctx.waitUntil, so "ok" means "it is on the sheet".
  *
  * Origins: the game itself is same-origin, so it needs no CORS. Other browser origins (the GitHub
- * Pages copy, a local preview) are allowed only when listed in ALLOWED_ORIGINS.
+ * Pages copy, a local preview) are allowed only when listed in ALLOWED_ORIGINS, and only while the
+ * gate is off: the session cookie is SameSite=Lax, so a cross-site page can never carry it.
  *
- * Environment (wrangler.toml [vars] + `wrangler secret put GITHUB_TOKEN`):
+ * Environment (wrangler.toml [vars] + `wrangler secret put ...`; secrets never live in files):
+ *   ACCESS_PASSWORD                   secret; the team password (gate on when set)
+ *   SESSION_SECRET                    secret; random 32+ bytes that sign the session cookie
  *   GITHUB_TOKEN                      secret; fine-grained PAT, Contents read/write on PLAYERS_REPO only
  *   PLAYERS_REPO                      "owner/repo" of the private players repo
  *   PLAYERS_BRANCH                    default "main"
  *   ALLOWED_ORIGINS                   comma-separated extra browser origins allowed to call the API
  *   RATE_LIMIT_ATTEMPTS_PER_MINUTE    per IP, default 20     RATE_LIMIT_READS_PER_MINUTE  per IP, default 60
+ *   RATE_LIMIT_LOGINS_PER_MINUTE      per IP, default 10
  *
- * Plain ESM on Web APIs only, so Node can import it for tests (tests/intake.test.js) and
- * `node --check` works on every file here. Nothing in this file logs names or email addresses.
+ * Plain ESM on Web APIs only, so Node can import it for tests (tests/intake.test.js,
+ * tests/gate.test.js) and `node --check` works on every file here. Nothing in this file logs names,
+ * email addresses, passwords or cookies.
  */
+import { LOGIN_PAGE_HEADERS, SESSION_COOKIE, clearSessionCookie, constantTimeEqual, createSession, loginPage, parseCookies, sessionCookie, verifySession } from "./gate.mjs"
 import { createContentsClient } from "./github.mjs"
 import { aggregatePlayers, findPlayer, publicLeague } from "./players.mjs"
 import { createRateLimiter } from "./ratelimit.mjs"
@@ -41,10 +53,18 @@ import { PLAYERS_MD, StoreUnavailableError, createPlayersStore } from "./store.m
 import { validateAttempt } from "./validate.mjs"
 
 export const BODY_LIMIT = 16 * 1024
+export const LOGIN_BODY_LIMIT = 4 * 1024
+export const WRONG_PASSWORD_DELAY_MS = 1000
 export const DEFAULT_ALLOWED_ORIGINS = "https://punkrockquantum.github.io"
 export const DEFAULT_ATTEMPTS_PER_MINUTE = 20
 export const DEFAULT_READS_PER_MINUTE = 60
+export const DEFAULT_LOGINS_PER_MINUTE = 10
 export const SERVICE = "tokenquest"
+
+/** Cache rules for the game files, the same as deploy/static/_headers (which Workers skip when the script runs first). */
+const ASSET_HEADERS = { "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer" }
+const FONT_CACHE = "public, max-age=31536000, immutable"
+const PAGE_CACHE = "no-store"
 
 class HttpError extends Error {
   constructor(status, code, message, headers = {}) {
@@ -103,6 +123,38 @@ function json(status, payload, headers = {}) {
 function positiveInt(value, fallback) {
   const n = Number(value)
   return Number.isInteger(n) && n > 0 ? n : fallback
+}
+
+function redirect(location, headers = {}) {
+  return new Response(null, { status: 303, headers: { Location: location, "Cache-Control": "no-store", ...headers } })
+}
+
+function html(status, body, headers = {}) {
+  return new Response(body, { status, headers: { ...LOGIN_PAGE_HEADERS, ...headers } })
+}
+
+/**
+ * The team password and the cookie-signing secret. The gate is on exactly when ACCESS_PASSWORD is a
+ * non-empty secret. Without SESSION_SECRET the signing key is derived from the password (so forgetting
+ * the second secret never opens the game); health reports which one is in use.
+ */
+export function gateConfig(env) {
+  const password = typeof env.ACCESS_PASSWORD === "string" ? env.ACCESS_PASSWORD.replace(/\r?\n$/, "") : ""
+  const explicit = typeof env.SESSION_SECRET === "string" ? env.SESSION_SECRET.trim() : ""
+  return {
+    enabled: password.length > 0,
+    password,
+    secret: explicit || `tokenquest-derived-session-key:${password}`,
+    session: explicit ? "secret" : "derived",
+  }
+}
+
+/** Re-serves an asset response with the cache and hardening headers the game expects. */
+function withAssetHeaders(response, pathname) {
+  const headers = new Headers(response.headers)
+  for (const [name, value] of Object.entries(ASSET_HEADERS)) headers.set(name, value)
+  headers.set("Cache-Control", /\.(woff2?|ttf|otf)$/i.test(pathname) ? FONT_CACHE : PAGE_CACHE)
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
 /** Reads at most `limit` bytes; anything longer is refused before it is buffered. */
@@ -185,6 +237,7 @@ export function createHandler(deps = {}) {
       limiters = {
         attempt: createRateLimiter({ perMinute: positiveInt(env.RATE_LIMIT_ATTEMPTS_PER_MINUTE, DEFAULT_ATTEMPTS_PER_MINUTE), now: clock }),
         read: createRateLimiter({ perMinute: positiveInt(env.RATE_LIMIT_READS_PER_MINUTE, DEFAULT_READS_PER_MINUTE), now: clock }),
+        login: createRateLimiter({ perMinute: positiveInt(env.RATE_LIMIT_LOGINS_PER_MINUTE, DEFAULT_LOGINS_PER_MINUTE), now: clock }),
       }
     }
     const ip = request.headers.get("CF-Connecting-IP") || "unknown"
@@ -192,7 +245,56 @@ export function createHandler(deps = {}) {
     if (!verdict.ok) throw new HttpError(429, "rate_limited", "Too many requests from this network; try again in a moment.", { "Retry-After": String(verdict.retryAfter) })
   }
 
-  async function route(request, env, url, cors) {
+  async function hasSession(request, gate) {
+    if (!gate.enabled) return true
+    const cookie = parseCookies(request.headers.get("Cookie")).get(SESSION_COOKIE)
+    return cookie ? verifySession(cookie, gate.secret, now().getTime()) : false
+  }
+
+  /** POST /login: same-origin form post, per-IP limited, constant-time compare, 1 s delay on a miss. */
+  async function login(request, env, url, gate) {
+    const origin = normaliseOrigin(request.headers.get("Origin"))
+    if (origin !== null && origin !== url.origin.toLowerCase()) throw new HttpError(403, "cross_origin", "Log in from the game's own page.")
+    try {
+      rateLimit(env, "login", request)
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 429) return html(429, loginPage({ error: "Too many tries. Wait a minute and try again." }), error.headers)
+      throw error
+    }
+    const type = String(request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase()
+    if (type !== "application/x-www-form-urlencoded") throw new HttpError(415, "unsupported_media_type", "Submit the login form.")
+    const form = new URLSearchParams(new TextDecoder().decode(await readBody(request, LOGIN_BODY_LIMIT)))
+    const given = form.get("password") ?? ""
+    if (given && (await constantTimeEqual(given, gate.password))) {
+      const value = await createSession(gate.secret, { now: now().getTime() })
+      return redirect("/", { "Set-Cookie": sessionCookie(value) })
+    }
+    if (sleep) await sleep(WRONG_PASSWORD_DELAY_MS)
+    else await new Promise((resolve) => setTimeout(resolve, WRONG_PASSWORD_DELAY_MS))
+    return html(401, loginPage({ error: "Wrong password" }))
+  }
+
+  /**
+   * The gate, before anything else. Resolves a Response to send instead, or null when the request may
+   * go on to the assets or the API. /api/health stays public (it carries no personal data).
+   */
+  async function gateCheck(request, env, url, gate) {
+    const method = request.method.toUpperCase()
+    const { pathname } = url
+    if (pathname === "/logout") return redirect("/", { "Set-Cookie": clearSessionCookie() })
+    if (pathname === "/login") {
+      if (!gate.enabled) return redirect("/")
+      if (method === "POST") return login(request, env, url, gate)
+      if (method === "GET" || method === "HEAD") return (await hasSession(request, gate)) ? redirect("/") : html(200, loginPage())
+      throw new HttpError(405, "method_not_allowed", "Use GET or POST here.", { Allow: "GET, POST" })
+    }
+    if (!gate.enabled || pathname === "/api/health" || (await hasSession(request, gate))) return null
+    if (pathname.startsWith("/api/")) throw new HttpError(401, "unauthorised", "Log in to Token Quest first, then play again.")
+    if (method === "GET" || method === "HEAD") return html(200, loginPage())
+    throw new HttpError(401, "unauthorised", "Log in to Token Quest first.")
+  }
+
+  async function route(request, env, url, cors, access) {
     const method = request.method.toUpperCase()
     const { pathname } = url
 
@@ -234,7 +336,10 @@ export function createHandler(deps = {}) {
       if (method !== "GET") throw new HttpError(405, "method_not_allowed", "Use GET here.", { Allow: "GET, OPTIONS" })
       rateLimit(env, "read", request)
       const { repo, branch, token } = storeConfig(env)
-      const base = { ok: true, service: SERVICE, configured: Boolean(repo && token), repo: repo || null, branch, sheet: PLAYERS_MD }
+      const summary = { ok: true, service: SERVICE, gate: access.gate, configured: Boolean(repo && token) }
+      // Public (no session): just the flags, nothing about where the sheet lives or how full it is.
+      if (access.gate && !access.authorised) return json(200, summary, cors)
+      const base = { ...summary, session: access.gate ? access.session : null, repo: repo || null, branch, sheet: PLAYERS_MD }
       if (!base.configured) return json(200, { ...base, attempts: null, players: null, message: "The player sheet is not configured yet: set PLAYERS_REPO and the GITHUB_TOKEN secret." }, cors)
       const store = storeFor(env)
       await store.ping()
@@ -255,18 +360,16 @@ export function createHandler(deps = {}) {
     throw new HttpError(404, "not_found", "Nothing here but the API.")
   }
 
-  /** True when the request is for the game files rather than the API (the same split as run_worker_first = ["/api/*"]) and an assets binding exists. */
+  /** True when the request is for the game files rather than the API (everything outside /api/) and an assets binding exists. */
   function isAssetRequest(url, env) {
     return !url.pathname.startsWith("/api/") && typeof env?.ASSETS?.fetch === "function"
   }
 
   return {
     async fetch(request, env = {}, _ctx) {
-      const url = new URL(request.url)
-      // The game itself: static assets (index.html, js/, css/, assets/, 404.html) served as uploaded.
-      if (isAssetRequest(url, env)) return env.ASSETS.fetch(request)
-
       const started = Date.now()
+      const url = new URL(request.url)
+      const gate = gateConfig(env)
       const origin = request.headers.get("Origin")
       const requestOrigin = normaliseOrigin(origin)
       const sameOrigin = requestOrigin !== null && requestOrigin === url.origin.toLowerCase()
@@ -275,8 +378,16 @@ export function createHandler(deps = {}) {
       const cors = crossOriginOk ? corsHeaders(origin) : {}
       let response
       try {
-        if (origin !== null && !sameOrigin && !crossOriginOk) throw new HttpError(403, "cross_origin", "This origin may not use the Token Quest API.")
-        response = await route(request, env, url, cors)
+        const gated = await gateCheck(request, env, url, gate)
+        if (gated) {
+          response = gated
+        } else if (isAssetRequest(url, env)) {
+          // The game itself: static assets (index.html, js/, css/, assets/, 404.html) served as uploaded.
+          return withAssetHeaders(await env.ASSETS.fetch(request), url.pathname)
+        } else {
+          if (origin !== null && !sameOrigin && !crossOriginOk) throw new HttpError(403, "cross_origin", "This origin may not use the Token Quest API.")
+          response = await route(request, env, url, cors, { gate: gate.enabled, authorised: gate.enabled ? await hasSession(request, gate) : true, session: gate.session })
+        }
       } catch (error) {
         if (error instanceof HttpError) {
           response = json(error.status, { ok: false, error: error.code, message: error.message }, { ...cors, ...error.headers })
