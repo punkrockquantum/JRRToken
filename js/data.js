@@ -402,9 +402,9 @@ export const NETWORKS = [
     gbps: 10,
     orcaLocal: true,
     orcaRetain: 0.7,
-    does: "Private on-demand connections to clouds, partners, other metros, and Digital Internet. You configure it.",
+    does: "Private on-demand connections to clouds, partners, other metros, and Digital Internet. Faster and steadier than peering, far faster than the public internet. You configure it.",
     learn:
-      "Digital Realty's private interconnection fabric: you pick a 10G or 100G port, a destination, a 50 Mbps to 100 Gbps connection, Layer 2 or Layer 3, and redundancy; a new port takes up to 15 days (published SLA) and connections go live in minutes, for about $1,200 a month per 10G port plus $400 to $1,500 a month per connection by bandwidth (estimate).",
+      "Digital Realty's private software-defined interconnection: you pick a 10G or 100G port, a destination, a 50 Mbps to 100 Gbps connection, Layer 2 or Layer 3, and redundancy; a new port takes up to 15 days (published SLA) and connections go live in minutes, for about $1,200 a month per 10G port plus $400 to $1,500 a month per connection by bandwidth (estimate). It rides lit fibre with almost no jitter and no loss: quicker than peering at an exchange and at least twice as quick as the public internet at any distance (game physics).",
   },
   {
     id: "mcp",
@@ -446,9 +446,9 @@ export const NETWORKS = [
     gbps: 10,
     orcaLocal: false,
     orcaRetain: 0.35,
-    does: "Transit from an ISP. Cheap per month, but slow, jittery, lossy, and with no SLA.",
+    does: "Transit from an ISP. Cheap per month, but the slowest path: jittery, lossy, and with no SLA.",
     learn:
-      "ISP transit over other people's routers, with nothing private to configure, an install of days to weeks (game: 3 weeks), and about $3,000 a month for 10 Gbps (estimate); it is the slowest path, with no SLA: live users see late, jittery tokens; batch jobs just move data more slowly.",
+      "ISP transit over other people's routers, with nothing private to configure, an install of days to weeks (game: 3 weeks), and about $3,000 a month for a 10 Gbps commit (estimate). It is the slowest path and has no SLA: the route runs about 2.4× the great circle plus 25 ms of hops, with 35% jitter and 0.5% loss (game physics shaped by public measurements), so live users see late, jittery tokens and batch jobs move data more slowly; 10 Gbps is also the most it carries.",
   },
   {
     id: "peer",
@@ -457,9 +457,9 @@ export const NETWORKS = [
     gbps: 10,
     orcaLocal: false,
     orcaRetain: 0.4,
-    does: "Exchange traffic directly with other networks at an internet exchange, so the path is shorter than transit.",
+    does: "Exchange traffic directly with other networks at an internet exchange: shorter than transit, still shared, slower than ServiceFabric.",
     learn:
-      "Peering at an internet exchange hands traffic straight to the other network instead of paying a transit ISP to carry it. The path is shorter than the public internet and still has some jitter. Game assumption: a few milliseconds of exchange delay on top of a slightly longer route.",
+      "Peering at an internet exchange hands traffic straight to the other network instead of paying a transit ISP to carry it. The path is shorter than the public internet but still shared: about 1.5× the great circle plus 8 ms at the exchange, with 12% jitter and 0.2% loss (game assumption); an exchange port, its cross connect and the first sessions take about three weeks (game). ServiceFabric is quicker and steadier on every leg.",
   },
   {
     id: "eye",
@@ -470,7 +470,7 @@ export const NETWORKS = [
     orcaRetain: 0.45,
     does: "Sit close to the ISPs your customers are on, so their traffic takes a short hop.",
     learn:
-      "Eyeball networks are the ISPs people and devices actually use. A metro next to those networks cuts the distance. It is still a shared path, steadier than transit and not as private as ServiceFabric. Game assumption: the same fibre distance plus a small hop.",
+      "Eyeball networks are the ISPs people and devices actually use. A private hand-off next to those networks cuts the distance: the fibre route plus about 3 ms, 5% jitter and a trace of loss (game assumption), negotiated ISP by ISP over about four weeks (game). Still a shared edge, steadier than transit, and not as quick or private as ServiceFabric.",
   },
 ]
 
@@ -557,7 +557,7 @@ const USE_CASE_TEMPLATES = [
       { id: "inter", name: "INTER-SITE", hint: "only with 2–3 metros", role: "inter", dest: "metro", trips: 0.4, bw: 0.35, jitter: 0.5, sensitive: true, critical: true, when: "multi" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "internet", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.35312023699225803, // recalibrated for 1M shoppers (551K tok/s) so the simple-board best scores 1,400
+    parCost: 0.35687001572294985, // recalibrated for 1M shoppers (551K tok/s) so the simple-board best scores 1,400
     worth: 2,
     bytesPerToken: 40,
     toolCalls: 0,
@@ -586,7 +586,7 @@ const USE_CASE_TEMPLATES = [
       { id: "store", name: "SITE → DOCUMENTS", hint: "retrieval round trips", role: "data", dest: "cloud", trips: 2, bw: 1, jitter: 0.8, sensitive: true, critical: true, when: "always" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "cloud", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 1.4345767125848854,
+    parCost: 1.4424999312370053,
     worth: 8,
     bytesPerToken: 500,
     toolCalls: 0,
@@ -616,7 +616,7 @@ const USE_CASE_TEMPLATES = [
       { id: "inter", name: "INTER-SITE", hint: "only with 2–3 metros", role: "inter", dest: "metro", trips: 1, bw: 0.3, jitter: 0.5, sensitive: true, critical: true, when: "multi" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "partner", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.45387426893998334, // recalibrated for the 650B MoE default so the simple-board best scores 1,400
+    parCost: 0.4584886969320989, // recalibrated for the 650B MoE default so the simple-board best scores 1,400
     worth: 10,
     bytesPerToken: 180,
     toolCalls: 8,
@@ -645,7 +645,7 @@ const USE_CASE_TEMPLATES = [
       { id: "data", name: "SITE → DATA / CLOUD", hint: "retrieval · tool trips", role: "data", dest: "cloud", trips: 10, bw: 0.7, jitter: 0.7, sensitive: true, critical: true, when: "always" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "internet", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.1988950027952783,
+    parCost: 0.20002715098781035,
     worth: 6,
     bytesPerToken: 160,
     toolCalls: 10,
@@ -680,7 +680,7 @@ const USE_CASE_TEMPLATES = [
       { id: "orca", name: "GPU ↔ ORCA", hint: "same-hall hand-off", role: "orca", dest: "partner", trips: 1, bw: 0.15, jitter: 0.2, sensitive: false, critical: false, when: "orca" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "partner", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.25655975089239536, // recalibrated for the 100B model and 40M candidates a day so the simple-board best scores 1,400
+    parCost: 0.25674090562739155, // recalibrated for the 100B model and 40M candidates a day so the simple-board best scores 1,400
     worth: 1.15,
     bytesPerToken: 220,
     toolCalls: 0,
@@ -711,7 +711,7 @@ const USE_CASE_TEMPLATES = [
       { id: "inter", name: "INTER-SITE", hint: "only with 2 metros", role: "inter", dest: "metro", trips: 0.4, bw: 0.3, jitter: 1, sensitive: true, critical: true, when: "multi" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "partner", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.3058607118038329, // recalibrated for the 70B model and 3,000 robots so the COMBO best (HGX B200 ×2) scores 1,400
+    parCost: 0.31022310171521855, // recalibrated for the 70B model and 3,000 robots so the COMBO best (HGX B200 ×2) scores 1,400
     worth: 2,
     bytesPerToken: 48,
     toolCalls: 0,
@@ -926,12 +926,12 @@ export const HORIZON_WEEKS = 52
  */
 export const FTE_HOURS = 1800
 export const HUMAN_WORK = {
-  chat: { tokensPerTask: 300, humanMinutes: 1.5, share: 0.35, loadedCost: 55_000, fteCap: 25_000, savingsPar: 738552011.8737237 },
-  rag: { tokensPerTask: 400, humanMinutes: 4, share: 0.4, loadedCost: 90_000, fteCap: 10_000, savingsPar: 522477277.3545038 },
-  code: { tokensPerTask: 800, humanMinutes: 25, share: 0.5, loadedCost: 160_000, fteCap: 8_000, savingsPar: 893518836.4073982 },
-  research: { tokensPerTask: 4000, humanMinutes: 90, share: 0.5, loadedCost: 130_000, fteCap: 3_000, savingsPar: 257086797.08384013 },
-  drug: { tokensPerTask: 500, humanMinutes: 3, share: 0.6, loadedCost: 150_000, fteCap: 2_000, savingsPar: 289712758.36 },
-  robot: { tokensPerTask: 64, humanMinutes: 2, share: 0.3, loadedCost: 75_000, fteCap: 1_500, savingsPar: 85147167.4732146 },
+  chat: { tokensPerTask: 300, humanMinutes: 1.5, share: 0.35, loadedCost: 55_000, fteCap: 25_000, savingsPar: 737406092.2840523 },
+  rag: { tokensPerTask: 400, humanMinutes: 4, share: 0.4, loadedCost: 90_000, fteCap: 10_000, savingsPar: 522283255.3808497 },
+  code: { tokensPerTask: 800, humanMinutes: 25, share: 0.5, loadedCost: 160_000, fteCap: 8_000, savingsPar: 889317653.2532836 },
+  research: { tokensPerTask: 4000, humanMinutes: 90, share: 0.5, loadedCost: 130_000, fteCap: 3_000, savingsPar: 257063392.63818327 },
+  drug: { tokensPerTask: 500, humanMinutes: 3, share: 0.6, loadedCost: 150_000, fteCap: 2_000, savingsPar: 289708558.36 },
+  robot: { tokensPerTask: 64, humanMinutes: 2, share: 0.3, loadedCost: 75_000, fteCap: 1_500, savingsPar: 84600924.98453729 },
 }
 
 export const SITES = [

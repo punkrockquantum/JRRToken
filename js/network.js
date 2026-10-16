@@ -67,6 +67,10 @@ export const LEAD_DAYS = {
   fiber: 84,
   /** Game: three weeks for an ISP to install transit (industry days to weeks). */
   public: 21,
+  /** Game: an exchange port, its cross connect and the first BGP sessions take about three weeks (industry two to six). */
+  peer: 21,
+  /** Game: private hand-offs to eyeball ISPs are negotiated one by one, about four weeks (industry one to three months). */
+  eye: 28,
 }
 
 /** Expected share of good tokens lost to outages on a single, unprotected path. Game assumption. */

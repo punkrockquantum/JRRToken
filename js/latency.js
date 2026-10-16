@@ -9,26 +9,27 @@
 
 import { EGRESS_PER_GB, USE_CASES } from "./data.js"
 import { kmBetween, metroDistances } from "./model.js"
+import { FIBRE_S_PER_KM, ROUTE } from "./physics.js"
 
-/** Light in glass travels about 204,000 km/s: 4.9 µs per km, one way. */
-export const FIBRE_S_PER_KM = 4.9e-6
-/** Cable routes are longer than the great circle: lit fibre about 1.2×, public internet paths about 2×. */
-export const INFLATION = { fibre: 1.2, internet: 2.0 }
+export { FIBRE_S_PER_KM }
+/** Cable routes are longer than the great circle: lit fibre about 1.2×, public internet paths about 2.4× (js/physics.js). */
+export const INFLATION = { fibre: ROUTE.fiber.inflation, internet: ROUTE.public.inflation }
 /** A late answer is still worth a quarter of a timely one. */
 export const LATE_GOODPUT = 0.25
 /** Ethernet payload used by the Mathis throughput bound, in bytes. */
 export const MSS_BYTES = 1460
 
 /**
- * Per-option overheads on top of the glass. Round-trip seconds, jitter as a share of the round
- * trip, packet loss as a fraction, and the port speed in Gbps. Game values, not SLAs.
+ * Per-option overheads on top of the glass, from the shared physics table: round-trip seconds,
+ * jitter as a share of the round trip, packet loss as a fraction, and the port speed in Gbps.
+ * Game values, not SLAs.
  */
 export const OPTIONS = {
-  internet: { name: "Public internet", inflation: INFLATION.internet, overheadS: 0.025, jitterFrac: 0.35, loss: 0.005, gbps: 10 },
-  peer: { name: "Peering + eyeballs", inflation: 1.5, overheadS: 0.008, jitterFrac: 0.12, loss: 0.002, gbps: 10 },
-  fabric: { name: "ServiceFabric", inflation: INFLATION.fibre, overheadS: 0.0003, jitterFrac: 0.02, loss: 0, gbps: 100 },
-  fiber: { name: "Dark fiber", inflation: INFLATION.fibre, overheadS: 0, jitterFrac: 0, loss: 0, gbps: 400 },
-  cross: { name: "Cross connect", inflation: 1, overheadS: 0.0001, jitterFrac: 0, loss: 0, gbps: 100 },
+  internet: { name: "Public internet", ...ROUTE.public, gbps: 10 },
+  peer: { name: "Peering + eyeballs", ...ROUTE.peer, gbps: 10 },
+  fabric: { name: "ServiceFabric", ...ROUTE.fabric, gbps: 100 },
+  fiber: { name: "Dark fiber", ...ROUTE.fiber, gbps: 400 },
+  cross: { name: "Cross connect", ...ROUTE.cross, gbps: 100 },
 }
 
 export const OPTION_IDS = Object.keys(OPTIONS)

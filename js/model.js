@@ -1,5 +1,6 @@
 import { DATA_HOMES, DATA_TIERS, EDGE_LATE, EGRESS_PER_GB, FTE_HOURS, HALLS, HORIZON_WEEKS, HUMAN_WORK, IN_METRO_KM, KV_TIER, METRO_OFFERS, MISSION_SITES, NETWORKS, ORCA, PLATFORMS, SCENARIOS, SITES, TRAIN_BONUS_CAP, USER_BASES, USE_CASES, byId, dataHomeFor, resolveUseCase } from "./data.js"
 import { HOURS_PER_MONTH, blankFabric, destinationsNeeded, liveShare, networkBill } from "./network.js"
+import { ROUTE, oneWayS, roundTripS } from "./physics.js"
 import { designFor, racksNeeded, withDesign } from "./refarch.js"
 import { defaultRoutes, evaluateRoutes } from "./routes.js"
 
@@ -115,15 +116,21 @@ const LATE_GOODPUT = 0.25
 /** A fan-cooled rack in the liquid hall is still cooled by air: it runs at the air hall's PUE. */
 const AIR_PUE = byId(HALLS, "A")?.pue ?? 1.38
 
-/** In-building cross connect. Game stand-in inside the published "minimal latency" range. */
-export const CROSS_RTT_S = 0.0001
+/** In-building cross connect: a few hundred metres of patch fibre, about 5 µs round trip (js/physics.js). */
+export const CROSS_RTT_S = ROUTE.cross.overheadS
 /** ServiceFabric overhead on top of fibre. Not a published SLA. MCP uses the same fabric. */
-export const FABRIC_OVERHEAD_S = 0.0003
-/** Public routes are longer than the great-circle fibre path. */
-export const INTERNET_INFLATION = 2
-export const INTERNET_HOP_S = 0.02
-export const INTERNET_LOSS = 0.005
-export const INTERNET_JITTER_FRAC = 0.35
+export const FABRIC_OVERHEAD_S = ROUTE.fabric.overheadS
+/** Public routes are longer than the great-circle fibre path, and hop through several networks. */
+export const INTERNET_INFLATION = ROUTE.public.inflation
+export const INTERNET_HOP_S = ROUTE.public.overheadS
+export const INTERNET_LOSS = ROUTE.public.loss
+export const INTERNET_JITTER_FRAC = ROUTE.public.jitterFrac
+/**
+ * One request's own upload path tops out near a gigabit (game value): a prompt's bytes never
+ * arrive faster than that, however fat the site's pipe, and only a pipe thinner than this
+ * slows a single prompt down.
+ */
+export const ACCESS_BPS = 1e9 / 8
 /** Same campus. Beyond this, a cross connect does not reach. */
 export const CAMPUS_KM = 2
 /** Named partner / cloud on-ramp in the metro. Game distance. */
@@ -185,9 +192,9 @@ export function kmBetween(a, b) {
   return 2 * 6371 * Math.asin(Math.sqrt(h))
 }
 
-/** One-way fibre delay: 5 µs per km. */
+/** One-way delay on lit fibre: 4.9 µs per km of glass along a cable route 1.2× the great circle (js/physics.js). */
 export function fiberOneWayS(km) {
-  return Math.max(0, km) * 5e-6
+  return oneWayS(km, "fiber")
 }
 
 /** Round trip on dark fibre: physics only, both directions. */
@@ -436,52 +443,35 @@ export function groupSize(useCase, platform) {
 }
 
 /**
- * Delay for one product over `km` of fibre.
- * Cross connect ignores distance: it only exists inside one building.
- * Dark fibre is physics only. ServiceFabric and ServiceFabric MCP share one fabric, so
- * they add the same small hop. The public internet inflates the route, adds a peering
- * hop, and jitters.
+ * Delay for one product over `km` of great circle, from the one physics table (js/physics.js).
+ * Cross connect ignores distance: it only exists inside one building. Dark fibre is physics
+ * only. ServiceFabric and ServiceFabric MCP share one fabric, so they add the same small hop.
+ * Peering hairpins through an exchange and jitters a little; the public internet inflates the
+ * route, hops through several networks, jitters and drops packets. At any distance:
+ * cross ≤ fiber ≤ fabric = mcp ≤ eye ≤ peer < public.
  */
 export function linkProfile(link, km = 0) {
   const distance = Math.max(0, Number(km) || 0)
-  const oneWay = fiberOneWayS(distance)
   const id = link?.id
-  if (id === "fiber") {
-    return { oneWayS: oneWay, rttS: 2 * oneWay, jitterS: 0, loss: 0, gbps: link.gbps, inflatedKm: distance }
-  }
-  if (id === "fabric" || id === "mcp") {
-    const rttS = 2 * oneWay + FABRIC_OVERHEAD_S
-    return { oneWayS: oneWay + FABRIC_OVERHEAD_S / 2, rttS, jitterS: rttS * 0.02, loss: 0, gbps: link.gbps, inflatedKm: distance }
-  }
-  if (id === "public") {
-    const inflatedKm = distance * INTERNET_INFLATION
-    const publicOne = fiberOneWayS(inflatedKm)
-    const rttS = 2 * publicOne + INTERNET_HOP_S
-    return {
-      oneWayS: publicOne + INTERNET_HOP_S / 2,
-      rttS,
-      jitterS: rttS * INTERNET_JITTER_FRAC,
-      loss: INTERNET_LOSS,
-      gbps: link.gbps,
-      inflatedKm,
+  if (id === "cross" || !ROUTE[id]) {
+    // A cross connect reaches the on-ramp in this building. When the data's region is in another
+    // metro, the trip beyond the on-ramp is fibre physics, like dark fibre.
+    if (distance > CAMPUS_KM) {
+      const oneWay = fiberOneWayS(distance)
+      return { oneWayS: oneWay, rttS: 2 * oneWay, jitterS: 0, loss: 0, gbps: link?.gbps || 100, inflatedKm: distance * ROUTE.fiber.inflation }
     }
+    return { oneWayS: CROSS_RTT_S / 2, rttS: CROSS_RTT_S, jitterS: 0, loss: 0, gbps: link?.gbps || 100, inflatedKm: 0 }
   }
-  if (id === "peer") {
-    const inflatedKm = distance * 1.25
-    const one = fiberOneWayS(inflatedKm)
-    const rttS = 2 * one + 0.008
-    return { oneWayS: one + 0.004, rttS, jitterS: rttS * 0.12, loss: 0.002, gbps: link.gbps, inflatedKm }
+  const route = ROUTE[id]
+  const rttS = roundTripS(distance, id)
+  return {
+    oneWayS: rttS / 2,
+    rttS,
+    jitterS: rttS * route.jitterFrac,
+    loss: route.loss,
+    gbps: link.gbps,
+    inflatedKm: distance * route.inflation,
   }
-  if (id === "eye") {
-    const inflatedKm = distance
-    const one = fiberOneWayS(inflatedKm)
-    const rttS = 2 * one + 0.003
-    return { oneWayS: one + 0.0015, rttS, jitterS: rttS * 0.05, loss: 0, gbps: link.gbps, inflatedKm }
-  }
-  // A cross connect reaches the on-ramp in this building. When the data's region is in another
-  // metro, the trip beyond the on-ramp is fibre physics, like dark fibre.
-  if (distance > CAMPUS_KM) return { oneWayS: oneWay, rttS: 2 * oneWay, jitterS: 0, loss: 0, gbps: link?.gbps || 100, inflatedKm: distance }
-  return { oneWayS: CROSS_RTT_S / 2, rttS: CROSS_RTT_S, jitterS: 0, loss: 0, gbps: link?.gbps || 100, inflatedKm: 0 }
 }
 
 export function linkRtt(link, km = 0) {
@@ -904,20 +894,27 @@ export function evaluateBuild(useCaseId, build = {}) {
     out.bandwidthCapped = true
   }
   out.capTok = delay.capTok
-  // The share of the racks' token rate the wire alone throws away: public stalls and drops, or a
-  // thin pipe. Shown as GPU IDLE on the connectivity tiles; cooling and power are judged elsewhere.
-  out.wireIdle = blended > 0 ? Math.min(1, Math.max(0, 1 - throughput / blended)) : 0
+  // The share of the tokens the crowd needs that the wire alone throws away: public stalls and
+  // drops, or a pipe thinner than the demand. A pipe sized for the crowd that leaves surplus
+  // rack capacity unused idles nothing. Shown as GPU IDLE on the connectivity tiles; cooling and
+  // power are judged elsewhere.
+  const needed = Math.min(blended, out.demand)
+  out.wireIdle = needed > 0 ? Math.min(1, Math.max(0, 1 - Math.min(throughput, out.demand) / needed)) : 0
   throughput *= thermal * deliver
   if (planned?.throttle < 1) throughput *= planned.throttle
   out.throughput = throughput
   out.served = Math.min(out.throughput, out.demand)
-  const util = out.throughput > 0 ? Math.min(1, out.demand / out.throughput) : 1
+  // The GPU queue grows with how hard the racks themselves run, not with the pipe in front of them.
+  const rackCapacity = blended * thermal * deliver * (planned?.throttle < 1 ? planned.throttle : 1)
+  const util = rackCapacity > 0 ? Math.min(1, out.demand / rackCapacity) : 1
   out.kvFill = Math.min(1, out.served / Math.max(1, out.kvTok))
 
   const prefillS = (useCase.ctx * (1 - hit)) / (prefillRate * fitMult)
   const queue = 1 + 3 * Math.pow(util, 3)
   const promptBytes = useCase.ctx * (useCase.bytesPerToken || 64)
-  const ingestS = delay.bytesPerSec > 0 ? promptBytes / delay.bytesPerSec : 0
+  // One prompt uploads over its own access path; only a users' pipe thinner than that slows it down.
+  const pipeBps = delay.ingressBps > 0 ? delay.ingressBps : delay.bytesPerSec > 0 ? delay.bytesPerSec : ACCESS_BPS
+  const ingestS = promptBytes / Math.min(ACCESS_BPS, pipeBps)
   let ttft = prefillS * queue + data.retrieval[useCase.data] + delay.meanS + ingestS
   if (build?.hosts === "grace" && kvOn) ttft *= 0.9
   if (orcaOn && (!wire.orcaLocal || out.orcaRemote)) {

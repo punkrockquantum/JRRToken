@@ -25,16 +25,30 @@ import {
 
 /** Company cloud region used when a retrieval leg is not an in-building cross connect. Game. */
 export const CLOUD_REGION_KM = 800
-/** Extra wait when one product carries both the user path and the retrieval path. Game. */
+/**
+ * Extra wait per retrieval when one shared public pipe (transit, peering or an eyeball
+ * hand-off) carries both the user path and the retrieval path, so the two queue on each
+ * other. ServiceFabric gives every destination its own Link or Connection, so it never
+ * shares. Game.
+ */
 export const SHARED_PIPE_S = 0.004
+const SHARED_PUBLIC = new Set(["public", "peer", "eye"])
 /** ServiceFabric at or above this rate counts as a high-bandwidth science pipe. Game. */
 export const FAT_GBPS = 10
 /**
- * A batch lab feed fills the port and is not jitter-killed. Public transit is lossier than
- * peering, so it screens fewer candidates per hour. Game assumption, tuned so drug discovery
- * on the internet lands near 900 and peering near 1,050, both under a private pipe.
+ * A batch lab feed fills the port and is not jitter-killed, but TCP over a lossy path spends
+ * part of the pipe on retransmissions: public transit (0.5% loss) delivers about 85% of its
+ * nominal rate as goodput, peering (0.2%) about 95%, private paths all of it. Game assumption.
  */
-const BATCH_FILL = { public: 1.15, peer: 1.3 }
+const BATCH_FILL = { public: 0.85, peer: 0.95, eye: 0.97 }
+/**
+ * How a ServiceFabric Link or Connection is sized for a leg when the player has not chosen a
+ * speed: the peak need with 2× headroom (links run at or under half their rate at peak), and
+ * never under 1 Gbps, so one prompt's upload is never slowed by the site's own pipe. Game
+ * engineering rule; the published speed tiers decide the exact figure.
+ */
+export const FABRIC_HEADROOM = 2
+export const FABRIC_MIN_GBPS = 1
 /** Combo goodput bonuses cannot multiply score by more than this. */
 export const SYNERGY_CAP = 1.25
 const STREAM_BONUS = new Set(["chat", "rag", "code", "research"])
@@ -149,13 +163,18 @@ export function legEligibility(leg, kind, reach) {
   return { ok: false, reason: "Unknown option." }
 }
 
+/** Peak need with headroom and the 1 Gbps floor, in Gbps, before snapping to a published tier. */
+function sizedNeed(needGbps) {
+  return Math.max(FABRIC_MIN_GBPS, (Number(needGbps) || 0) * FABRIC_HEADROOM)
+}
+
 function leadOf(kind) {
   if (kind === "fabric" || kind === "mcp") return LEAD_DAYS.fabricPort
   if (kind === "cross") return LEAD_DAYS.cross
   if (kind === "fiber") return LEAD_DAYS.fiber
   if (kind === "public") return LEAD_DAYS.public
-  if (kind === "peer") return 10
-  if (kind === "eye") return 21
+  if (kind === "peer") return LEAD_DAYS.peer
+  if (kind === "eye") return LEAD_DAYS.eye
   return 0
 }
 
@@ -237,7 +256,7 @@ export function evaluateRoutes(ctx) {
     if ((kind === "fabric" || kind === "mcp") && Number.isFinite(build.bwTier)) {
       // Ingress is split across metros; a tools, data or lab leg is one link carrying the whole flow.
       const need = ((useCase.demand * (useCase.bytesPerToken || 64) * 8) / 1e9 / (leg.role === "ingress" ? siteCount : 1)) * (leg.bw || 1)
-      const vc = stepSpeed(speedFor(need), build.bwTier)
+      const vc = stepSpeed(speedFor(sizedNeed(need)), build.bwTier)
       fabric = { ...fabric, vc, port: vc > 10 ? 100 : 10, redundant: build.fabricRedundant ?? fabric.redundant }
     }
     if (kind === "fabric" || kind === "mcp") {
@@ -252,7 +271,7 @@ export function evaluateRoutes(ctx) {
   })
 
   const ingress = rows.find((row) => row.leg.role === "ingress")
-  const needOf = (row) => ((useCase.demand * (useCase.bytesPerToken || 64) * 8) / 1e9 / (row.leg.role === "ingress" ? siteCount : 1)) * (row.leg.bw || 1)
+  const needOf = (row) => sizedNeed(((useCase.demand * (useCase.bytesPerToken || 64) * 8) / 1e9 / (row.leg.role === "ingress" ? siteCount : 1)) * (row.leg.bw || 1))
   for (const row of rows) {
     if (row.kind !== "mcp") continue
     const next = mcpRightSize(row.fabric, needOf(row))
@@ -303,6 +322,7 @@ export function evaluateRoutes(ctx) {
   let userRttS = 0
   let loss = 0
   let capTok = Infinity
+  let ingressBps = Infinity
   const unreached = []
   let leadDays = 0
   const bytes = useCase.bytesPerToken || 64
@@ -319,7 +339,7 @@ export function evaluateRoutes(ctx) {
     if (row.leg.role === "data" && comboIds.has("onramp")) profile = linkProfile(byId(NETWORKS, "cross"), legKm(row.leg, reach, "cross"))
     const weight = row.leg.trips || 0
     let extra = 0
-    if ((row.leg.role === "data" || row.leg.role === "tools") && ingress && row.kind === ingress.kind && !comboIds.has("onramp")) extra = SHARED_PIPE_S * weight
+    if ((row.leg.role === "data" || row.leg.role === "tools") && ingress && SHARED_PUBLIC.has(row.kind) && SHARED_PUBLIC.has(ingress.kind) && !comboIds.has("onramp")) extra = SHARED_PIPE_S * weight
     const addedS = weight * profile.rttS + extra
     if (row.leg.role !== "control") {
       meanS += addedS
@@ -339,6 +359,8 @@ export function evaluateRoutes(ctx) {
       const legCap = (gbps * 1e9) / 8 / (bytes * (row.leg.bw / fill))
       capTok = Math.min(capTok, legCap)
     }
+    // The raw pipe one request's upload meets: the users' leg, or the lab feed in a batch story.
+    if ((row.leg.role === "ingress" || row.leg.role === "lab") && Number.isFinite(gbps)) ingressBps = Math.min(ingressBps, (gbps * 1e9) / 8)
     if (row.kind === "cross" || row.backup === "cross") {
       const count = (row.kind === "cross" ? 1 : 0) + (row.backup === "cross" ? 1 : 0)
       const scale = row.leg.role === "ingress" ? siteCount : 1
@@ -358,7 +380,10 @@ export function evaluateRoutes(ctx) {
     }
     if (row.kind === "public" || row.kind === "peer" || row.kind === "eye") {
       const scale = row.leg.role === "ingress" ? siteCount : 1
-      const premium = row.kind === "eye" ? 1.35 : row.kind === "peer" ? 1.15 : 1
+      // Live users: an exchange port (peering) or private ISP hand-offs (eyeball) sit on top of the
+      // transit commit, so they cost more. A bulk feed from one named partner peers for the price
+      // of the transit it replaces. Game pricing.
+      const premium = row.kind === "eye" ? 1.35 : row.kind === "peer" && !row.leg.slaExempt ? 1.15 : 1
       const nrc = NET_PRICES.transitNrc * scale
       const mrc = NET_PRICES.transitCommitGbps * 1000 * NET_PRICES.transitPerMbps * scale * premium
       const label = row.kind === "eye" ? "eyeball" : row.kind === "peer" ? "peering" : "transit"
@@ -439,6 +464,7 @@ export function evaluateRoutes(ctx) {
       loss: comboIds.has("private") ? 0 : loss,
       capTok,
       bytesPerSec: nominalBps,
+      ingressBps: Number.isFinite(ingressBps) ? ingressBps : nominalBps,
       legs: legStats,
     },
   }

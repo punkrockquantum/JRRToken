@@ -34,12 +34,13 @@ import { kmBetween, metroDistances, metroOffers } from "../js/model.js"
 const site = (id) => SITES.find((row) => row.id === id)
 const near = (actual, expected, tolerance, message) => assert.ok(Math.abs(actual - expected) <= tolerance, `${message}: ${actual} vs ${expected} ±${tolerance}`)
 
-test("light in glass: 4.9 µs per km, fibre routes 1.2× the great circle, internet paths 2×", () => {
+test("light in glass: 4.9 µs per km, fibre routes 1.2× the great circle, internet paths 2.4×", () => {
   assert.equal(FIBRE_S_PER_KM, 4.9e-6)
-  assert.deepEqual(INFLATION, { fibre: 1.2, internet: 2.0 })
+  assert.deepEqual(INFLATION, { fibre: 1.2, internet: 2.4 })
   assert.equal(OPTIONS.fabric.inflation, 1.2)
   assert.equal(OPTIONS.fiber.inflation, 1.2)
-  assert.equal(OPTIONS.internet.inflation, 2.0)
+  assert.equal(OPTIONS.internet.inflation, 2.4)
+  assert.equal(OPTIONS.peer.inflation, 1.5)
   assert.deepEqual(OPTION_IDS, ["internet", "peer", "fabric", "fiber", "cross"])
   for (const id of OPTION_IDS) {
     const option = OPTIONS[id]
@@ -75,7 +76,7 @@ test("more known pairs: Frankfurt–Ashburn ≈ 6,500 km, Amsterdam–London ≈
   near(kmBetween(site("ams"), site("lon")), kmBetween(site("lon"), site("ams")), 1e-9, "symmetry")
   /* One-way ms = km × inflation × 0.0049. */
   near(legRtt(1000, "fiber").rttS * 1000, 2 * 1000 * 1.2 * 0.0049, 1e-9, "1,000 km of lit fibre")
-  near(legRtt(1000, "internet").rttS * 1000, 2 * 1000 * 2.0 * 0.0049 + 25, 1e-9, "1,000 km of public internet")
+  near(legRtt(1000, "internet").rttS * 1000, 2 * 1000 * 2.4 * 0.0049 + 25, 1e-9, "1,000 km of public internet")
 })
 
 test("every story's legs use the USERS distance for the request and the DATA distance for the trips", () => {
@@ -105,9 +106,9 @@ test("every story's legs use the USERS distance for the request and the DATA dis
   assert.ok(drug.some((leg) => leg.slaExempt && leg.id === "lab"), "the lab feed rides along as an exempt leg")
 })
 
-test("a leg carries its option's overheads; a cross connect is 100 µs whatever the metro", () => {
+test("a leg carries its option's overheads; a cross connect is a few microseconds of patch fibre whatever the metro", () => {
   const cross = legRtt(0.5, "cross")
-  near(cross.rttS * 1e6, 100 + 2 * 0.5 * 4.9, 1, "cross connect µs")
+  near(cross.rttS * 1e6, 5 + 2 * 0.5 * 4.9, 0.1, "cross connect µs")
   assert.equal(cross.jitterS, 0)
   assert.equal(cross.loss, 0)
   assert.equal(legRtt(100, "nonsense").option, "fabric", "unknown options fall back to ServiceFabric")

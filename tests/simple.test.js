@@ -79,8 +79,9 @@ test("connection tiles follow real-world order: public < peering < ServiceFabric
     const built = ["cheap", "peer", "fast"].map((wires) => score(id, { ...base, wires }))
     const [cheap, peer, fast] = built.map((result) => result.score)
     if (id === "drug") {
-      assert.ok(cheap >= 800 && cheap <= 1100, `drug internet ${cheap} should be viable`)
-      assert.ok(peer >= 1000 && peer <= 1300, `drug peering ${peer}`)
+      /* A 10 Gbps transit commit cannot carry the 14 Gbps lab feed: batch work is never late, but the racks wait on data. */
+      assert.ok(cheap >= 400 && cheap <= 700, `drug internet ${cheap} should be viable but thin`)
+      assert.ok(peer >= 500 && peer <= 800, `drug peering ${peer}`)
       assert.equal(built[0].bandwidthCapped, true)
       assert.equal(built[0].slaMet, true)
       assert.ok(built[0].pMiss < 0.05, `batch work is not SLA-killed (${built[0].pMiss})`)
@@ -231,7 +232,7 @@ test("simple-space balance: story-specific optima, one winner, max-everything an
     rag: { best: { metros: ["fra"], brains: "b300", home: "rear", memory: "on", wires: "combo", library: "smart" }, typical: [5, 300] }, // no index on the home metro: DATA and POWER are red
     code: { best: { metros: ["iad", "sjc"], brains: "gb200", home: "super", memory: "plus", wires: "combo", library: "basic" }, typical: [20, 400] },
     research: { best: { metros: ["par"], brains: "gb200", home: "super", memory: "on", wires: "combo", library: "smart" }, typical: [100, 500] },
-    drug: { best: { metros: ["lon"], brains: "b300", home: "rear", memory: "off", wires: "fast", library: "basic", helper: true }, typical: [300, 700] },
+    drug: { best: { metros: ["lon"], brains: "b300", home: "rear", memory: "off", wires: "fast", library: "basic", helper: true }, typical: [150, 700] }, // the opening picture's 10 Gbps peering cannot carry the 14 Gbps lab feed
     robot: { best: { metros: ["fra", "ams"], brains: "b200", home: "rear", memory: "on", wires: "combo", library: "none" }, typical: [300, 700] }, // two Blackwell air racks; three B300 racks are more than 5,000 robots need
   }
   /* Robots: ServiceFabric everywhere is within 3% of the COMBO, so that one near-miss also keeps three stars. */

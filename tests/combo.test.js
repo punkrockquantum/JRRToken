@@ -30,7 +30,7 @@ test("a chatbot on one metro does best on ServiceFabric or peering; the batch sc
   const drug = expertChoices("drug")
   const internet = score("drug", { ...drug, wires: "cheap" })
   assert.equal(internet.slaMet, true, "batch work is not SLA-killed")
-  assert.ok(internet.score >= 800, `drug on the open internet still scores ${internet.score}`)
+  assert.ok(internet.score >= 400, `drug on the open internet still scores ${internet.score}`)
   assert.ok(internet.score < score("drug", { ...drug, wires: "fast" }).score, "but a fat private pipe screens more")
 })
 
