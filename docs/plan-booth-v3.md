@@ -68,10 +68,12 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
 ## and it is much better than public internet. It should be impossible to go completely over budget or get a
 ## score of Zero. Ensure all the maths, numbers and info are very accurate.") — each its own commit, pushed
 
-- [ ] C1 Connectivity ordering end-to-end: for every story × metro set × leg, RTT(cross) ≤ RTT(fiber) ≤
+- [x] C1 Connectivity ordering end-to-end: for every story × metro set × leg, RTT(cross) ≤ RTT(fiber) ≤
       RTT(fabric) ≤ RTT(peer) < RTT(internet), internet ≥ 2× fabric and ≥ +20 ms at ≥ 100 km; the ServiceFabric
       tile's first-token time, stream label, GPU-idle and score are never worse than Peering for the same
       story/location; tile and learn copy say it plainly; a test iterates stories × metros × simple wire tiles
+      (commit c51c949: shared `js/physics.js` table, per-request ingest, demand-relative idle, right-sized fabric,
+      public-only shared-pipe penalty, IX/eyeball lead times; 0 of 300 story × metro × tile combinations mis-ordered)
 - [ ] C2 Budget guard: a tile whose pick would exceed the scenario budget is disabled with an "OVER BUDGET by $X"
       tag and a learn line saying what to drop; defaults always affordable; nerd rack stepper / site designer clamp
       at the budget; power and deadline stay soft consequences; the "can't afford" results path is unreachable.
