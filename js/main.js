@@ -319,7 +319,10 @@ function titleScreen() {
     el("div", { class: "panel title-card", "data-key": "title-card" }, [
       el("div", { class: "title-hero" }, [
         el("div", { class: "logo-art" }, [spriteImg("hero", 4), spriteImg("token", 4), spriteImg("prof", 4)]),
-        el("h1", { class: "game-logo" }, [el("span", { text: "TOKEN" }), el("span", { text: "QUEST" })]),
+        el("div", { class: "logo-row" }, [
+          el("h1", { class: "game-logo" }, [el("span", { text: "TOKEN" }), el("span", { text: "QUEST" })]),
+          el("img", { class: "brand-mark", src: "assets/digital-realty-mark.png", alt: "Digital Realty", width: "297", height: "288", decoding: "async", "data-key": "brand-mark" }),
+        ]),
         el("p", { class: "subtitle", text: "A DIGITAL REALTY GAME" }),
         el("p", { class: "tagline", "data-key": "tagline", text: TAGLINE }),
         el("p", {

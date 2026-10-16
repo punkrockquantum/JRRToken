@@ -178,6 +178,9 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
   color: var(--yellow);
 }
 .game-logo span:last-child { color: var(--lime); }
+/* The Digital Realty mark sits to the right of the two-line logo at the logo's own height, so it never moves anything else. */
+.logo-row { display: flex; align-items: center; gap: clamp(14px, 1.6vw, 26px); min-width: 0; }
+.brand-mark { flex: none; height: clamp(66px, 7.1vw, 116px); width: auto; aspect-ratio: 297 / 288; image-rendering: auto; }
 .subtitle { font-size: var(--fs); color: var(--cyan); margin: 4px 0 0; }
 .pitch { color: #f4f4ff; margin: 0; }
 .title-form { align-self: center; }
