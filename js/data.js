@@ -365,23 +365,82 @@ export const NETWORKS = [
   },
 ]
 
-export const USE_CASES = [
+/**
+ * The three model sizes a player can deploy, picked on the first step. Public-class figures,
+ * one byte per parameter at FP8 (FP4 racks halve the bytes in js/model.js `weightScale`):
+ * - 70B dense (Llama-3.x-70B class): 70 GB at FP8, 140 GB at FP16; grouped-query KV cache about
+ *   0.16 MB per token at FP8 (80 layers × 8 KV heads × 128 dims × 2).
+ * - 100B dense (ESM3-98B / Command-A-111B class): about 100 GB at FP8, 200 GB at FP16; KV about 0.2 MB per token.
+ * - 650B mixture-of-experts (DeepSeek-V3 / R1 class: 671B total, about 37B active per token): 671 GB at FP8,
+ *   1.3 TB at FP16; multi-head latent attention keeps the KV cache near 0.07 MB per token. Every expert is
+ *   read somewhere in a batch, so it wants a 72-GPU NVLink domain and spills across 8-GPU islands.
+ * `quality` is a labelled game factor on the price per million good tokens: a bigger model gives better
+ * answers, so each good token earns more. The maths per token (compute, memory, prefill) comes from
+ * `activeB`, `weightsGB`, `moe` and `kvMBPerTok` in js/model.js, unchanged by the label.
+ */
+export const MODELS = [
+  { id: "70b", name: "70B", label: "70B dense", example: "Llama-class", params: 70, activeB: 70, weightsGB: 70, fp16GB: 140, moe: false, kvMBPerTok: 0.16, quality: 1 },
+  { id: "100b", name: "100B", label: "100B dense", example: "ESM3 / Command-A class", params: 100, activeB: 100, weightsGB: 100, fp16GB: 200, moe: false, kvMBPerTok: 0.2, quality: 1.12 },
+  { id: "650b", name: "650B", label: "650B MoE", example: "DeepSeek-class, 37B active", params: 671, activeB: 37, weightsGB: 671, fp16GB: 1342, moe: true, kvMBPerTok: 0.07, quality: 1.3 },
+]
+
+export const MODEL_IDS = MODELS.map((model) => model.id)
+export const USER_TIER_IDS = ["small", "medium", "large"]
+
+/**
+ * How many people (or robots, or scientists) ask, picked on the first step: three tiers per story
+ * ten times apart (enterprise sizes, not consumer-internet scale). Demand in tokens per second is
+ * derived with a labelled concurrency model, so the number on the tile and the maths agree:
+ *   people:  at once   = count × daily-active share × sessions a day × minutes a session / 1,440 × peak-to-mean
+ *            streams   = at once × model streams a session (the answer the person reads plus the
+ *                        search, retrieval or sub-agent calls running for them; 1 = a plain chat)
+ *   fleet:   streams   = robots × duty (the share of robots mid-request at any moment)
+ *   batch:   demand    = scientists × candidates each a night × tokens a candidate / 86,400 (a pipeline, no peak)
+ *   demand   = streams × the story's tokens per second per stream
+ * `peak` for office work is about 3: a working day is 8 of 24 hours, so the busy hour runs three
+ * times the 24-hour mean; retail runs round the clock with an evening peak.
+ * The top tier is the business each story was written for (its demand is the story's calibrated
+ * demand). A business ten times smaller has about a fifth of the budget and power for this project
+ * (`scale` = ratio^0.7, game assumption); the GPU tiles scale their rack counts with the demand.
+ */
+export const USERS = {
+  // A retailer's shopping assistant: 35% of monthly shoppers on a given day, 1.2 sessions of 6 minutes,
+  // the evening peak at 3.5× the daily mean; each session runs the assistant plus a search and a
+  // stock agent (3 streams). 1M shoppers → 6,125 at once → 18,375 streams × 30 tok/s ≈ 551K tok/s.
+  chat: { unit: "shoppers a month", who: "shoppers", top: 1_000_000, kind: "people", daily: 0.35, sessions: 1.2, minutes: 6, peak: 3.5, streams: 3 },
+  // A knowledge assistant for staff: 60% ask on a given day, 6 questions of 8 minutes, office peak 3×,
+  // the answer plus its retrieval re-rank (2 streams). 50K staff → 3,000 at once → 6,000 streams × 25 = 150K tok/s.
+  rag: { unit: "staff", who: "staff", top: 50_000, kind: "people", daily: 0.6, sessions: 6, minutes: 8, peak: 3, streams: 2 },
+  // Coding agents: 70% of developers on a given day keep one agent running for about 4 hours, office
+  // peak 3×. 20K developers → 7,000 agents at once × 60 tok/s = 420K tok/s.
+  code: { unit: "developers", who: "developers", top: 20_000, kind: "people", daily: 0.7, sessions: 1, minutes: 240, peak: 3, streams: 1 },
+  // Deep research: 70% of analysts on a given day run 5 one-hour jobs, each with 4 sub-agents
+  // (search, read, check, write), office peak 3×. 10K analysts → 4,375 at once → 17,500 streams × 40 = 700K tok/s.
+  research: { unit: "analysts", who: "analysts", top: 10_000, kind: "people", daily: 0.7, sessions: 5, minutes: 60, peak: 3, streams: 4 },
+  // A screening pipeline: each scientist queues 20,000 candidates a night, 500 tokens of poses and
+  // scores each. 2,000 scientists → 40M candidates a day ÷ 86,400 s ≈ 231K tok/s, steady.
+  drug: { unit: "scientists", who: "scientists", top: 2_000, kind: "batch", perNight: 20_000, tokens: 500 },
+  // A robot fleet: a robot is mid-request 30% of the time. 5,000 robots → 1,500 streams × 80 tok/s = 120K tok/s.
+  robot: { unit: "robots", who: "robots", top: 5_000, kind: "fleet", duty: 0.3 },
+}
+
+export const USER_TIER_MULT = { small: 0.01, medium: 0.1, large: 1 }
+/** Budget and power grow slower than the crowd: scale = (count / top) ^ SCALE_EXP. */
+export const SCALE_EXP = 0.7
+
+const USE_CASE_TEMPLATES = [
   {
     id: "chat",
     name: "Customer Chat",
     npc: "Chatty",
     icon: "iconChat",
-    blurb: "A help-desk assistant for millions of shoppers. Short questions, fast answers.",
-    model: "70B dense LLM",
-    activeB: 70,
-    weightsGB: 70,
-    moe: false,
+    blurb: "A help-desk assistant for a retailer's shoppers. Short questions, fast answers.",
+    defaults: { model: "70b", users: "large" },
+    modelSuffix: "LLM",
     ctx: 4000,
     outTokens: 300,
-    kvMBPerTok: 0.16,
     tps: 30,
     ttft: 0.6,
-    demand: 600000,
     netDest: { user: "internet" },
     netWhy: "Shoppers arrive from the internet. Give each leg its own path.",
     legs: [
@@ -389,7 +448,7 @@ export const USE_CASES = [
       { id: "inter", name: "INTER-SITE", hint: "only with 2–3 metros", role: "inter", dest: "metro", trips: 0.4, bw: 0.35, jitter: 0.5, sensitive: true, critical: true, when: "multi" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "internet", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.38414437209943497,
+    parCost: 0.35312023699225803, // recalibrated for 1M shoppers (551K tok/s) so the simple-board best scores 1,400
     worth: 2,
     bytesPerToken: 40,
     toolCalls: 0,
@@ -405,16 +464,12 @@ export const USE_CASES = [
     npc: "Libby",
     icon: "iconBook",
     blurb: "An enterprise assistant that answers from company documents.",
-    model: "70B dense LLM + retrieval",
-    activeB: 70,
-    weightsGB: 70,
-    moe: false,
+    defaults: { model: "70b", users: "large" },
+    modelSuffix: "LLM + retrieval",
     ctx: 16000,
     outTokens: 400,
-    kvMBPerTok: 0.16,
     tps: 25,
     ttft: 1.5,
-    demand: 150000,
     netDest: { user: "cloud", retrieval: "cloud" },
     netWhy: "Staff reach the site from the company cloud. Documents come back on a second path.",
     legs: [
@@ -438,16 +493,12 @@ export const USE_CASES = [
     npc: "Codey",
     icon: "iconCode",
     blurb: "An agent that reads whole code repos and writes fixes, many tool calls in a row.",
-    model: "400B mixture-of-experts",
-    activeB: 17,
-    weightsGB: 400,
-    moe: true,
+    defaults: { model: "650b", users: "large" },
+    modelSuffix: "coding agent",
     ctx: 64000,
     outTokens: 800,
-    kvMBPerTok: 0.12,
     tps: 60,
     ttft: 3,
-    demand: 420000,
     netDest: { user: "internet", retrieval: "cloud", tool: "partner" },
     netWhy: "Developers arrive from the internet. Tool calls and repos are a separate, chatty path.",
     legs: [
@@ -456,7 +507,7 @@ export const USE_CASES = [
       { id: "inter", name: "INTER-SITE", hint: "only with 2–3 metros", role: "inter", dest: "metro", trips: 1, bw: 0.3, jitter: 0.5, sensitive: true, critical: true, when: "multi" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "partner", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.5073665934936242,
+    parCost: 0.45387426893998334, // recalibrated for the 650B MoE default so the simple-board best scores 1,400
     worth: 10,
     bytesPerToken: 180,
     toolCalls: 8,
@@ -472,16 +523,12 @@ export const USE_CASES = [
     npc: "Prof. Owl",
     icon: "iconOwl",
     blurb: "A reasoning model that thinks step by step, calls tools, and writes long reports.",
-    model: "671B reasoning MoE",
-    activeB: 37,
-    weightsGB: 700,
-    moe: true,
+    defaults: { model: "650b", users: "large" },
+    modelSuffix: "reasoning model",
     ctx: 32000,
     outTokens: 4000,
-    kvMBPerTok: 0.07,
     tps: 40,
     ttft: 5,
-    demand: 700000,
     netDest: { user: "internet", retrieval: "cloud", tool: "internet" },
     netWhy: "Analysts arrive from the internet. Papers and web tools come from the cloud.",
     legs: [
@@ -506,26 +553,25 @@ export const USE_CASES = [
     npc: "Dr. Helix",
     icon: "iconFlask",
     blurb: "GPUs build binding graphs. ORCA's quantum accelerator finds the best pose more often.",
-    model: "15B protein & chemistry models",
-    activeB: 15,
-    weightsGB: 15,
-    moe: false,
+    defaults: { model: "100b", users: "large" },
+    modelSuffix: "protein & chemistry model",
     ctx: 2000,
     outTokens: 500,
-    kvMBPerTok: 0.05,
     tps: 40,
     ttft: 20,
-    demand: 1300000,
     netDest: { user: "partner", retrieval: "partner" },
     netWhy: "The lab ships bulk data to the site. ORCA sits in the same hall as the GPUs.",
     legs: [
       // slaExempt (game assumption): the bulk lab leg pays no jitter or SLA haircut on the public
       // internet; only the link's bandwidth limits how many candidates are screened per hour.
-      { id: "lab", name: "LAB / DATA → SITE", hint: "bulk · latency-insensitive", role: "lab", dest: "partner", trips: 0.05, bw: 6, jitter: 0, sensitive: false, critical: true, when: "always", slaExempt: true },
+      // Each screened candidate moves about 3.7 MB of 3D poses, scores and binding graph between
+      // the lab and the site (500 output tokens × 220 B × 34): 40M candidates a day is ~14 Gbps
+      // sustained, more than one 10 Gbps internet port carries.
+      { id: "lab", name: "LAB / DATA → SITE", hint: "bulk · ~3.7 MB a candidate", role: "lab", dest: "partner", trips: 0.05, bw: 34, jitter: 0, sensitive: false, critical: true, when: "always", slaExempt: true },
       { id: "orca", name: "GPU ↔ ORCA", hint: "same-hall hand-off", role: "orca", dest: "partner", trips: 1, bw: 0.15, jitter: 0.2, sensitive: false, critical: false, when: "orca" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "partner", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.04864189619954892,
+    parCost: 0.25655975089239536, // recalibrated for the 100B model and 40M candidates a day so the simple-board best scores 1,400
     worth: 1.15,
     bytesPerToken: 220,
     toolCalls: 0,
@@ -543,16 +589,12 @@ export const USE_CASES = [
     npc: "Bolt",
     icon: "hero",
     blurb: "Robot fleets on a factory floor need answers in milliseconds.",
-    model: "8B vision-language-action",
-    activeB: 8,
-    weightsGB: 8,
-    moe: false,
+    defaults: { model: "70b", users: "large" },
+    modelSuffix: "vision-language-action model",
     ctx: 512,
     outTokens: 64,
-    kvMBPerTok: 0.02,
     tps: 80,
     ttft: 0.05,
-    demand: 220000,
     netDest: { user: "partner" },
     netWhy: "Robots sit on a private factory network. The public internet is too slow and too jittery for a 50 ms answer.",
     legs: [
@@ -560,7 +602,7 @@ export const USE_CASES = [
       { id: "inter", name: "INTER-SITE", hint: "only with 2 metros", role: "inter", dest: "metro", trips: 0.4, bw: 0.3, jitter: 1, sensitive: true, critical: true, when: "multi" },
       { id: "control", name: "CONTROL", hint: "optional · where MCP sits", role: "control", dest: "partner", trips: 0, bw: 0.02, jitter: 0, sensitive: false, critical: false, when: "optional" },
     ],
-    parCost: 0.1315125223528696, // recalibrated so the COMBO (plant carriers on cross connects) best scores 1,400
+    parCost: 0.3058607118038329, // recalibrated for the 70B model and 3,000 robots so the COMBO best (HGX B200 ×2) scores 1,400
     worth: 2,
     bytesPerToken: 48,
     toolCalls: 0,
@@ -571,6 +613,87 @@ export const USE_CASES = [
       "A physical-AI workload: small prompts, a very tight time to first token, and a steady stream of requests from robots in one or two industrial metros. The public internet misses the deadline. A nearby metro, a private path, and isolated hosts keep the line moving.",
   },
 ]
+
+/** "10K", "1M", "5,000", "200": short on a tile, exact below ten thousand. */
+export const fmtCount = (n) => (n >= 1e6 ? `${String(Math.round((n / 1e6) * 10) / 10).replace(/\.0$/, "")}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : Math.round(n).toLocaleString("en-GB"))
+
+/**
+ * One users tier for a story: the count, how many are asking at once, the model streams that
+ * drives, the demand in tokens per second, and the budget / power scale against the top tier.
+ * Unknown tiers are the top one (the business the story was written for).
+ */
+export function usersTier(useCaseId, tierId = "large") {
+  const spec = USERS[useCaseId] || USERS.chat
+  const template = USE_CASE_TEMPLATES.find((item) => item.id === useCaseId) || USE_CASE_TEMPLATES[0]
+  const id = USER_TIER_IDS.includes(tierId) ? tierId : "large"
+  const mult = USER_TIER_MULT[id]
+  const count = Math.round(spec.top * mult)
+  let concurrent
+  let streams
+  let demand
+  if (spec.kind === "batch") {
+    demand = (count * spec.perNight * spec.tokens) / 86400
+    streams = demand / template.tps
+    concurrent = streams
+  } else if (spec.kind === "fleet") {
+    concurrent = count * spec.duty
+    streams = concurrent
+    demand = streams * template.tps
+  } else {
+    concurrent = (count * spec.daily * spec.sessions * spec.minutes * spec.peak) / 1440
+    streams = concurrent * (spec.streams || 1)
+    demand = streams * template.tps
+  }
+  return {
+    id,
+    count,
+    label: `${fmtCount(count)} ${spec.unit}`,
+    unit: spec.unit,
+    who: spec.who,
+    kind: spec.kind,
+    concurrent: Math.round(concurrent),
+    streams: Math.round(streams),
+    demand: Math.round(demand),
+    candidatesPerDay: spec.kind === "batch" ? count * spec.perNight : 0,
+    mult,
+    scale: Math.round(Math.pow(mult, SCALE_EXP) * 1000) / 1000,
+    spec,
+  }
+}
+
+/**
+ * A story with one model size and one users tier filled in: the model's bytes, active
+ * parameters, KV cache and quality, and the tier's demand and budget / power scale. The
+ * template's own `defaults` fill anything missing, so `USE_CASES` below are the default picks.
+ */
+export function resolveUseCase(useCaseId, picks = {}) {
+  const template = USE_CASE_TEMPLATES.find((item) => item.id === useCaseId)
+  if (!template) return null
+  const model = byId(MODELS, picks?.model) || byId(MODELS, template.defaults.model) || MODELS[0]
+  const own = byId(MODELS, template.defaults.model) || model
+  const tier = usersTier(useCaseId, picks?.users || template.defaults.users)
+  return {
+    ...template,
+    modelId: model.id,
+    usersId: tier.id,
+    model: `${model.label} ${template.modelSuffix}`,
+    modelSize: model,
+    activeB: model.activeB,
+    weightsGB: model.weightsGB,
+    moe: model.moe,
+    kvMBPerTok: model.kvMBPerTok,
+    quality: model.quality,
+    /* The story's token price is set for its own model; a bigger model earns more per token, a smaller one less. */
+    priceMult: Math.round((model.quality / own.quality) * 1000) / 1000,
+    demand: tier.demand,
+    concurrent: tier.concurrent,
+    scale: tier.scale,
+    users: tier,
+  }
+}
+
+/** The six stories at their default model and users: what every table and the opening board use. */
+export const USE_CASES = USE_CASE_TEMPLATES.map((template) => resolveUseCase(template.id))
 
 /**
  * Digital Realty metros (real PlatformDIGITAL markets). Coordinates are city centres;
@@ -589,7 +712,10 @@ export const SCENARIOS = {
   // Two NVL72 racks of power where the allocation is full; a metro that is 10% short browns out.
   research: { where: "Analysts in London and Paris", users: "60% London, 40% Paris", budget: 7_500_000, powerMW: 0.35, deadlineWeeks: 36, pricePerM: 0.4 },
   // A lab's share of a hall: a few air-cooled racks of power, so cooling efficiency decides what fits.
-  drug: { where: "A lab in Cambridge, UK", users: "One lab in Cambridge, UK", budget: 8_000_000, powerMW: 0.18, deadlineWeeks: 30, pricePerM: 0.1 },
+  // $0.50 per million tokens of a 100B protein model's screening output is $0.00025 a candidate
+  // (500 tokens of poses and scores), far below a wet-lab assay; the screen only pays for itself
+  // with the library well utilised, and ORCA's extra strong matches are where the margin comes from.
+  drug: { where: "A lab in Cambridge, UK", users: "One lab in Cambridge, UK", budget: 8_000_000, powerMW: 0.18, deadlineWeeks: 30, pricePerM: 0.5 },
   robot: { where: "Factory floors near Frankfurt and Amsterdam", users: "Stuttgart (70%) and Rotterdam (30%)", budget: 9_000_000, powerMW: 0.5, deadlineWeeks: 16, pricePerM: 0.8 },
 }
 
@@ -599,16 +725,28 @@ export const SCENARIOS = {
  * or tool trip runs the distance from the chosen site to this place. `corpusTB` is the data
  * that must move with the weights (documents, repos, papers, candidate libraries).
  */
-export const DATA_HOMES = {
-  chat: { city: "Ashburn", lat: 39.04, lon: -77.49, kind: "cloud", label: "a public cloud region in Northern Virginia (Ashburn)", what: "70 GB of weights and 2 TB of fine-tuning data", corpusTB: 2 },
-  rag: { city: "Frankfurt", lat: 50.11, lon: 8.68, kind: "cloud", label: "the company's cloud tenancy in Frankfurt", what: "70 GB of weights and 30 TB of documents", corpusTB: 30 },
-  code: { city: "Ashburn", lat: 39.04, lon: -77.49, kind: "cloud", label: "a cloud region in Northern Virginia (Ashburn)", what: "400 GB of weights and 80 TB of repos", corpusTB: 80 },
-  research: { city: "Paris", lat: 48.86, lon: 2.35, kind: "cloud", label: "a sovereign cloud region in Paris", what: "700 GB of weights and 400 TB of papers", corpusTB: 400 },
+const HOMES = {
+  chat: { city: "Ashburn", lat: 39.04, lon: -77.49, kind: "cloud", label: "a public cloud region in Northern Virginia (Ashburn)", corpus: "2 TB of fine-tuning data", corpusTB: 2 },
+  rag: { city: "Frankfurt", lat: 50.11, lon: 8.68, kind: "cloud", label: "the company's cloud tenancy in Frankfurt", corpus: "30 TB of documents", corpusTB: 30 },
+  code: { city: "Ashburn", lat: 39.04, lon: -77.49, kind: "cloud", label: "a cloud region in Northern Virginia (Ashburn)", corpus: "80 TB of repos", corpusTB: 80 },
+  research: { city: "Paris", lat: 48.86, lon: 2.35, kind: "cloud", label: "a sovereign cloud region in Paris", corpus: "400 TB of papers", corpusTB: 400 },
   // The scientists sit in Cambridge; their candidate libraries live in a public cloud region in Dublin,
   // so every metro is a different distance from the users and from the data.
-  drug: { city: "Dublin", lat: 53.35, lon: -6.26, kind: "cloud", label: "the lab's cloud tenancy in Dublin", what: "15 GB of models and 250 TB of candidate libraries", corpusTB: 250 },
-  robot: { city: "Frankfurt", lat: 50.11, lon: 8.68, kind: "own", label: "the carmaker's training cluster in Frankfurt", what: "8 GB of weights and 12 TB of driving logs", corpusTB: 12 },
+  drug: { city: "Dublin", lat: 53.35, lon: -6.26, kind: "cloud", label: "the lab's cloud tenancy in Dublin", corpus: "250 TB of candidate libraries", corpusTB: 250 },
+  robot: { city: "Frankfurt", lat: 50.11, lon: 8.68, kind: "own", label: "the carmaker's training cluster in Frankfurt", corpus: "12 TB of driving logs", corpusTB: 12 },
 }
+
+/** The weights that must move with the data: the chosen model's bytes at FP8 and the story's corpus. */
+export function dataHomeFor(useCase) {
+  const home = HOMES[useCase?.id]
+  if (!home) return null
+  const gb = useCase?.weightsGB || 0
+  const word = useCase?.id === "drug" ? "models" : "weights"
+  return { ...home, what: `${gb >= 1000 ? `${(gb / 1000).toFixed(1)} TB` : `${gb} GB`} of ${word} and ${home.corpus}` }
+}
+
+/** Every story's data home at its default model. */
+export const DATA_HOMES = Object.fromEntries(USE_CASES.map((useCase) => [useCase.id, dataHomeFor(useCase)]))
 
 /** Same metro: no copy, and an in-building on-ramp reaches the data (game threshold). */
 export const IN_METRO_KM = 60
@@ -679,12 +817,12 @@ export const HORIZON_WEEKS = 52
  */
 export const FTE_HOURS = 1800
 export const HUMAN_WORK = {
-  chat: { tokensPerTask: 300, humanMinutes: 1.5, share: 0.35, loadedCost: 55_000, fteCap: 25_000, savingsPar: 678517145.6702592 },
+  chat: { tokensPerTask: 300, humanMinutes: 1.5, share: 0.35, loadedCost: 55_000, fteCap: 25_000, savingsPar: 738552011.8737237 },
   rag: { tokensPerTask: 400, humanMinutes: 4, share: 0.4, loadedCost: 90_000, fteCap: 10_000, savingsPar: 522477277.3545038 },
-  code: { tokensPerTask: 800, humanMinutes: 25, share: 0.5, loadedCost: 160_000, fteCap: 8_000, savingsPar: 844232144.1586552 },
+  code: { tokensPerTask: 800, humanMinutes: 25, share: 0.5, loadedCost: 160_000, fteCap: 8_000, savingsPar: 893518836.4073982 },
   research: { tokensPerTask: 4000, humanMinutes: 90, share: 0.5, loadedCost: 130_000, fteCap: 3_000, savingsPar: 257086797.08384013 },
-  drug: { tokensPerTask: 500, humanMinutes: 3, share: 0.6, loadedCost: 150_000, fteCap: 2_000, savingsPar: 289710962.61 },
-  robot: { tokensPerTask: 64, humanMinutes: 2, share: 0.3, loadedCost: 75_000, fteCap: 1_500, savingsPar: 88571871.14648634 },
+  drug: { tokensPerTask: 500, humanMinutes: 3, share: 0.6, loadedCost: 150_000, fteCap: 2_000, savingsPar: 289712758.36 },
+  robot: { tokensPerTask: 64, humanMinutes: 2, share: 0.3, loadedCost: 75_000, fteCap: 1_500, savingsPar: 85147167.4732146 },
 }
 
 export const SITES = [

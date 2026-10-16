@@ -1,4 +1,4 @@
-import { DATA_HOMES, PLATFORMS, SCENARIOS, SITES, USE_CASES, byId } from "./data.js"
+import { PLATFORMS, SITES, USE_CASES, byId, dataHomeFor } from "./data.js"
 import { designCard, designFor, designLines, designsFor, referenceDesign } from "./refarch.js"
 import { BUILD } from "./build-info.js"
 import { drHelp } from "./drhelp.js"
@@ -9,7 +9,7 @@ import { plainCoach } from "./coach.js"
 import { createFloor } from "./floor.js"
 import { createAdvanceGate, createIntro, matchingScene, sceneCaption, scenesFor, setIntroDetail } from "./intro.js"
 import { leagueCsv, leagueJson, ordinal, rankOf, sortLeague, upsertEntry } from "./league.js"
-import { STAR_POINTS, defaultSitePlans, evaluateBuild, formatMoney, formatScore, formatTokens, stars } from "./model.js"
+import { STAR_POINTS, defaultSitePlans, evaluateBuild, formatMoney, formatScore, formatTokens, scenarioFor, stars } from "./model.js"
 import { blockedReason, peopleCount, peopleLead, savingsLine } from "./results.js"
 import { attemptPayload, syncStatusLine } from "./attempt.js"
 import { validateEmail, validateName } from "./names.js"
@@ -17,7 +17,7 @@ import { fetchLeague, recordAttempt } from "./sync.js"
 import { isMuted, loadMute, play, setMuted, unlock } from "./sound.js"
 import { spriteImg } from "./sprites.js"
 import { STORIES, brainPick, choicesToBuild, maxMetros, nerdChoices, simpleChoices } from "./presets.js"
-import { BUILD_STEP_IDS, STEPS, STEP_IDS, applyTile, audienceSummary, jobBrief, nextStep, prevStep, qpuRelevant, simpleDefaults, stepIndex, stepTiles, stepValue, untouchedSteps } from "./steps.js"
+import { BUILD_STEP_IDS, STEPS, STEP_IDS, applyTile, audienceSummary, jobBrief, modelLabel, nextStep, prevStep, qpuRelevant, simpleDefaults, stepIndex, stepTiles, stepValue, tileOn, untouchedSteps } from "./steps.js"
 import { canImprove, roundEntry, roundHint, roundLine } from "./rounds.js"
 
 const LEAGUE_KEY = "token-quest-league-v1"
@@ -65,7 +65,7 @@ const hud = document.getElementById("hud")
 /** A new plan for a story: the opening defaults, the LOCATION step, round one of two. */
 function freshPlan(useCaseId, nerd = false) {
   const choices = simpleDefaults(useCaseId)
-  return { useCase: useCaseId, choices, build: choicesToBuild(useCaseId, choices, nerd), step: "location", round: 1, rounds: [] }
+  return { useCase: useCaseId, choices, build: choicesToBuild(useCaseId, choices, nerd), step: "model", round: 1, rounds: [] }
 }
 
 function el(tag, props = {}, children = []) {
@@ -753,10 +753,14 @@ function responseWords(seconds) {
   return seconds < 1 ? `${Math.round(seconds * 1000)} ms` : `${seconds} s`
 }
 
-/** The brief every step shows: who the users are, where the model and data live, and the limits. */
+/**
+ * The brief every step shows: who the users are, where the model and data live, and the limits.
+ * `uc` is the story at the first step's picks, so the crowd, the model, the demand, the budget
+ * and the power follow them live.
+ */
 function scenarioCard(uc) {
-  const scenario = SCENARIOS[uc.id] || {}
-  const home = DATA_HOMES[uc.id]
+  const scenario = scenarioFor(uc)
+  const home = dataHomeFor(uc)
   const story = STORIES[uc.id] || { line: uc.blurb, sprite: uc.icon }
   const fact = (label, value, key) => el("div", { class: "sc-fact", "data-key": `fact-${key}` }, [el("span", { class: "fine", text: label }), el("strong", { text: value })])
   return el("div", { class: "scenario panel", "data-key": "scenario" }, [
@@ -768,8 +772,8 @@ function scenarioCard(uc) {
       ]),
     ]),
     el("div", { class: "sc-places" }, [
-      el("p", { class: "sc-place", "data-key": "users-place" }, [el("b", { text: "USERS " }), scenario.users || scenario.where || ""]),
-      el("p", { class: "sc-place", "data-key": "data-place" }, [el("b", { text: "MODEL & DATA " }), home ? `${home.what} in ${home.label}` : "beside the GPUs"]),
+      el("p", { class: "sc-place", "data-key": "users-place" }, [el("b", { text: "USERS " }), `${uc.users?.label ? `${uc.users.label}: ` : ""}${scenario.users || scenario.where || ""}`]),
+      el("p", { class: "sc-place", "data-key": "data-place" }, [el("b", { text: "MODEL & DATA " }), `${uc.model}: ${home ? `${home.what} in ${home.label}` : "beside the GPUs"}`]),
     ]),
     el("div", { class: "sc-facts" }, [
       fact("DEMAND", `${formatTokens(uc.demand)} tok/s`, "demand"),
@@ -842,13 +846,12 @@ function stepPanel(stepId, result) {
   const choices = state.plan.choices
   const step = STEPS[stepIndex(stepId)]
   if (stepId === "review") return reviewPanel(result)
-  const tiles = stepTiles(id, stepId, state.nerd)
-  const value = stepValue(id, stepId, choices)
-  const isOn = (tile) => (stepId === "location" ? value.includes(tile.id) : value === tile.id)
+  const tiles = stepTiles(id, stepId, state.nerd, choices)
+  const isOn = (tile) => tileOn(id, stepId, tile, choices)
   const wraps = tiles.map((tile) => {
     const impact = stepId === "wires" ? wireImpact(id, choices, tile.id, state.nerd) : null
     const wrap = picture({
-      key: `${stepId}-${tile.id}`,
+      key: `${tile.row || stepId}-${tile.id}`,
       art: tile.art,
       tag: tile.tag || "",
       label: tile.label,
@@ -882,21 +885,37 @@ function stepPanel(stepId, result) {
   })
   const selected = tiles.find(isOn)
   // The wires step carries its nerd detail on every tile's TOKEN IMPACT strip, not under the grid;
-  // the GPU step carries it in the reference-architecture panel's title.
-  const nerdLine = state.nerd && stepId !== "wires" && stepId !== "gpu" ? selected?.nerd || "" : ""
+  // the GPU step carries it in the reference-architecture panel's title; the first step has two rows.
+  const nerdLine = state.nerd && stepId !== "wires" && stepId !== "gpu" && stepId !== "model" ? selected?.nerd || "" : ""
   const max = maxMetros(id)
   const subtitle = stepId === "location"
     ? `${step.hint}${max > 1 ? `: pick up to ${max}` : ""}. ${metroSummary(id, choices)}`
-    : stepId === "qpu" && !qpuRelevant(id)
-      ? "No choice here. Read why, then NEXT."
-      : step.hint
+    : stepId === "model"
+      ? `${step.hint}. Chosen: ${modelLabel(id, choices)}.`
+      : stepId === "qpu" && !qpuRelevant(id)
+        ? "No choice here. Read why, then NEXT."
+        : step.hint
+  /* The first step: MODEL SIZE tiles on one row, USERS tiles on the next, each row with its own heading. */
+  const grid = stepId === "model"
+    ? ["model", "users"].map((row) => {
+      const mine = wraps.filter((_, index) => tiles[index].row === row)
+      const picked = tiles.find((tile) => tile.row === row && isOn(tile))
+      return el("div", { class: `tile-row-group row-${row}`, "data-key": `row-${row}` }, [
+        el("h3", { class: "row-title" }, [
+          row === "model" ? "MODEL SIZE" : "USERS",
+          state.nerd && picked?.nerd ? el("span", { class: "fine row-nerd", "data-key": `${row}-nerd`, text: picked.nerd }) : null,
+        ]),
+        el("div", { class: `tiles count-${mine.length}` }, mine),
+      ])
+    })
+    : [el("div", { class: `tiles count-${wraps.length}` }, wraps)]
   return el("section", { class: `step-panel step-${stepId}`, "data-key": "step-panel", "aria-labelledby": "step-title" }, [
     el("div", { class: "step-head" }, [
       el("h2", { id: "step-title", text: `${stepIndex(stepId) + 1}. ${step.title}` }),
       el("p", { class: "fine", "data-key": "step-hint", text: subtitle }),
     ]),
     stepId === "location" ? whoWhere(id) : null,
-    el("div", { class: `tiles count-${wraps.length}` }, wraps),
+    ...grid,
     nerdLine ? el("p", { class: "row-nerd", "data-key": "step-nerd", text: nerdLine }) : null,
     stepId === "gpu" && state.nerd ? refarchPanel(result, selected) : null,
     stepNav(stepId),
@@ -910,7 +929,7 @@ function stepPanel(stepId, result) {
 function refarchPanel(result, selected) {
   const id = state.plan.useCase
   const choices = state.plan.choices
-  const brain = brainPick(id, choices.brains || "medium")
+  const brain = brainPick(id, choices.brains || "medium", choices.users)
   const platform = byId(PLATFORMS, brain.platform)
   if (!platform) return null
   const hallId = state.plan.build.hall
@@ -965,8 +984,8 @@ function metroSummary(id, choices) {
  * data live, what the job has to do, and the three numbers the maths runs on.
  */
 function whoWhere(id) {
-  const { groups, data } = audienceSummary(id)
-  const brief = jobBrief(id)
+  const { groups, data } = audienceSummary(id, state.plan.choices)
+  const brief = jobBrief(id, state.plan.choices)
   const chip = (label, value, key) => el("div", { class: "ww-chip", "data-key": `ww-${key}` }, [el("span", { class: "fine", text: label }), el("strong", { text: value })])
   return el("div", { class: "who-where", "data-key": "who-where" }, [
     el("div", { class: "ww-chips" }, [
@@ -986,10 +1005,12 @@ function reviewPanel(result) {
   const rows = BUILD_STEP_IDS.filter((stepId) => stepId !== "qpu" || qpuRelevant(id)).map((stepId) => {
     const step = STEPS[stepIndex(stepId)]
     const value = stepValue(id, stepId, choices)
-    const tiles = stepTiles(id, stepId, state.nerd)
+    const tiles = stepTiles(id, stepId, state.nerd, choices)
     const label = stepId === "location"
       ? value.map((site) => byId(SITES, site)?.metro || site).join(" + ")
-      : tiles.find((tile) => tile.id === value)?.label || stepTiles(id, stepId, !state.nerd).find((tile) => tile.id === value)?.label || String(value)
+      : stepId === "model"
+        ? modelLabel(id, choices)
+        : tiles.find((tile) => tile.id === value)?.label || stepTiles(id, stepId, !state.nerd, choices).find((tile) => tile.id === value)?.label || String(value)
     return el("div", { class: `review-row${untouched.has(stepId) ? " untouched" : ""}`, "data-key": `review-${stepId}` }, [
       el("span", { class: "fine", text: step.title }),
       el("strong", { text: label }),
@@ -1159,9 +1180,10 @@ function siteDesigner(result) {
 }
 
 function gameScreen() {
-  const uc = useCase()
   const result = live()
-  const stepId = STEP_IDS.includes(state.plan.step) ? state.plan.step : "location"
+  /* The story at the first step's picks (model size, crowd), so the card tracks them. */
+  const uc = result.useCase || useCase()
+  const stepId = STEP_IDS.includes(state.plan.step) ? state.plan.step : "model"
   return el("section", { class: `screen game${state.nerd ? " nerd" : " simple"} on-${stepId}` }, [
     scenarioCard(uc),
     el("div", { class: "eco-strip" }, [ecoBar(result), rail(stepId)]),

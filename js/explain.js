@@ -50,9 +50,11 @@ function locationPhrase(useCaseId, before, after) {
 function neighbours(useCaseId, choices, nerd = false) {
   const list = []
   for (const stepId of BUILD_STEP_IDS) {
+    /* The first step is the brief the player chose (model size and crowd), not a build decision to second-guess. */
+    if (stepId === "model") continue
     if (stepId === "qpu" && !qpuRelevant(useCaseId)) continue
     const value = stepValue(useCaseId, stepId, choices)
-    for (const tile of stepTiles(useCaseId, stepId, nerd)) {
+    for (const tile of stepTiles(useCaseId, stepId, nerd, choices)) {
       if (tile.locked) continue
       if (stepId !== "location" && tile.id === value) continue
       const next = applyTile(useCaseId, stepId, tile.id, choices)

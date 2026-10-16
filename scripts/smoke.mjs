@@ -25,7 +25,7 @@ const SIMPLE_COPY = [
   "Take any one away and the AI stops: no power, no maths; no cooling, no GPUs; no data, nothing to know; no connection, no answer.",
   "Closer, cooler and better connected means faster answers for less money. Build the best AI factory you can afford!",
 ]
-const BUILD_STEPS = ["location", "gpu", "cooling", "memory", "wires", "storage", "qpu"]
+const BUILD_STEPS = ["model", "location", "gpu", "cooling", "memory", "wires", "storage", "qpu"]
 
 /** Fails if the page scrolls, a panel clips its content, or a control sits outside the viewport. */
 const FITS = `(() => {
@@ -338,10 +338,26 @@ try {
     for (const part of ["Shoppers want quick answers", "USERS", "MODEL & DATA", "NEW STORY"]) if (!scenario.includes(part)) throw new Error(`Scenario card lacks ${part}: ${scenario}`)
     const lights = await evaluate(`[...document.querySelectorAll('[data-key="eco-bar"] .eco-part')].map((p) => p.dataset.part + ':' + p.dataset.state).join(',')`)
     if (!/^power:\w+,cooling:\w+,compute:\w+,data:\w+,connections:\w+$/.test(lights)) throw new Error(`Ecosystem bar: ${lights}`)
-    const picks = { location: ["location-lon", "location-fra"], gpu: ["gpu-big"], cooling: ["cooling-super"], memory: ["memory-on"], wires: ["wires-fast"], storage: ["storage-none"], qpu: [] }
+    const picks = { model: ["model-70b", "users-large"], location: ["location-lon", "location-fra"], gpu: ["gpu-big"], cooling: ["cooling-super"], memory: ["memory-on"], wires: ["wires-fast"], storage: ["storage-none"], qpu: [] }
     for (const step of BUILD_STEPS) {
       await click(`[data-key="step-${step}"]`)
       await waitFor(`document.querySelector('[data-key="step-panel"]').classList.contains('step-${step}')`, `${step} step`)
+      if (step === "model") {
+        /* The first step: three model sizes on one row, three crowd sizes on the next, one of each pressed. */
+        const rows = await evaluate(`['row-model', 'row-users'].map((row) => document.querySelectorAll('[data-key="' + row + '"] .tile').length).join(',')`)
+        if (rows !== "3,3") throw new Error(`MODEL & USERS should show 3 model tiles and 3 users tiles, saw ${rows}`)
+        const pressed = await evaluate(`[...document.querySelectorAll('.step-model .tile[aria-pressed="true"]')].map((t) => t.dataset.key).join(',')`)
+        if (pressed !== "model-70b,users-large") throw new Error(`The shopper story should open on 70B and the crowd it was written for: ${pressed}`)
+        const usersHint = await text('[data-key="users-medium"] .tile-hint')
+        if (!/at once · .*tok\/s/.test(usersHint)) throw new Error(`A users tile should say how many ask at once and what that demands: ${usersHint}`)
+        const labels = await evaluate(`[...document.querySelectorAll('[data-key="row-users"] .tile .tile-title')].map((t) => t.textContent.trim()).join(',')`)
+        if (labels !== "10K shoppers a month,100K shoppers a month,1M shoppers a month") throw new Error(`The crowd tiles should read as enterprise sizes: ${labels}`)
+        /* Picking the small crowd shrinks the budget and the demand on the scenario card; the default restores them. */
+        await click('[data-key="users-small"]')
+        await sleep(150)
+        const smallCard = await text('[data-key="scenario"]')
+        if (!/10K shoppers a month/.test(smallCard) || !/\$360k/.test(smallCard)) throw new Error(`The scenario card should follow the crowd: ${smallCard}`)
+      }
       if (step === "location") {
         if (!(await has('[data-key="who-where"]'))) throw new Error("The LOCATION step should show who asks and where the data lives")
         const rows = await evaluate(`[...document.querySelectorAll('.step-location .tile')].map((t) => t.querySelectorAll('.tile-row').length)`)
@@ -350,7 +366,7 @@ try {
         if (!/tokens a second/.test(brief) || !/First word within/.test(brief)) throw new Error(`The job brief should carry the demand and first-word target: ${brief}`)
       }
       const tiles = await evaluate(`document.querySelectorAll('.step-panel .tile').length`)
-      if (step !== "qpu" && tiles !== 3 && step !== "location") throw new Error(`${step}: the simple board shows 3 tiles, saw ${tiles}`)
+      if (step !== "qpu" && tiles !== 3 && step !== "location" && step !== "model") throw new Error(`${step}: the simple board shows 3 tiles, saw ${tiles}`)
       const simpleText = await text(".screen.game")
       const jargon = ["TB/s", "PFLOPS", "PUE"].filter((word) => simpleText.includes(word))
       if (jargon.length) throw new Error(`${step}: the simple board leaked ${jargon.join(", ")}`)

@@ -85,7 +85,7 @@ test("picture presets map onto builds, and the preset board stays in the scoring
   assert.equal(choicesToBuild("drug", { helper: true }).orca, true)
   assert.equal(choicesToBuild("chat", { helper: true }).orca, false)
   assert.match(main, /nerd: false/)
-  assert.match(main, /const nerdLine = state\.nerd && stepId !== "wires" && stepId !== "gpu" \? selected\?\.nerd \|\| "" : ""/)
+  assert.match(main, /const nerdLine = state\.nerd && stepId !== "wires" && stepId !== "gpu" && stepId !== "model" \? selected\?\.nerd \|\| "" : ""/)
   assert.match(main, /stepId === "gpu" && state\.nerd \? refarchPanel\(result, selected\) : null/, "the nerd GPU step shows the reference architectures")
   assert.match(main, /const impact = stepId === "wires" \? wireImpact\(id, choices, tile\.id, state\.nerd\) : null/)
   assert.match(main, /extra: impact \? impactStrip\(impact, tile\.id\) : null/)

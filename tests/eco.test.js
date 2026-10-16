@@ -3,13 +3,13 @@ import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
-import { USE_CASES } from "../js/data.js"
+import { PLATFORMS, USERS, USE_CASES, byId, resolveUseCase, usersTier } from "../js/data.js"
 import { ECO_PARTS, ecoHint, ecoQuestion, ecoSummary, ecosystem } from "../js/eco.js"
 import { upsertEntry } from "../js/league.js"
-import { evaluateBuild } from "../js/model.js"
+import { evaluateBuild, groupSize, scenarioFor } from "../js/model.js"
 import { COMBO, choicesToBuild, hasCombo, wireIds } from "../js/presets.js"
 import { MAX_ROUNDS, canImprove, finalScore, roundEntry, roundHint, roundLine } from "../js/rounds.js"
-import { BUILD_STEP_IDS, STEPS, STEP_IDS, allSimple, applyTile, describeChoices, nextStep, prevStep, qpuRelevant, simpleDefaults, stepIndex, stepTiles, stepValue, untouchedSteps } from "../js/steps.js"
+import { BUILD_STEP_IDS, STEPS, STEP_IDS, allSimple, applyTile, describeChoices, nextStep, prevStep, qpuRelevant, simpleDefaults, stepIndex, stepTiles, stepValue, tileOn, untouchedSteps } from "../js/steps.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const main = readFileSync(join(root, "js/main.js"), "utf8")
@@ -183,19 +183,86 @@ test("the league entry after any round stores both rounds and keeps the better o
 
 /* ---------- The stepped build ---------- */
 
-test("the build is eight steps in order, and the step helpers never fall off the rail", () => {
-  assert.deepEqual(STEP_IDS, ["location", "gpu", "cooling", "memory", "wires", "storage", "qpu", "review"])
-  assert.deepEqual(STEPS.map((step) => step.title), ["LOCATION", "GPU", "COOLING", "MEMORY", "CONNECTIVITY", "STORAGE", "QPU", "REVIEW"])
+test("the build is nine steps in order, MODEL & USERS first, and the step helpers never fall off the rail", () => {
+  assert.deepEqual(STEP_IDS, ["model", "location", "gpu", "cooling", "memory", "wires", "storage", "qpu", "review"])
+  assert.deepEqual(STEPS.map((step) => step.title), ["MODEL & USERS", "LOCATION", "GPU", "COOLING", "MEMORY", "CONNECTIVITY", "STORAGE", "QPU", "REVIEW"])
   assert.deepEqual(BUILD_STEP_IDS, STEP_IDS.slice(0, -1))
-  assert.equal(stepIndex("location"), 0)
-  assert.equal(stepIndex("review"), 7)
+  assert.equal(stepIndex("model"), 0)
+  assert.equal(stepIndex("location"), 1)
+  assert.equal(stepIndex("review"), 8)
   assert.equal(stepIndex("nope"), 0)
+  assert.equal(nextStep("model"), "location")
   assert.equal(nextStep("location"), "gpu")
   assert.equal(nextStep("qpu"), "review")
   assert.equal(nextStep("review"), "review")
-  assert.equal(prevStep("location"), "location")
+  assert.equal(prevStep("model"), "model")
+  assert.equal(prevStep("location"), "model")
   assert.equal(prevStep("review"), "qpu")
   for (const step of STEPS) assert.ok(step.hint.length > 0 && step.short.length <= 5, step.id)
+})
+
+test("MODEL & USERS offers three model sizes and three crowd sizes, each tile saying what it demands", () => {
+  for (const { id, defaults } of USE_CASES) {
+    const tiles = stepTiles(id, "model")
+    assert.deepEqual(tiles.map((tile) => `${tile.row}-${tile.id}`), ["model-70b", "model-100b", "model-650b", "users-small", "users-medium", "users-large"], id)
+    for (const tile of tiles) {
+      assert.ok(tile.lines.length === 3, `${id} ${tile.row} ${tile.id} learn lines`)
+      assert.ok(tile.nerd.length > 0 && tile.why.length > 0, `${id} ${tile.row} ${tile.id} nerd and why`)
+      assert.deepEqual(Object.keys(tile.patch), [tile.row], `${id} ${tile.row} ${tile.id} patches its own row`)
+      assert.doesNotMatch(`${tile.label} ${tile.hint}`, /TB\/s|PFLOPS|\bPUE\b/, `${id} ${tile.label}`)
+    }
+    const users = tiles.filter((tile) => tile.row === "users")
+    assert.ok(users.every((tile) => /tok\/s/.test(tile.hint)), `${id} users tiles carry the demand`)
+    assert.ok(users[0].tier.demand < users[1].tier.demand && users[1].tier.demand < users[2].tier.demand, `${id} crowds grow`)
+    assert.equal(users[2].tier.count, USERS[id].top, `${id} the top crowd is the business the story was written for`)
+    assert.equal(users[1].tier.count * 10, users[2].tier.count, `${id} tiers are ten times apart`)
+    assert.equal(users[0].tier.count * 100, users[2].tier.count, `${id} tiers are ten times apart`)
+    const picked = stepValue(id, "model", simpleDefaults(id))
+    assert.deepEqual(picked, defaults, `${id} opens on its own model and crowd`)
+    assert.equal(defaults.users, "large", `${id} opens on the crowd its budget and racks were set for`)
+    for (const tile of tiles) {
+      const next = applyTile(id, "model", tile.id, simpleDefaults(id))
+      assert.equal(stepValue(id, "model", next)[tile.row], tile.id, `${id} ${tile.row} ${tile.id}`)
+      assert.ok(tileOn(id, "model", tile, next), `${id} ${tile.row} ${tile.id} lights up`)
+    }
+    /* The GPU tiles scale their rack counts down with a smaller crowd, never below one rack. */
+    const medium = stepTiles(id, "gpu", false, { users: "medium" }).map((tile) => tile.racks)
+    const large = stepTiles(id, "gpu", false, { users: "large" }).map((tile) => tile.racks)
+    assert.deepEqual(medium, large.map((racks) => Math.max(1, Math.round(racks / 10))), `${id} racks follow the crowd`)
+    assert.ok(stepTiles(id, "gpu", false, { users: "small" }).every((tile) => tile.racks === 1), `${id} one rack for the smallest crowd`)
+  }
+  /* The resolved story: a 650B MoE needs the 72-GPU domain; on an 8-GPU island it spills over several. */
+  const big = resolveUseCase("chat", { model: "650b", users: "large" })
+  assert.equal(big.weightsGB, 671)
+  assert.equal(big.activeB, 37)
+  assert.ok(big.moe)
+  assert.ok(groupSize(big, byId(PLATFORMS, "gb200")) >= 72, "a 650B MoE wants the whole NVL72 domain")
+  assert.ok(groupSize(big, byId(PLATFORMS, "h100")) > 8, "a 650B model does not fit one 8-GPU HGX island")
+  assert.equal(groupSize(resolveUseCase("chat", { model: "70b" }), byId(PLATFORMS, "h100")), 8)
+  /* The crowd sets the demand with the labelled concurrency model; budget and power follow it (×0.1 scales by the 0.7 power). */
+  const small = usersTier("chat", "small")
+  const medium = usersTier("chat", "medium")
+  const large = usersTier("chat", "large")
+  assert.deepEqual([small.label, medium.label, large.label], ["10K shoppers a month", "100K shoppers a month", "1M shoppers a month"])
+  assert.equal(large.concurrent, 6_125, "1M × 0.35 × 1.2 × 6 ÷ 1,440 × 3.5 shoppers at once")
+  assert.equal(large.streams, 18_375, "three model streams a shopper")
+  assert.equal(large.demand, 551_250, "× 30 tok/s")
+  assert.equal(medium.demand, 55_125)
+  assert.equal(small.demand, 5_513)
+  assert.equal(scenarioFor(resolveUseCase("chat", { users: "large" })).budget, 9_000_000)
+  assert.equal(scenarioFor(resolveUseCase("chat", { users: "medium" })).budget, Math.round((9_000_000 * 0.1 ** 0.7) / 10_000) * 10_000)
+  assert.equal(scenarioFor(resolveUseCase("chat", { users: "medium" })).powerMW, 0.12)
+  assert.deepEqual([usersTier("rag", "medium").label, usersTier("code", "medium").label, usersTier("research", "medium").label], ["5,000 staff", "2,000 developers", "1,000 analysts"])
+  assert.deepEqual([usersTier("rag", "large").demand, usersTier("code", "large").demand, usersTier("research", "large").demand], [150_000, 420_000, 700_000], "the top tiers carry the calibrated demand")
+  /* Robots and scientists are counted their own way: a fleet by duty, a screen by candidates a night. */
+  assert.deepEqual([usersTier("robot", "small").label, usersTier("robot", "large").label], ["50 robots", "5,000 robots"])
+  assert.equal(usersTier("robot", "large").streams, 1_500)
+  assert.equal(usersTier("robot", "large").demand, 120_000)
+  assert.deepEqual([usersTier("drug", "small").label, usersTier("drug", "medium").label, usersTier("drug", "large").label], ["20 scientists", "200 scientists", "2,000 scientists"])
+  assert.equal(usersTier("drug", "large").candidatesPerDay, 40_000_000)
+  assert.equal(usersTier("drug", "large").demand, Math.round((40_000_000 * 500) / 86_400))
+  assert.match(stepTiles("drug", "model").find((tile) => tile.row === "users" && tile.id === "medium").hint, /^4,000,000 a day · /)
+  assert.match(describeChoices("chat", simpleDefaults("chat")), /^NVIDIA HGX B300 ×6/, "the describe line is unchanged by the first step")
 })
 
 test("every step offers three tiles on the simple board, a short list of metros, and the QPU only to drug discovery", () => {
@@ -246,7 +313,7 @@ test("every step offers three tiles on the simple board, a short list of metros,
   }
   assert.deepEqual(stepTiles("chat", "gpu").map((tile) => tile.label), ["NVIDIA HGX B300 ×6", "NVIDIA GB200 NVL72 ×2", "NVIDIA Vera Rubin NVL72 ×1"])
   assert.deepEqual(stepTiles("code", "gpu").map((tile) => tile.label), ["NVIDIA HGX B300 ×6", "NVIDIA GB200 NVL72 ×3", "NVIDIA Vera Rubin NVL72 ×1"])
-  assert.deepEqual(stepTiles("robot", "gpu").map((tile) => tile.label), ["NVIDIA HGX H100 ×2", "NVIDIA HGX H200 ×2", "NVIDIA Vera Rubin NVL72 ×1"])
+  assert.deepEqual(stepTiles("robot", "gpu").map((tile) => tile.label), ["NVIDIA HGX B200 ×2", "NVIDIA HGX B300 ×3", "NVIDIA Vera Rubin NVL72 ×1"])
   assert.deepEqual(stepTiles("chat", "location").map((tile) => tile.id), ["lon", "fra", "ams", "par"])
   assert.deepEqual(stepTiles("code", "location").map((tile) => tile.id), ["iad", "sjc", "dfw", "chi"])
 })
@@ -277,7 +344,8 @@ test("picking a tile patches the choice set; metros toggle up to the story's max
   assert.deepEqual(applyTile("rag", "location", "fra", rag).metros, ["fra"], "a one-metro story swaps metros")
   const memoryOn = applyTile("chat", "memory", "plus", chat)
   assert.deepEqual([memoryOn.memory, memoryOn.hosts], [true, "grace"])
-  assert.deepEqual(untouchedSteps("chat", memoryOn), ["location", "gpu", "cooling", "wires", "storage"])
+  assert.deepEqual(untouchedSteps("chat", memoryOn), ["model", "location", "gpu", "cooling", "wires", "storage"])
+  assert.deepEqual(untouchedSteps("chat", applyTile("chat", "model", "medium", chat)), ["location", "gpu", "cooling", "memory", "wires", "storage"], "a smaller crowd counts as a touched first step")
   assert.equal(describeChoices("chat", chat), "NVIDIA HGX B300 ×6, air cooling in London, with the KV cache off, on Peering + eyeballs, local only storage")
   assert.match(describeChoices("drug", applyTile("drug", "qpu", "orca", simpleDefaults("drug"))), /, with ORCA PT-3$/)
 })
@@ -316,7 +384,10 @@ test("the game screen is the stepped build: scenario card, ecosystem bar, rail, 
   assert.match(game, /scenarioCard\(uc\)/)
   assert.match(game, /ecoBar\(result\), rail\(stepId\)/)
   assert.match(game, /stepPanel\(stepId, result\)/)
-  assert.match(main, /step: "location", round: 1, rounds: \[\]/)
+  assert.match(main, /step: "model", round: 1, rounds: \[\]/)
+  /* The first step renders two rows, MODEL SIZE and USERS, each with its own tiles grid. */
+  assert.match(main, /"data-key": `row-\$\{row\}`/)
+  assert.match(main, /row === "model" \? "MODEL SIZE" : "USERS"/)
   assert.match(main, /btn\("IMPROVE IT ▶"/)
   assert.match(main, /text: roundLine\(rounds\)/)
   assert.match(main, /"data-key": "users-place"/)

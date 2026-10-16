@@ -1,4 +1,4 @@
-import { DATA_HOMES, DATA_TIERS, EDGE_LATE, EGRESS_PER_GB, FTE_HOURS, HALLS, HORIZON_WEEKS, HUMAN_WORK, IN_METRO_KM, KV_TIER, METRO_OFFERS, MISSION_SITES, NETWORKS, ORCA, PLATFORMS, SCENARIOS, SITES, TRAIN_BONUS_CAP, USER_BASES, USE_CASES, byId } from "./data.js"
+import { DATA_HOMES, DATA_TIERS, EDGE_LATE, EGRESS_PER_GB, FTE_HOURS, HALLS, HORIZON_WEEKS, HUMAN_WORK, IN_METRO_KM, KV_TIER, METRO_OFFERS, MISSION_SITES, NETWORKS, ORCA, PLATFORMS, SCENARIOS, SITES, TRAIN_BONUS_CAP, USER_BASES, USE_CASES, byId, dataHomeFor, resolveUseCase } from "./data.js"
 import { HOURS_PER_MONTH, blankFabric, destinationsNeeded, liveShare, networkBill } from "./network.js"
 import { designFor, racksNeeded, withDesign } from "./refarch.js"
 import { defaultRoutes, evaluateRoutes } from "./routes.js"
@@ -670,7 +670,8 @@ function emptyResult(useCase, hall, platform, data, link, racks, build) {
  * per million good tokens and a score. Bad builds never block; they just cost.
  */
 export function evaluateBuild(useCaseId, build = {}) {
-  const useCase = byId(USE_CASES, useCaseId)
+  // The story at the build's model size and users tier; the defaults when the build names none.
+  const useCase = resolveUseCase(useCaseId, { model: build?.model, users: build?.users })
   const hall = byId(HALLS, build?.hall || "A")
   const stock = byId(PLATFORMS, build?.platform)
   // A nerd reference architecture ships the same GPUs in another box: rack power, lead and price shift a little.
@@ -710,7 +711,7 @@ export function evaluateBuild(useCaseId, build = {}) {
   out.interKm = reach.interKm
   out.dataKm = reach.dataKm
   out.dataNearKm = reach.dataNearKm
-  out.dataHome = reach.dataHome
+  out.dataHome = dataHomeFor(useCase) || reach.dataHome
   const terms = metroTerms(useCase.id, reach.sites, reach.perSite)
   out.metroTerms = terms
 
@@ -1015,7 +1016,9 @@ function settle(out) {
   // rack cannot win and the ranking stays put. People-power repays it once a year.
   const annualFinance = out.finance * (1 + FINANCE_RATE)
   out.hourlyCost = out.powerCost + out.amort + out.netCost + out.failure + out.spaceBill + out.finance
-  const pricePerM = out.scenario?.pricePerM ?? scenarioFor(out.useCase).pricePerM
+  // A bigger model's answers are worth more per token (the model size's labelled quality factor).
+  const pricePerM = (out.scenario?.pricePerM ?? scenarioFor(out.useCase).pricePerM) * (out.useCase?.priceMult || 1)
+  out.pricePerM = pricePerM
   out.goodTok = out.goodput * outage * live * out.hitMult * out.reachMult
   out.revenue = (out.goodTok * pricePerM * HOUR) / 1e6
   const fullYear = live > 0 ? (out.revenue / live) * 24 * 365 : 0
@@ -1059,8 +1062,15 @@ function settle(out) {
   return out
 }
 
+/**
+ * The scenario card for a story at its users tier: the budget and the power allocation grow
+ * with the business (`useCase.scale`, 1 at the middle tier); the deadline and the token price do not.
+ */
 export function scenarioFor(useCase) {
-  return SCENARIOS[useCase?.id] || { where: "", budget: BUDGET, powerMW: 1, deadlineWeeks: 26, pricePerM: 1 }
+  const base = SCENARIOS[useCase?.id] || { where: "", budget: BUDGET, powerMW: 1, deadlineWeeks: 26, pricePerM: 1 }
+  const scale = useCase?.scale > 0 ? useCase.scale : 1
+  if (scale === 1) return base
+  return { ...base, budget: Math.round((base.budget * scale) / 10_000) * 10_000, powerMW: Math.round(base.powerMW * scale * 1000) / 1000 }
 }
 
 function fmtWeeks(value) {

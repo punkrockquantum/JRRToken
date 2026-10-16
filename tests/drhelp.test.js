@@ -180,9 +180,9 @@ test("the time line reads the lead parts: the slowest part, pre-built halls, the
   const onTime = helped("rag", expertChoices("rag"), false).lines[3].text
   assert.match(onTime, /^Live in week 12 against a week 20 deadline\. The slowest part was HGX B300 at 12 weeks\. The rear-door hall in Frankfurt was powered and cooled before the racks shipped, so nothing waited on the building\.$/)
   const late = helped("robot", WEAK.robot, false).lines[3].text
-  assert.match(late, /^Live in week 30, 14 weeks after the week 16 deadline\. The slowest part was Vera Rubin NVL72 at 30 weeks\. .* The one-time copy of 12,008 GB from Frankfurt took about 27 hours once the link was lit\.$/)
+  assert.match(late, /^Live in week 30, 14 weeks after the week 16 deadline\. The slowest part was Vera Rubin NVL72 at 30 weeks\. .* The one-time copy of 12,070 GB from Frankfurt took about 27 hours once the link was lit\.$/)
   const days = helped("drug", WEAK.drug, false).lines[3].text
-  assert.match(days, /The one-time copy of 250,015 GB from Dublin took about 23 days once the link was lit\.$/)
+  assert.match(days, /The one-time copy of 250,100 GB from Dublin took about 23 days once the link was lit\.$/)
   /* A London liquid hall for RAG waits four extra weeks; Frankfurt had liquid capacity ready. */
   const fitOut = helped("rag", { ...expertChoices("rag"), metros: ["lon"], brains: "small", home: "super" }, true)
   assert.match(fitOut.lines[3].text, /The slowest part was Liquid hall fit-out at 14 weeks\. Digital Realty would have advised Frankfurt, where liquid capacity was ready 4 weeks sooner\./)

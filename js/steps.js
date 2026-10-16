@@ -4,13 +4,14 @@
  * what each tile sets in a choice set, the one-line reason shown when a tile is picked, and
  * the enumeration of every simple picture for the balance checks. No DOM here.
  */
-import { AUDIENCES, DATA_HOMES, DOES, HALLS, JOBS, KV_TIER, ORCA, PLATFORMS, SITES, USER_BASES, USE_CASES, byId } from "./data.js"
+import { AUDIENCES, DATA_HOMES, DOES, HALLS, JOBS, KV_TIER, MODELS, ORCA, PLATFORMS, SITES, USER_BASES, USER_TIER_IDS, USE_CASES, byId, dataHomeFor, resolveUseCase, usersTier } from "./data.js"
 import { dataTrips } from "./latency.js"
-import { formatMoney, metroOffers } from "./model.js"
-import { COMBO, NERD_IDS, SIMPLE_IDS, brainPick, cleanMetros, defaultChoices, maxMetros, memoryChoices, memoryTile, metroSets, wireIds } from "./presets.js"
+import { formatMoney, formatTokens, metroOffers, scenarioFor } from "./model.js"
+import { COMBO, NERD_IDS, SIMPLE_IDS, brainPick, cleanMetros, defaultChoices, maxMetros, memoryChoices, memoryTile, metroSets, modelPicks, wireIds } from "./presets.js"
 import { designFor } from "./refarch.js"
 
 export const STEPS = [
+  { id: "model", title: "MODEL & USERS", hint: "Which model answers, and how many people ask", short: "MODEL" },
   { id: "location", title: "LOCATION", hint: "Which Digital Realty metros", short: "WHERE" },
   { id: "gpu", title: "GPU", hint: "The computers that run the AI", short: "GPU" },
   { id: "cooling", title: "COOLING", hint: "How the racks are cooled", short: "COOL" },
@@ -89,14 +90,54 @@ const GPU_LEARN = {
 
 const SIZE_TAG = { small: "SMALL", medium: "MEDIUM", big: "BIG", rubin: "NEWEST", huge: "HUGE" }
 
+/** The three model sizes: what each one is, what it needs, and when to pick it. */
+const MODEL_TILES = {
+  "70b": {
+    art: "token",
+    hint: "fits on a few GPUs, quick answers",
+    lines: [
+      "A 70-billion-parameter dense model: every parameter works on every token.",
+      "70 GB of weights at FP8 (140 GB at FP16) fit on two or three of today's GPUs, so answers start fast and cost little.",
+      "Pick it for short, everyday questions where speed and price matter more than depth.",
+    ],
+    nerd: "Llama-class. 70 GB FP8 / 140 GB FP16. KV cache 0.16 MB per token at FP8. Quality ×1.0 on the token price (game).",
+    why: "The lightest model: cheapest per token, fastest to start, good enough for everyday questions.",
+  },
+  "100b": {
+    art: "gem",
+    hint: "a bigger brain for the same hall",
+    lines: [
+      "About 100 billion parameters, dense: a step up in answer quality for a step up in memory and maths.",
+      "100 GB of weights at FP8 (200 GB at FP16): three or four GPUs just to load it, a little slower per token.",
+      "Pick it when the answers have to be right more often and the budget can carry 40% more weights.",
+    ],
+    nerd: "ESM3-98B / Command-A-111B class. 100 GB FP8 / 200 GB FP16. KV cache 0.2 MB per token. Quality ×1.12 (game).",
+    why: "A bigger dense model: better answers for about 40% more memory and maths per token.",
+  },
+  "650b": {
+    art: "rackLiquid",
+    hint: "mixture of experts, wants 72 GPUs as one",
+    lines: [
+      "A 650-billion-parameter mixture-of-experts model (DeepSeek-class: 671B in total, about 37B active per token).",
+      "671 GB of weights at FP8: too big for an 8-GPU server at FP8 on Hopper, so it spills across islands unless a 72-GPU NVLink rack holds it whole.",
+      "Pick it for reasoning, long reports and hard code, and plan an NVL72 rack for it.",
+    ],
+    nerd: "671B total / 37B active. 671 GB FP8 / 1.3 TB FP16. MLA KV cache 0.07 MB per token. Quality ×1.3 (game). NVL72 domain ×1.5, 8-GPU islands ×0.75.",
+    why: "The biggest brain: the best answers, but it only runs well when 72 GPUs act as one.",
+  },
+}
+
+const USERS_TAG = { small: "SMALL", medium: "MEDIUM", large: "LARGE" }
+const USERS_ART = { small: "user", medium: "user", large: "hero" }
+
 /** One line per story and GPU tile: the reason that pops up for two seconds when it is picked. */
 const GPU_WHY = {
   chat: { h100: "Cheap and quick to get, but each rack answers few shoppers.", b300: "Six strong air racks: plenty of shoppers, no liquid hall needed.", gb200: "Two NVL72 racks answer the whole crowd, if the hall can cool them.", vr: "The fastest rack, but it lands after the 16-week deadline." },
-  rag: { h200: "Fits the 70B model, but slow on 16k-token prompts.", b300: "Air-cooled Blackwell fits a small power room.", gb200: "One NVL72 rack would do; two blow the power room.", vr: "Scarce and late for a 20-week deadline." },
-  code: { h200: "Too little memory for 64k-token agent contexts.", b300: "Six air racks keep up until the contexts fill the memory.", gb200: "Three NVL72 racks hold the 400B model and its long contexts.", vr: "Arrives too late for a 26-week launch." },
-  research: { h200: "A 671B model does not fit well on Hopper islands.", b300: "Works, but the model spills across small NVLink islands.", gb200: "72 GPUs as one is how a 671B reasoning model wants to run.", vr: "Inside the 36-week deadline, but the priciest rack on the board." },
-  drug: { h200: "Fine for 15B chemistry models; a bit slow on the screen.", b300: "Four Blackwell Ultra racks screen the library fast on air.", gb200: "More rack than the lab's power room can feed.", vr: "The lab would pay for speed it cannot power." },
-  robot: { h100: "The 8B model fits; a second rack serves both plants.", h200: "Faster memory writes each answer sooner for the robots.", vr: "A 210 kW rack for an 8B model: power and money wasted." },
+  rag: { h200: "Fits a 70B model, but slow on 16k-token prompts.", b300: "Air-cooled Blackwell fits a small power room.", gb200: "One NVL72 rack would do; two blow the power room.", vr: "Scarce and late for a 20-week deadline." },
+  code: { h200: "Too little memory for 64k-token agent contexts.", b300: "Six air racks keep up until the contexts fill the memory.", gb200: "Three NVL72 racks hold a big model and its long contexts.", vr: "Arrives too late for a 26-week launch." },
+  research: { h200: "A 650B model does not fit well on Hopper islands.", b300: "Works, but a big model spills across small NVLink islands.", gb200: "72 GPUs as one is how a 650B reasoning model wants to run.", vr: "Inside the 36-week deadline, but the priciest rack on the board." },
+  drug: { h200: "Cheap racks, but a 100B model screens slowly on them.", b300: "Four Blackwell Ultra racks screen the library fast on air.", gb200: "More rack than the lab's power room can feed.", vr: "The lab would pay for speed it cannot power." },
+  robot: { h100: "Cheap, but too few tokens a second for a 70B model.", h200: "Four Hopper racks still miss the fleet's 50 ms first word.", b200: "Two Blackwell racks on air serve the whole fleet from the plants.", b300: "Three racks is more than the fleet needs; the money shows in the token price.", vr: "A 210 kW rack far above what the fleet needs: power and money wasted." },
 }
 
 const HALL_META = {
@@ -221,12 +262,98 @@ export function qpuNotNeeded(useCaseId) {
 
 const km = (value) => `${Math.round(value).toLocaleString("en-GB")} km`
 const pct = (share) => `${Math.round(share * 100)}%`
+const count = (n) => Math.round(n).toLocaleString("en-GB")
+
+/** The concurrency derivation for one users tier, in words: the tile's learn lines and its nerd line. */
+export function usersDerivation(useCaseId, tierId) {
+  const tier = usersTier(useCaseId, tierId)
+  const uc = byId(USE_CASES, useCaseId)
+  const spec = tier.spec
+  const demand = `${formatTokens(tier.demand)} tokens a second`
+  const scenario = scenarioFor(resolveUseCase(useCaseId, { users: tier.id }))
+  const money = tier.scale === 1
+    ? `This is the business the story was written for: a ${formatMoney(scenario.budget)} budget and ${scenario.powerMW} MW of power.`
+    : `A business this size brings a ${formatMoney(scenario.budget)} budget and ${scenario.powerMW} MW of power (×${tier.scale} of the top tier, game assumption).`
+  if (spec.kind === "batch") {
+    const perDay = count(tier.candidatesPerDay)
+    return {
+      lines: [
+        `${tier.label}, each queueing ${count(spec.perNight)} candidates a night: ${perDay} candidates a day. A pipeline, not a crowd; nobody waits on one answer.`,
+        `${perDay} candidates × ${spec.tokens} tokens of poses and scores each ÷ 86,400 seconds in a day = ${demand}, steady, with no busy hour.`,
+        money,
+      ],
+      nerd: `${count(tier.count)} × ${count(spec.perNight)} × ${spec.tokens} tok ÷ 86,400 s = ${count(tier.demand)} tok/s (≈ ${count(tier.streams)} streams at ${uc.tps} tok/s).`,
+    }
+  }
+  if (spec.kind === "fleet") {
+    return {
+      lines: [
+        `${tier.label} on the floor, each asking many times a second.`,
+        `About ${pct(spec.duty)} of them are mid-request at any moment: ${count(tier.streams)} streams × ${uc.tps} tokens a second each = ${demand}.`,
+        money,
+      ],
+      nerd: `${count(tier.count)} robots × duty ${spec.duty} = ${count(tier.streams)} streams × ${uc.tps} tok/s = ${count(tier.demand)} tok/s.`,
+    }
+  }
+  const streams = spec.streams || 1
+  const session = spec.minutes >= 60 ? `${spec.minutes / 60} hour${spec.minutes === 60 ? "" : "s"}` : `${spec.minutes} minutes`
+  const perSession = streams === 1 ? `one model stream each` : `${streams} model streams each (the answer plus the agents working for them)`
+  return {
+    lines: [
+      `${tier.label}: ${pct(spec.daily)} ask on a given day, ${spec.sessions} session${spec.sessions === 1 ? "" : "s"} of about ${session}, and the busy hour runs ${spec.peak}× the 24-hour average.`,
+      `That is about ${count(tier.concurrent)} ${spec.who} at once, ${perSession}, at ${uc.tps} tokens a second: ${demand} at the peak.`,
+      money,
+    ],
+    nerd: `${count(tier.count)} × ${spec.daily} × ${spec.sessions} × ${spec.minutes} min ÷ 1,440 × ${spec.peak} = ${count(tier.concurrent)} at once × ${streams} stream${streams === 1 ? "" : "s"} × ${uc.tps} tok/s = ${count(tier.demand)} tok/s.`,
+  }
+}
+
+/** The six tiles of the first step: three model sizes, then three users tiers, each knowing its row. */
+function modelTiles(useCaseId, choices = {}) {
+  const picks = modelPicks(useCaseId, choices)
+  const models = MODELS.map((model) => {
+    const copy = MODEL_TILES[model.id]
+    const uc = resolveUseCase(useCaseId, { model: model.id, users: picks.users })
+    return {
+      id: model.id,
+      row: "model",
+      label: `${model.label} (${model.example})`,
+      hint: copy.hint,
+      tag: `${model.weightsGB >= 1000 ? `${(model.weightsGB / 1000).toFixed(1)} TB` : `${model.weightsGB} GB`} FP8 · ${model.moe ? `${model.activeB}B ACTIVE` : "DENSE"}`,
+      art: copy.art,
+      lines: copy.lines,
+      nerd: copy.nerd,
+      why: copy.why,
+      patch: { model: model.id },
+      model,
+      useCase: uc,
+    }
+  })
+  const users = USER_TIER_IDS.map((tierId) => {
+    const tier = usersTier(useCaseId, tierId)
+    const derived = usersDerivation(useCaseId, tierId)
+    return {
+      id: tierId,
+      row: "users",
+      label: tier.label,
+      hint: tier.kind === "batch" ? `${count(tier.candidatesPerDay)} a day · ${formatTokens(tier.demand)} tok/s` : `≈ ${count(tier.concurrent)} at once · ${formatTokens(tier.demand)} tok/s`,
+      tag: USERS_TAG[tierId],
+      art: USERS_ART[tierId],
+      lines: derived.lines,
+      nerd: derived.nerd,
+      why: `${tier.label}: ${formatTokens(tier.demand)} tokens a second to serve${tierId === "large" ? ", the business this story was written for" : tierId === "medium" ? ", a tenth of the top crowd" : ", a hundredth of the top crowd"}.`,
+      patch: { users: tierId },
+      tier,
+    }
+  })
+  return [...models, ...users]
+}
 
 /**
  * Who prompts this story and from where, as the location step shows it: one entry per
  * audience with its cities and request share, plus the model and data home.
  */
-export function audienceSummary(useCaseId) {
+export function audienceSummary(useCaseId, choices = null) {
   const names = AUDIENCES[useCaseId] || {}
   const places = USER_BASES[useCaseId]?.places || []
   const groups = ["customers", "employees"].map((kind) => {
@@ -236,20 +363,21 @@ export function audienceSummary(useCaseId) {
     const cities = mine.length === 1 ? mine[0].city : mine.map((place) => `${place.city} ${pct(place.share / share)}`).join(", ")
     return { kind, name: names[kind] || kind, cities, share }
   }).filter(Boolean)
-  const home = DATA_HOMES[useCaseId]
+  const home = choices ? dataHomeFor(resolveUseCase(useCaseId, modelPicks(useCaseId, choices))) : DATA_HOMES[useCaseId]
   return { groups, data: home ? { city: home.city, label: home.label, what: home.what } : null }
 }
 
 /**
  * The job in plain words plus the three numbers the maths runs on: who asks and how much,
  * how fast the first word must come, and how often an answer goes back to the data.
+ * With a choice set, the demand and the model follow the first step's picks.
  */
-export function jobBrief(useCaseId) {
-  const uc = byId(USE_CASES, useCaseId)
+export function jobBrief(useCaseId, choices = null) {
+  const uc = choices ? resolveUseCase(useCaseId, modelPicks(useCaseId, choices)) : byId(USE_CASES, useCaseId)
   if (!uc) return { job: "", needs: [] }
-  const { groups, data } = audienceSummary(useCaseId)
+  const { groups, data } = audienceSummary(useCaseId, choices)
   const who = groups.map((group) => `${group.name.toLowerCase()} (${pct(group.share)} of requests)`).join(" and ")
-  const demand = `${Math.round(uc.demand / 1000).toLocaleString("en-GB")}K tokens a second`
+  const demand = `${formatTokens(uc.demand)} tokens a second`
   const first = uc.ttft < 1 ? `${Math.round(uc.ttft * 1000)} ms` : `${uc.ttft} s`
   const trips = dataTrips(uc)
   const dataLine = trips > 0
@@ -326,9 +454,14 @@ function metroWhy(useCaseId, offer) {
   return `${offer.site?.metro}: ${offer.note}; ${Math.round(offer.dataKm).toLocaleString("en-GB")} km from ${home?.city || "the data"}, so the weights and data copy over your link.`
 }
 
-/** The tiles one step offers for a story, simple or nerd. Each tile knows what it sets. */
-export function stepTiles(useCaseId, stepId, nerd = false) {
+/**
+ * The tiles one step offers for a story, simple or nerd. Each tile knows what it sets. The
+ * choice set only matters where a tile depends on another step: the GPU tiles scale their
+ * rack counts with the users tier, the model tiles show the demand at that tier.
+ */
+export function stepTiles(useCaseId, stepId, nerd = false, choices = {}) {
   const ids = nerd ? NERD_IDS : SIMPLE_IDS
+  if (stepId === "model") return modelTiles(useCaseId, choices)
   if (stepId === "location") {
     const offers = metroOffers(useCaseId)
     return offers.map((offer) => ({
@@ -345,8 +478,9 @@ export function stepTiles(useCaseId, stepId, nerd = false) {
     }))
   }
   if (stepId === "gpu") {
+    const { users } = modelPicks(useCaseId, choices)
     return ids.brains.map((id) => {
-      const pick = brainPick(useCaseId, id)
+      const pick = brainPick(useCaseId, id, users)
       const platform = byId(PLATFORMS, pick.platform)
       const spec = platform ? `${platform.hbmGB} GB HBM, ${platform.hbmTBs} TB/s, ${platform.rackKW} kW, ${formatMoney(platform.capex)}, lead ${platform.leadWeeks} weeks` : ""
       return {
@@ -408,8 +542,9 @@ export function stepTiles(useCaseId, stepId, nerd = false) {
   return []
 }
 
-/** The tile id (or metro list) a choice set is on for one step. */
+/** The tile id (or metro list, or the model and users pair) a choice set is on for one step. */
 export function stepValue(useCaseId, stepId, choices = {}) {
+  if (stepId === "model") return modelPicks(useCaseId, choices)
   if (stepId === "location") return cleanMetros(useCaseId, choices.metros)
   if (stepId === "gpu") return choices.brains || "medium"
   if (stepId === "cooling") return choices.home || "cool"
@@ -432,11 +567,26 @@ export function applyTile(useCaseId, stepId, tileId, choices = {}) {
     const { sitePlans, ...rest } = base
     return { ...rest, metros }
   }
-  const tile = stepTiles(useCaseId, stepId, true).find((item) => item.id === tileId) || stepTiles(useCaseId, stepId, false).find((item) => item.id === tileId)
+  const tile = stepTiles(useCaseId, stepId, true, base).find((item) => item.id === tileId) || stepTiles(useCaseId, stepId, false, base).find((item) => item.id === tileId)
   const next = tile ? { ...base, ...tile.patch } : base
   /* A reference architecture belongs to one platform: a new GPU tile drops a design built for another. */
   if (stepId === "gpu" && next.refarch && !designFor(brainPick(useCaseId, next.brains).platform, next.refarch)) delete next.refarch
   return next
+}
+
+/** True when a tile is the one a choice set is on: metros toggle, the first step has two rows. */
+export function tileOn(useCaseId, stepId, tile, choices = {}) {
+  const value = stepValue(useCaseId, stepId, choices)
+  if (stepId === "location") return value.includes(tile.id)
+  if (stepId === "model") return value[tile.row] === tile.id
+  return value === tile.id
+}
+
+/** One line naming the first step's picks: the model size and the crowd. */
+export function modelLabel(useCaseId, choices = {}) {
+  const picks = modelPicks(useCaseId, choices)
+  const model = byId(MODELS, picks.model)
+  return `${model?.label || picks.model} · ${usersTier(useCaseId, picks.users).label}`
 }
 
 /** The short ids of a story's metro short list. */
@@ -444,9 +594,13 @@ export function metroShortList(useCaseId) {
   return metroOffers(useCaseId).map((offer) => offer.id)
 }
 
-/** Every simple picture for one story: each metro set × three tiles on five steps × the QPU choice. */
-export function allSimple(useCaseId) {
+/**
+ * Every simple picture for one story at one model and crowd (the story's own by default): each
+ * metro set × three tiles on five steps × the QPU choice.
+ */
+export function allSimple(useCaseId, picks = {}) {
   const list = []
+  const first = modelPicks(useCaseId, picks)
   const qpu = qpuRelevant(useCaseId) ? [false, true] : [false]
   for (const metros of metroSets(useCaseId, metroShortList(useCaseId))) {
     for (const brains of SIMPLE_IDS.brains) {
@@ -454,7 +608,7 @@ export function allSimple(useCaseId) {
         for (const memory of SIMPLE_IDS.memory) {
           for (const wires of wireIds(useCaseId)) {
             for (const library of SIMPLE_IDS.library) {
-              for (const helper of qpu) list.push({ metros, brains, home, wires, library, helper, ...memoryChoices(memory), mcp: false })
+              for (const helper of qpu) list.push({ ...first, metros, brains, home, wires, library, helper, ...memoryChoices(memory), mcp: false })
             }
           }
         }
@@ -473,7 +627,7 @@ export function simpleDefaults(useCaseId) {
 export function describeChoices(useCaseId, choices = {}) {
   const tile = (stepId) => {
     const value = stepValue(useCaseId, stepId, choices)
-    return stepTiles(useCaseId, stepId, true).find((item) => item.id === value) || stepTiles(useCaseId, stepId, false).find((item) => item.id === value)
+    return stepTiles(useCaseId, stepId, true, choices).find((item) => item.id === value) || stepTiles(useCaseId, stepId, false, choices).find((item) => item.id === value)
   }
   const metros = cleanMetros(useCaseId, choices.metros).map((id) => byId(SITES, id)?.metro || id)
   const parts = [

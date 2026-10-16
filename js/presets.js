@@ -7,7 +7,7 @@
  * (connectivity), `library` (storage), `helper` (ORCA) and `mcp`. The simple board offers
  * three tiles per step; nerd mode offers the full set. Both run through `choicesToBuild`.
  */
-import { MISSION_SITES, PLATFORMS, SITES, USE_CASES, byId } from "./data.js"
+import { MISSION_SITES, MODEL_IDS, PLATFORMS, SITES, USER_TIER_IDS, USE_CASES, byId, usersTier } from "./data.js"
 import { FIBER_MAX_KM, kmBetween } from "./model.js"
 import { blankFabric } from "./network.js"
 import { routeNetworkId } from "./routes.js"
@@ -31,7 +31,7 @@ const BRAINS = {
   code: { small: ["h200", 2], medium: ["b300", 6], big: ["gb200", 3], rubin: ["vr", 1], huge: ["vr", 4] },
   research: { small: ["h200", 2], medium: ["b300", 6], big: ["gb200", 2], rubin: ["vr", 1], huge: ["vr", 4] },
   drug: { small: ["h200", 2], medium: ["b300", 4], big: ["gb200", 2], rubin: ["vr", 1], huge: ["vr", 4] },
-  robot: { small: ["h100", 1], medium: ["h100", 2], big: ["h200", 2], rubin: ["vr", 1], huge: ["vr", 2] },
+  robot: { small: ["h200", 4], medium: ["b200", 2], big: ["b300", 3], rubin: ["vr", 1], huge: ["vr", 2] },
 }
 
 const LIBRARY = { none: "local", basic: "file", smart: "vector" }
@@ -124,8 +124,18 @@ export function cleanMetros(useCaseId, metros) {
   return list.slice(0, maxMetros(useCaseId))
 }
 
+/** The model size and users tier a choice set is on: the story's defaults when it names none. */
+export function modelPicks(useCaseId, choices = {}) {
+  const defaults = byId(USE_CASES, useCaseId)?.defaults || { model: "70b", users: "large" }
+  return {
+    model: MODEL_IDS.includes(choices?.model) ? choices.model : defaults.model,
+    users: USER_TIER_IDS.includes(choices?.users) ? choices.users : defaults.users,
+  }
+}
+
 export function defaultChoices(useCaseId) {
   return {
+    ...modelPicks(useCaseId),
     metros: (MISSION_SITES[useCaseId]?.defaults || ["lon"]).slice(0, 1),
     brains: "medium",
     memory: false,
@@ -168,6 +178,7 @@ export function simpleChoices(useCaseId, choices = {}) {
   const { sitePlans, refarch, ...rest } = picked
   return {
     ...rest,
+    ...modelPicks(useCaseId, picked),
     metros: cleanMetros(useCaseId, picked.metros),
     brains,
     home,
@@ -181,7 +192,7 @@ export function simpleChoices(useCaseId, choices = {}) {
 
 /** The nerd board keeps every simple pick as it is: the wires tiles mean the same thing in both modes. */
 export function nerdChoices(useCaseId, choices) {
-  const next = { ...defaultChoices(useCaseId), ...choices }
+  const next = { ...defaultChoices(useCaseId), ...choices, ...modelPicks(useCaseId, choices) }
   next.metros = cleanMetros(useCaseId, next.metros)
   return next
 }
@@ -197,7 +208,7 @@ const EXPERTS = {
   code: { metros: ["iad", "sjc"], brains: "big", memory: true, hosts: "grace", home: "super", wires: "combo", library: "basic" },
   research: { metros: ["par"], brains: "big", memory: true, hosts: "standard", home: "super", wires: "combo", library: "smart" },
   drug: { metros: ["lon"], brains: "medium", memory: false, hosts: "standard", home: "rear", wires: "private", library: "basic", helper: true },
-  robot: { metros: ["fra", "ams"], brains: "big", memory: true, hosts: "standard", home: "rear", wires: "combo", library: "none" },
+  robot: { metros: ["fra", "ams"], brains: "medium", memory: true, hosts: "standard", home: "rear", wires: "combo", library: "none" },
 }
 
 export function expertChoices(useCaseId) {
@@ -253,10 +264,15 @@ export function comboMcp(useCaseId, wires) {
   return wires === "combo" && COMBO[useCaseId]?.legs.control === "mcp"
 }
 
-/** The computers behind one BRAINS tile. */
-export function brainPick(useCaseId, brains) {
+/**
+ * The computers behind one BRAINS tile. The rack counts are set for the top users tier (the
+ * business the story was written for); a smaller crowd scales them down with the demand, never
+ * below one rack, so a tile is never more racks than the crowd can use.
+ */
+export function brainPick(useCaseId, brains, users = "large") {
   const picked = BRAINS[useCaseId]?.[brains] || BRAINS.chat.medium
-  return { platform: picked[0], racks: picked[1] }
+  const mult = usersTier(useCaseId, users).mult
+  return { platform: picked[0], racks: Math.max(1, Math.round(picked[1] * mult)) }
 }
 
 /**
@@ -266,12 +282,14 @@ export function brainPick(useCaseId, brains) {
  */
 export function choicesToBuild(useCaseId, choices, nerd = false) {
   const useCase = byId(USE_CASES, useCaseId)
-  const picked = nerd ? { ...defaultChoices(useCaseId), ...choices } : simpleChoices(useCaseId, choices)
-  const [platform, racks] = BRAINS[useCaseId][picked.brains] || BRAINS[useCaseId].big
+  const picked = nerd ? nerdChoices(useCaseId, choices) : simpleChoices(useCaseId, choices)
+  const { platform, racks } = brainPick(useCaseId, BRAINS[useCaseId][picked.brains] ? picked.brains : "big", picked.users)
   const sites = cleanMetros(useCaseId, picked.metros)
   const helper = Boolean(useCase?.orca && picked.helper)
   const routes = assignRoutes(useCase, sites, helper, picked.wires, Boolean(picked.mcp))
   const build = {
+    model: picked.model,
+    users: picked.users,
     hall: { cool: "A", rear: "R", row: "I", super: "B" }[picked.home] || "A",
     hosts: picked.hosts || "standard",
     platform,

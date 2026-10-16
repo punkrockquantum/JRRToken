@@ -116,7 +116,7 @@ test("nerd mode docks its panel as a column instead of covering the tiles", () =
   assert.match(css, /\.screen\.game\.nerd \{ grid-template-columns:/)
   assert.match(css, /\.row-nerd \{[^}]*text-overflow: ellipsis/)
   assert.match(main, /state\.nerd \? el\("aside", \{ class: "think"/)
-  assert.match(main, /const tiles = stepTiles\(id, stepId, state\.nerd\)/)
+  assert.match(main, /const tiles = stepTiles\(id, stepId, state\.nerd, choices\)/)
   assert.match(main, /scale: state\.nerd \? 2 : 3/)
 })
 
@@ -209,10 +209,10 @@ test("simple-space balance: story-specific optima, one winner, max-everything an
   const expected = {
     chat: { best: { metros: ["lon", "fra"], brains: "big", home: "super", memory: "on", wires: "fast", library: "none" }, typical: [250, 450] },
     rag: { best: { metros: ["fra"], brains: "medium", home: "rear", memory: "on", wires: "combo", library: "smart" }, typical: [5, 300] }, // no index on the home metro: DATA and POWER are red
-    code: { best: { metros: ["iad", "sjc"], brains: "big", home: "super", memory: "plus", wires: "combo", library: "basic" }, typical: [30, 400] },
+    code: { best: { metros: ["iad", "sjc"], brains: "big", home: "super", memory: "plus", wires: "combo", library: "basic" }, typical: [20, 400] },
     research: { best: { metros: ["par"], brains: "big", home: "super", memory: "on", wires: "combo", library: "smart" }, typical: [100, 500] },
     drug: { best: { metros: ["lon"], brains: "medium", home: "rear", memory: "off", wires: "fast", library: "basic", helper: true }, typical: [300, 700] },
-    robot: { best: { metros: ["fra", "ams"], brains: "big", home: "rear", memory: "on", wires: "combo", library: "none" }, typical: [300, 700] },
+    robot: { best: { metros: ["fra", "ams"], brains: "medium", home: "rear", memory: "on", wires: "combo", library: "none" }, typical: [300, 700] }, // two Blackwell air racks; three B300 racks are more than 5,000 robots need
   }
   /* Robots: ServiceFabric everywhere is within 3% of the COMBO, so that one near-miss also keeps three stars. */
   const threeStarAllowance = { robot: 2 }
@@ -282,9 +282,9 @@ test("the results headline ties the outcome to a data-center decision in plain w
   const late = combo("robot", { brains: "rubin", home: "super", wires: "fast" })
   assert.match(headline(evaluateBuild("robot", choicesToBuild("robot", late, false)), late), /Vera Rubin NVL72 arrived in week \d+, \d+ weeks after the deadline/)
   const lab = combo("drug", { brains: "medium", home: "rear", wires: "fast", library: "basic", helper: true })
-  assert.match(headline(evaluateBuild("drug", choicesToBuild("drug", lab, false)), lab), /screened 9\d% of the lab's candidates over ServiceFabric, with ORCA PT-3/)
+  assert.match(headline(evaluateBuild("drug", choicesToBuild("drug", lab, false)), lab), /screened (9\d|100)% of the lab's candidates over ServiceFabric, with ORCA PT-3/)
   const stuck = combo("robot", { metros: ["fra", "ams"], brains: "rubin", home: "rear", wires: "cheap" })
-  assert.match(bestChange("robot", stuck).text, /^No single change rescues this\. NVIDIA HGX H200 ×2, rear door heat exchanger in Frankfurt \+ Amsterdam, with the KV cache on, on COMBO, local only storage would score about 1,[34]\d\d\.$/)
+  assert.match(bestChange("robot", stuck).text, /^No single change rescues this\. NVIDIA HGX B200 ×2, rear door heat exchanger in Frankfurt \+ Amsterdam, with the KV cache on, on COMBO, local only storage would score about 1,[34]\d\d\.$/)
   assert.equal(DR_FOOTER, "Built in a Digital Realty data center: power, cooling and connections ready.")
 })
 
