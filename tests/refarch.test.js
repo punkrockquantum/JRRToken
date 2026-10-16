@@ -61,6 +61,12 @@ test("every platform has three or four anonymised designs with the plan's fields
         assert.equal(design.gpusPerNode, 4, design.id)
         assert.ok(design.rackKW > 100, design.id)
         assert.equal(platform.cooling, "liquid", `${design.id} belongs to a liquid platform`)
+      } else if (platform.hbmTBs < 2) {
+        /* PCIe cards: eight 350–600 W GPUs in a 3U–4U air box. */
+        assert.equal(design.gpusPerNode, 8, `${design.id} is an 8-GPU PCIe node`)
+        assert.ok(design.u >= 3 && design.u <= 5, design.id)
+        assert.ok(design.nodeKW >= 3 && design.nodeKW <= 8, design.id)
+        assert.equal(design.cooling, "air", `${design.id} PCIe servers are air-cooled`)
       } else {
         assert.equal(design.gpusPerNode, 8, `${design.id} is an 8-GPU HGX node`)
         assert.ok(design.u >= 4 && design.u <= 10, design.id)
@@ -83,6 +89,8 @@ test("every platform has three or four anonymised designs with the plan's fields
     assert.equal(designFor(platform.id, null), null)
   }
   assert.equal(designsFor("h100"), designsFor("h200"), "HGX H100 and H200 share the Hopper chassis designs")
+  assert.equal(designsFor("b300n"), designsFor("b300"), "the single HGX B300 node ships in the same chassis designs as the rack")
+  assert.notEqual(designsFor("l40s"), designsFor("rtx6000"), "the two PCIe cards have their own server lists")
 })
 
 test("player text never names a vendor: designs, cards, facts, learn lines and every non-comment line of source", () => {
@@ -202,15 +210,15 @@ test("the simple board forgets a design, nerd mode carries it, and a new GPU til
   assert.equal("refarch" in choicesToBuild("chat", chat, false), false, "the simple build has no design")
   assert.equal("refarch" in simpleChoices("chat", chat), false, "simple choices drop the design")
   assert.equal("refarch" in choicesToBuild("chat", expertChoices("chat"), true), false, "no design, no key")
-  const kept = applyTile("chat", "gpu", "medium", { ...expertChoices("chat"), brains: "small", refarch: "hgx-b" })
-  assert.deepEqual([brainPick("chat", "small").platform, brainPick("chat", "medium").platform], ["h100", "b300"], "chat SMALL is Hopper, MEDIUM is Blackwell Ultra")
+  const kept = applyTile("chat", "gpu", "b300", { ...expertChoices("chat"), brains: "h100", refarch: "hgx-b" })
   assert.equal("refarch" in kept, false, "a B300 tile drops a Hopper node design")
-  const hopper = applyTile("robot", "gpu", "small", { ...expertChoices("rag"), brains: "small", refarch: "hgx-b" })
-  assert.deepEqual([brainPick("rag", "small").platform, brainPick("robot", "small").platform], ["h200", "h200"], "the RAG and robot SMALL tiles are both HGX H200")
+  const hopper = applyTile("chat", "gpu", "h200", { ...expertChoices("chat"), brains: "h100", refarch: "hgx-b" })
   assert.ok(designFor("h200", "hgx-b") && designFor("h100", "hgx-b"), "Hopper HGX platforms share their node designs")
   assert.equal(hopper.refarch, "hgx-b", "the same design family keeps its design")
-  const dropped = applyTile("chat", "gpu", "big", { ...expertChoices("chat"), brains: "medium", refarch: "b300-b" })
-  assert.equal(dropped.brains, "big")
+  const node = applyTile("chat", "gpu", "b300n", { ...expertChoices("chat"), brains: "b300", refarch: "b300-b" })
+  assert.equal(node.refarch, "b300-b", "the single B300 node keeps the B300 chassis design")
+  const dropped = applyTile("chat", "gpu", "gb200", { ...expertChoices("chat"), brains: "b300", refarch: "b300-b" })
+  assert.equal(dropped.brains, "gb200")
   assert.equal("refarch" in dropped, false, "a GB200 tile drops a B300 design")
   for (const tile of stepTiles("chat", "gpu", true)) assert.ok(designsFor(tile.platform.id).length >= 3, `${tile.id} has designs`)
 })

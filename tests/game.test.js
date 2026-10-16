@@ -145,7 +145,7 @@ test("picture presets map onto builds, and the preset board stays in the scoring
     "the classic, runs on air",
     "strongest rack on air",
     "72 GPUs as one, liquid",
-    "next gen, liquid, arrives late",
+    "next gen, liquid, due 2026",
     "KV cache OFF",
     "KV cache ON",
     "KV cache ON + CPU host memory",

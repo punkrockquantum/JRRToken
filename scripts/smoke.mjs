@@ -338,7 +338,7 @@ try {
     for (const part of ["Shoppers want quick answers", "USERS", "MODEL & DATA", "NEW STORY"]) if (!scenario.includes(part)) throw new Error(`Scenario card lacks ${part}: ${scenario}`)
     const lights = await evaluate(`[...document.querySelectorAll('[data-key="eco-bar"] .eco-part')].map((p) => p.dataset.part + ':' + p.dataset.state).join(',')`)
     if (!/^power:\w+,cooling:\w+,compute:\w+,data:\w+,connections:\w+$/.test(lights)) throw new Error(`Ecosystem bar: ${lights}`)
-    const picks = { model: ["model-70b", "users-large"], location: ["location-lon", "location-fra"], gpu: ["gpu-big"], cooling: ["cooling-super"], memory: ["memory-on"], wires: ["wires-fast"], storage: ["storage-none"], qpu: [] }
+    const picks = { model: ["model-70b", "users-large"], location: ["location-lon", "location-fra"], gpu: ["gpu-gb200"], cooling: ["cooling-super"], memory: ["memory-on"], wires: ["wires-fast"], storage: ["storage-none"], qpu: [] }
     for (const step of BUILD_STEPS) {
       await click(`[data-key="step-${step}"]`)
       await waitFor(`document.querySelector('[data-key="step-panel"]').classList.contains('step-${step}')`, `${step} step`)
@@ -366,7 +366,20 @@ try {
         if (!/tokens a second/.test(brief) || !/First word within/.test(brief)) throw new Error(`The job brief should carry the demand and first-word target: ${brief}`)
       }
       const tiles = await evaluate(`document.querySelectorAll('.step-panel .tile').length`)
-      if (step !== "qpu" && tiles !== 3 && step !== "location" && step !== "model") throw new Error(`${step}: the simple board shows 3 tiles, saw ${tiles}`)
+      if (step === "gpu") {
+        /* Six real NVIDIA racks on a 3×2 grid, cheapest first, each with its name, its rack count and whether the hall needs liquid. */
+        if (tiles !== 6) throw new Error(`gpu: the simple board shows six GPU tiles, saw ${tiles}`)
+        const titles = await evaluate(`[...document.querySelectorAll('.step-gpu .tile .tile-title')].map((t) => t.textContent.trim())`)
+        if (titles.some((title) => !/^NVIDIA .+ ×\d+$/.test(title))) throw new Error(`Every GPU tile should read "NVIDIA <rack> ×N": ${titles.join(" | ")}`)
+        const tags = await evaluate(`[...document.querySelectorAll('.step-gpu .tile .tile-tag')].map((t) => t.textContent.trim())`)
+        if (tags.length !== 6 || tags.some((tag) => !/^(INCLUDED · AIR|NEEDS LIQUID( · 2026)?)$/.test(tag))) throw new Error(`Every GPU tile should say included or needs liquid: ${tags.join(" | ")}`)
+        const grid = await evaluate(`(() => {
+          const boxes = [...document.querySelectorAll('.step-gpu .tile')].map((t) => t.getBoundingClientRect())
+          const rows = new Set(boxes.map((b) => Math.round(b.top)))
+          return { rows: rows.size, perRow: boxes.filter((b) => Math.round(b.top) === Math.round(boxes[0].top)).length }
+        })()`)
+        if (grid.rows !== 2 || grid.perRow !== 3) throw new Error(`The GPU tiles should sit on two rows of three, saw ${grid.rows} rows of ${grid.perRow}`)
+      } else if (step !== "qpu" && tiles !== 3 && step !== "location" && step !== "model") throw new Error(`${step}: the simple board shows 3 tiles, saw ${tiles}`)
       const simpleText = await text(".screen.game")
       const jargon = ["TB/s", "PFLOPS", "PUE"].filter((word) => simpleText.includes(word))
       if (jargon.length) throw new Error(`${step}: the simple board leaked ${jargon.join(", ")}`)

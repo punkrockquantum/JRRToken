@@ -931,7 +931,7 @@ function stepPanel(stepId, result) {
 function refarchPanel(result, selected) {
   const id = state.plan.useCase
   const choices = state.plan.choices
-  const brain = brainPick(id, choices.brains || "medium", choices.users)
+  const brain = brainPick(id, choices.brains, choices.users)
   const platform = byId(PLATFORMS, brain.platform)
   if (!platform) return null
   const hallId = state.plan.build.hall
@@ -1140,7 +1140,7 @@ const SITE_ROLES = [
 
 function currentPlans(result) {
   const sites = result.sites || []
-  const brain = brainPick(state.plan.useCase, state.plan.choices.brains)
+  const brain = brainPick(state.plan.useCase, state.plan.choices.brains, state.plan.choices.users)
   const defaults = defaultSitePlans(result.platform, brain.racks, sites)
   const saved = state.plan.choices.sitePlans
   if (!saved?.length) return defaults

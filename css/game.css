@@ -909,6 +909,17 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .screen.game.nerd .step-panel .tile-title { font-size: 12px; }
 .screen.game.nerd .step-panel .tile-hint { font-size: 12px; -webkit-line-clamp: 2; }
 .screen.game.nerd .step-panel .tiles.count-5, .screen.game.nerd .step-panel .tiles.count-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* GPUs: six real NVIDIA racks on two rows of three, in a shorter tile so both rows sit above NEXT without a scroll. */
+.screen.game .step-panel.step-gpu .tiles.count-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.screen.game .step-panel.step-gpu .tiles.count-6 .tile { min-height: 92px; gap: 6px; padding-top: 8px; padding-bottom: 8px; }
+.screen.game .step-panel.step-gpu .tiles.count-6 .tile-title { -webkit-line-clamp: 2; }
+.screen.game .step-panel.step-gpu .tiles.count-6 .tile-hint { -webkit-line-clamp: 2; }
+/* Nerd GPUs: the whole roster plus the HUGE trap, four a row, three rows, the spec in the "?" and the design panel's title. */
+.screen.game.nerd .step-panel.step-gpu .tiles.count-11 { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile { min-height: 76px; gap: 4px; padding: 6px 36px 6px 8px; }
+.screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-title { -webkit-line-clamp: 3; }
+.screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-hint { -webkit-line-clamp: 3; }
+.screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-tag { white-space: normal; overflow: visible; }
 .screen.game .step-panel .tile-tag { display: block; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .screen.game .step-panel .tile-copy { max-width: 100%; }
 /* TOKEN IMPACT strip on connectivity tiles: three coloured chips, one plain sentence, nerd detail. */
@@ -1128,6 +1139,19 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
   .ra-cards.count-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .ra-card { min-height: 40px; padding: 3px 32px 3px 6px; gap: 1px; }
   .screen.game.nerd .step-gpu .tile { min-height: 72px; }
+  /* Six GPU tiles keep two rows of three here; the sprite goes so the rack's full name and the tag fit the narrow tile. */
+  .screen.game .step-panel.step-gpu .tiles.count-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .screen.game .step-panel.step-gpu .tiles.count-6 .tile { min-height: 80px; gap: 6px; padding: 6px 36px 6px 8px; align-items: flex-start; }
+  .screen.game .step-panel.step-gpu .tiles.count-6 .tile-art { display: none; }
+  .screen.game .step-panel.step-gpu .tiles.count-6 .tile-tag { white-space: normal; overflow: visible; }
+  .screen.game .step-panel.step-gpu .tiles.count-6 .tile-title { -webkit-line-clamp: 3; }
+  .screen.game .step-panel.step-gpu .tiles.count-6 .tile-hint { -webkit-line-clamp: 3; }
+  /* Eleven nerd GPU tiles: three a row, four rows, no sprite, the name only; the "?" and the design panel carry the specs. */
+  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile { min-height: 56px; gap: 4px; padding: 4px 34px 4px 8px; }
+  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-art { display: none; }
+  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-title { -webkit-line-clamp: 3; }
+  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-hint { display: none; }
   .ra-card .ra-line:nth-of-type(2) { display: none; } /* the spec line lives in the "?" popover here */
   .refarch { gap: 2px; }
   .workers { max-width: 48px; }
@@ -1169,6 +1193,10 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 @media (max-width: 1200px) and (max-height: 800px) {
   .screen.game.nerd .step-gpu .tile { min-height: 62px; padding-top: 4px; padding-bottom: 4px; gap: 6px; }
   .screen.game.nerd .step-gpu .tiles { gap: 6px; }
+  /* Eleven tiles three a row: the longest names ("RTX PRO 6000 Server") need a fourth line in this narrow column. */
+  .screen.game.nerd .step-panel.step-gpu { gap: 6px; }
+  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile { min-height: 52px; }
+  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-title { -webkit-line-clamp: 4; }
   .screen.game.nerd .step-gpu .step-head .fine { display: none; }
   .ra-title .fine { display: none; }
   /* Location: the job paragraph goes (the "?" and the brief's numbers keep the lesson); tiles get a little shorter. */

@@ -225,11 +225,13 @@ test("MODEL & USERS offers three model sizes and three crowd sizes, each tile sa
       assert.equal(stepValue(id, "model", next)[tile.row], tile.id, `${id} ${tile.row} ${tile.id}`)
       assert.ok(tileOn(id, "model", tile, next), `${id} ${tile.row} ${tile.id} lights up`)
     }
-    /* The GPU tiles scale their rack counts down with a smaller crowd, never below one rack. */
+    /* The GPU tiles right-size their rack counts to the crowd: never more racks for fewer people, never below one rack. */
+    const small = stepTiles(id, "gpu", false, { users: "small" }).map((tile) => tile.racks)
     const medium = stepTiles(id, "gpu", false, { users: "medium" }).map((tile) => tile.racks)
     const large = stepTiles(id, "gpu", false, { users: "large" }).map((tile) => tile.racks)
-    assert.deepEqual(medium, large.map((racks) => Math.max(1, Math.round(racks / 10))), `${id} racks follow the crowd`)
-    assert.ok(stepTiles(id, "gpu", false, { users: "small" }).every((tile) => tile.racks === 1), `${id} one rack for the smallest crowd`)
+    assert.ok(medium.every((racks, i) => racks >= 1 && racks <= large[i]), `${id} medium racks ${medium} within large ${large}`)
+    assert.ok(small.every((racks, i) => racks >= 1 && racks <= medium[i]), `${id} small racks ${small} within medium ${medium}`)
+    assert.ok(stepTiles(id, "gpu", false, { users: "small" }).filter((tile) => tile.platform.hbmTBs >= 2).every((tile) => tile.racks === 1), `${id} one HBM rack for the smallest crowd`)
   }
   /* The resolved story: a 650B MoE needs the 72-GPU domain; on an 8-GPU island it spills over several. */
   const big = resolveUseCase("chat", { model: "650b", users: "large" })
@@ -277,8 +279,8 @@ test("every step offers three tiles on the simple board, a short list of metros,
     }
     for (const stepId of ["gpu", "cooling", "memory", "wires", "storage"]) {
       const tiles = stepTiles(id, stepId)
-      /* CONNECTIVITY adds a fourth tile, COMBO, only where a mixture pays (RAG, coding, research, robots). */
-      assert.equal(tiles.length, stepId === "wires" && hasCombo(id) ? 4 : 3, `${id} ${stepId}`)
+      /* CONNECTIVITY adds a fourth tile, COMBO, only where a mixture pays (RAG, coding, research, robots); the GPU step offers six NVIDIA platforms. */
+      assert.equal(tiles.length, stepId === "gpu" ? 6 : stepId === "wires" && hasCombo(id) ? 4 : 3, `${id} ${stepId}`)
       assert.ok(stepTiles(id, stepId, true).length >= tiles.length, `${id} ${stepId} nerd offers at least the simple tiles`)
       for (const tile of tiles) {
         assert.ok(tile.label.length > 0 && tile.label.length <= 32, `${id} ${stepId} label "${tile.label}"`)
@@ -301,7 +303,13 @@ test("every step offers three tiles on the simple board, a short list of metros,
     assert.deepEqual(stepTiles(id, "cooling").map((tile) => tile.label), ["Air-cooled hall", "Rear-door hall", "Liquid-cooled hall"], id)
     assert.deepEqual(stepTiles(id, "memory").map((tile) => tile.label), ["KV cache OFF", "KV cache ON", "KV cache ON + CPU host memory"], id)
     assert.deepEqual(stepTiles(id, "storage").map((tile) => tile.label), ["Local only", "File & object", "Vector index"], id)
-    assert.equal(stepTiles(id, "gpu")[2].label, "NVIDIA Vera Rubin NVL72 ×1", id)
+    const gpus = stepTiles(id, "gpu")
+    assert.equal(gpus[5].label, "NVIDIA Vera Rubin NVL72 ×1", id)
+    assert.ok(gpus.every((tile) => /^NVIDIA /.test(tile.label)), `${id} NVIDIA only`)
+    assert.ok(gpus.every((tile) => /^(INCLUDED · AIR|NEEDS LIQUID( · 2026)?)$/.test(tile.tag)), `${id} every GPU tile says included or needs liquid: ${gpus.map((tile) => tile.tag)}`)
+    assert.ok(gpus.every((tile) => (tile.platform.cooling === "liquid") === /NEEDS LIQUID/.test(tile.tag)), `${id} the liquid tag matches the platform`)
+    assert.ok(gpus.slice(1).every((tile, i) => tile.platform.capex >= gpus[i].platform.capex), `${id} GPU tiles run cheapest first`)
+    assert.equal(new Set(gpus.map((tile) => tile.platform.id)).size, 6, `${id} six different platforms`)
     assert.equal(qpuRelevant(id), Boolean(orca), id)
     const qpu = stepTiles(id, "qpu")
     if (orca) assert.deepEqual(qpu.map((tile) => tile.label), ["No QPU", "ORCA PT-3"])
@@ -311,9 +319,19 @@ test("every step offers three tiles on the simple board, a short list of metros,
       assert.equal(qpu[0].label, "Not needed for this job")
     }
   }
-  assert.deepEqual(stepTiles("chat", "gpu").map((tile) => tile.label), ["NVIDIA HGX B300 ×6", "NVIDIA GB200 NVL72 ×2", "NVIDIA Vera Rubin NVL72 ×1"])
-  assert.deepEqual(stepTiles("code", "gpu").map((tile) => tile.label), ["NVIDIA HGX B300 ×6", "NVIDIA GB200 NVL72 ×3", "NVIDIA Vera Rubin NVL72 ×1"])
-  assert.deepEqual(stepTiles("robot", "gpu").map((tile) => tile.label), ["NVIDIA HGX B200 ×2", "NVIDIA HGX B300 ×3", "NVIDIA Vera Rubin NVL72 ×1"])
+  assert.deepEqual(stepTiles("chat", "gpu").map((tile) => tile.label), ["NVIDIA RTX PRO 6000 Server ×8", "NVIDIA HGX H100 ×2", "NVIDIA HGX H200 ×2", "NVIDIA HGX B300 ×6", "NVIDIA GB200 NVL72 ×2", "NVIDIA Vera Rubin NVL72 ×1"])
+  assert.deepEqual(stepTiles("code", "gpu").map((tile) => tile.label), ["NVIDIA RTX PRO 6000 Server ×8", "NVIDIA HGX H200 ×2", "NVIDIA HGX B300 ×6", "NVIDIA GB200 NVL72 ×3", "NVIDIA GB300 NVL72 ×2", "NVIDIA Vera Rubin NVL72 ×1"])
+  assert.deepEqual(stepTiles("drug", "gpu").map((tile) => tile.label), ["NVIDIA L40S Server ×15", "NVIDIA RTX PRO 6000 Server ×8", "NVIDIA HGX H200 ×2", "NVIDIA HGX B300 ×4", "NVIDIA GB200 NVL72 ×2", "NVIDIA Vera Rubin NVL72 ×1"])
+  assert.deepEqual(stepTiles("robot", "gpu").map((tile) => tile.label), ["NVIDIA RTX PRO 6000 Server ×9", "NVIDIA HGX H100 ×8", "NVIDIA HGX H200 ×4", "NVIDIA HGX B200 ×2", "NVIDIA HGX B300 ×3", "NVIDIA Vera Rubin NVL72 ×1"])
+  /* The crowd right-sizes the racks: a small shop gets one PCIe rack, the medium chat crowd six. */
+  assert.deepEqual(stepTiles("chat", "gpu", false, { users: "small" }).map((tile) => tile.label), ["NVIDIA RTX PRO 6000 Server ×1", "NVIDIA HGX H100 ×1", "NVIDIA HGX H200 ×1", "NVIDIA HGX B300 ×1", "NVIDIA GB200 NVL72 ×1", "NVIDIA Vera Rubin NVL72 ×1"])
+  assert.equal(stepTiles("chat", "gpu", false, { users: "medium" })[0].label, "NVIDIA RTX PRO 6000 Server ×6")
+  /* Nerd mode lists every platform the story can use, then the HUGE trap. */
+  const nerdGpus = stepTiles("chat", "gpu", true)
+  assert.deepEqual(nerdGpus.map((tile) => tile.id), ["l40s", "rtx6000", "h100", "h200", "b200", "b300", "b300n", "gb200", "gb300", "vr", "huge"])
+  assert.equal(nerdGpus.at(-1).label, "NVIDIA Vera Rubin NVL72 ×4")
+  assert.ok(nerdGpus.every((tile) => /TB\/s, [\d.]+ PFLOPS FP[48], \d+ kW/.test(tile.nerd)), "nerd specs carry memory bandwidth, maths and power")
+  assert.match(nerdGpus.find((tile) => tile.id === "rtx6000").nerd, /^96 GB GDDR, 1\.6 TB\/s, 2 PFLOPS FP4, 14 kW, \$240k, lead 3 weeks$/)
   assert.deepEqual(stepTiles("chat", "location").map((tile) => tile.id), ["lon", "fra", "ams", "par"])
   assert.deepEqual(stepTiles("code", "location").map((tile) => tile.id), ["iad", "sjc", "dfw", "chi"])
 })
@@ -321,7 +339,7 @@ test("every step offers three tiles on the simple board, a short list of metros,
 test("picking a tile patches the choice set; metros toggle up to the story's maximum and the last one stays", () => {
   for (const { id } of USE_CASES) {
     const defaults = simpleDefaults(id)
-    assert.deepEqual([defaults.brains, defaults.home, defaults.wires, defaults.library, defaults.memory, defaults.helper, defaults.hosts, defaults.mcp], ["medium", "cool", "peer", "none", false, false, "standard", false], id)
+    assert.deepEqual([defaults.brains, defaults.home, defaults.wires, defaults.library, defaults.memory, defaults.helper, defaults.hosts, defaults.mcp], [id === "robot" ? "b200" : "b300", "cool", "peer", "none", false, false, "standard", false], id)
     assert.equal(defaults.metros.length, 1, `${id} opens on one metro`)
     assert.deepEqual(untouchedSteps(id, defaults), BUILD_STEP_IDS.filter((stepId) => stepId !== "qpu" || qpuRelevant(id)), id)
     for (const stepId of ["gpu", "cooling", "memory", "wires", "storage"]) {
@@ -350,18 +368,18 @@ test("picking a tile patches the choice set; metros toggle up to the story's max
   assert.match(describeChoices("drug", applyTile("drug", "qpu", "orca", simpleDefaults("drug"))), /, with ORCA PT-3$/)
 })
 
-test("the simple space is every metro set times three tiles on five steps, times the QPU choice", () => {
+test("the simple space is every metro set times six GPU tiles and three tiles on four steps, times the QPU choice", () => {
   for (const { id, orca } of USE_CASES) {
     const combos = allSimple(id)
     const metroSets = new Set(combos.map((combo) => combo.metros.join("+")))
-    const perSet = 81 * wireIds(id).length
+    const perSet = 6 * 27 * wireIds(id).length
     assert.equal(combos.length, metroSets.size * perSet * (orca ? 2 : 1), id)
     assert.ok(combos.every((combo) => combo.mcp === false && combo.metros.length >= 1), id)
   }
-  assert.equal(allSimple("chat").length, 14 * 243, "four metros, up to three at a time")
-  assert.equal(allSimple("rag").length, 4 * 324, "a fourth connectivity tile, COMBO")
-  assert.equal(allSimple("drug").length, 4 * 243 * 2)
-  assert.equal(allSimple("robot").length, 10 * 324, "four metros, up to two at a time")
+  assert.equal(allSimple("chat").length, 14 * 486, "four metros, up to three at a time")
+  assert.equal(allSimple("rag").length, 4 * 648, "a fourth connectivity tile, COMBO")
+  assert.equal(allSimple("drug").length, 4 * 486 * 2)
+  assert.equal(allSimple("robot").length, 10 * 648, "four metros, up to two at a time")
 })
 
 /* ---------- The game screen wiring ---------- */

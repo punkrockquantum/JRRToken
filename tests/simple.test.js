@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
-import { SITES, USE_CASES, byId } from "../js/data.js"
+import { PLATFORMS, SITES, USE_CASES, byId } from "../js/data.js"
 import { DR_FOOTER, bestChange, explainResult, headline } from "../js/explain.js"
 import { FIBER_MAX_KM, evaluateBuild, kmBetween } from "../js/model.js"
 import {
@@ -17,7 +17,9 @@ import {
   hasCombo,
   memoryChoices,
   memoryTile,
+  nerdBrainIds,
   nerdChoices,
+  simpleBrainIds,
   simpleChoices,
   wireIds,
 } from "../js/presets.js"
@@ -33,13 +35,28 @@ const presetBest = (id) => Math.max(...allPresets(id).map((choices) => score(id,
 const simpleScore = (id, combo) => evaluateBuild(id, choicesToBuild(id, combo, false))
 const combo = (id, patch) => ({ ...simpleDefaults(id), ...patch })
 
-test("the simple view offers three tiles a step and Vera Rubin ×1 in every story", () => {
-  assert.deepEqual(PRESET_IDS.brains, ["small", "medium", "big", "rubin"])
+test("the simple view offers three tiles a step, six NVIDIA platforms for the GPUs, and Vera Rubin ×1 in every story", () => {
+  assert.deepEqual(PRESET_IDS.brains, ["rtx6000", "h100", "h200", "b300", "gb200", "vr"])
+  assert.deepEqual(PRESET_IDS.legacyBrains, ["small", "medium", "big", "rubin"], "the old tile words are still understood")
   assert.deepEqual(PRESET_IDS.wires, ["cheap", "peer", "fast", "private", "combo"])
   assert.deepEqual(PRESET_IDS.homes, ["cool", "rear", "super"])
   assert.ok(PRESET_IDS.nerdBrains.includes("huge"), "the HUGE trap stays a nerd-mode option")
-  assert.deepEqual(SIMPLE_IDS, { brains: ["medium", "big", "rubin"], home: ["cool", "rear", "super"], memory: ["off", "on", "plus"], wires: ["cheap", "peer", "fast"], library: ["none", "basic", "smart"] })
-  for (const { id } of USE_CASES) assert.deepEqual(brainPick(id, "rubin"), { platform: "vr", racks: 1 }, id)
+  assert.deepEqual(PRESET_IDS.nerdBrains, [...PLATFORMS.map((platform) => platform.id), "huge"], "nerd mode lists the whole roster")
+  assert.deepEqual(SIMPLE_IDS, { home: ["cool", "rear", "super"], memory: ["off", "on", "plus"], wires: ["cheap", "peer", "fast"], library: ["none", "basic", "smart"] })
+  for (const { id } of USE_CASES) {
+    assert.deepEqual(brainPick(id, "rubin"), { platform: "vr", racks: 1 }, id)
+    assert.deepEqual(brainPick(id, "vr"), { platform: "vr", racks: 1 }, id)
+    assert.equal(simpleBrainIds(id).length, 6, id)
+    assert.ok(simpleBrainIds(id).includes("rtx6000") && simpleBrainIds(id).includes("vr") && simpleBrainIds(id).includes("b300"), `${id} offers the budget Blackwell, the best air rack and Vera Rubin`)
+    assert.deepEqual(nerdBrainIds(id).slice(0, -1), PLATFORMS.map((platform) => platform.id), `${id} nerd offers every platform`)
+    /* The old words still mean the same racks: SMALL the Hopper tile, MEDIUM the air Blackwell, BIG the biggest. */
+    assert.deepEqual(brainPick(id, "medium"), brainPick(id, id === "robot" ? "b200" : "b300"), `${id} medium`)
+    assert.deepEqual(brainPick(id, "big"), brainPick(id, id === "robot" ? "b300" : "gb200"), `${id} big`)
+    assert.deepEqual(brainPick(id, "small"), brainPick(id, id === "chat" ? "h100" : "h200"), `${id} small`)
+    assert.deepEqual(brainPick(id, "no-such-tile"), brainPick(id, "medium"), `${id} an unknown tile is the opening tile`)
+    assert.deepEqual(brainPick(id, "huge"), { platform: "vr", racks: 4 }, `${id} huge`)
+    assert.deepEqual(brainPick(id, "huge", "small"), { platform: "vr", racks: 2 }, `${id} huge stays at least two racks for a small crowd`)
+  }
 })
 
 test("Vera Rubin ×1 fits the budget and the liquid hall but only research comes close to the best", () => {
@@ -125,7 +142,7 @@ test("nerd mode docks its panel as a column instead of covering the tiles", () =
 test("the memory step maps onto the KV tier and the hosts beside it, and the simple board snaps anything else onto its tiles", () => {
   for (const { id, orca } of USE_CASES) {
     const defaults = simpleDefaults(id)
-    assert.deepEqual([defaults.brains, defaults.home, defaults.wires, defaults.library, defaults.metros.length], ["medium", "cool", "peer", "none", 1], id)
+    assert.deepEqual([defaults.brains, defaults.home, defaults.wires, defaults.library, defaults.metros.length], [id === "robot" ? "b200" : "b300", "cool", "peer", "none", 1], id)
     assert.equal(defaults.memory, false, `${id} the opening picture has no memory tier`)
     assert.equal(defaults.helper, false, `${id} ORCA is a choice, not a default`)
     const build = choicesToBuild(id, defaults, false)
@@ -184,9 +201,12 @@ test("simple picks round-trip through nerd mode and back without changing the bu
       assert.equal(evaluateBuild(id, nerdBuild).score, evaluateBuild(id, simpleBuild).score, `${id} ${describeChoices(id, picks)} score`)
     }
     const huge = simpleChoices(id, { ...expertChoices(id), brains: "huge", hosts: "dpu", mcp: true })
-    assert.equal(huge.brains, "big", `${id} HUGE snaps to the big tile`)
+    assert.equal(huge.brains, brainPick(id, "big").platform, `${id} HUGE snaps to the biggest simple tile`)
     assert.notEqual(huge.hosts, "dpu", id)
     assert.equal(huge.mcp, false, id)
+    /* Nerd-only platforms snap onto the biggest simple tile too; a legacy word lands on its platform. */
+    assert.equal(simpleChoices(id, { brains: "b300n" }).brains, brainPick(id, "big").platform, `${id} a nerd-only node snaps`)
+    assert.equal(simpleChoices(id, { brains: "medium" }).brains, brainPick(id, "medium").platform, `${id} medium`)
   }
 })
 
@@ -207,12 +227,12 @@ const STEP_KEYS = ["location", "gpu", "cooling", "memory", "wires", "storage", "
 
 test("simple-space balance: story-specific optima, one winner, max-everything and naive fail, near-misses feel close", () => {
   const expected = {
-    chat: { best: { metros: ["lon", "fra"], brains: "big", home: "super", memory: "on", wires: "fast", library: "none" }, typical: [250, 450] },
-    rag: { best: { metros: ["fra"], brains: "medium", home: "rear", memory: "on", wires: "combo", library: "smart" }, typical: [5, 300] }, // no index on the home metro: DATA and POWER are red
-    code: { best: { metros: ["iad", "sjc"], brains: "big", home: "super", memory: "plus", wires: "combo", library: "basic" }, typical: [20, 400] },
-    research: { best: { metros: ["par"], brains: "big", home: "super", memory: "on", wires: "combo", library: "smart" }, typical: [100, 500] },
-    drug: { best: { metros: ["lon"], brains: "medium", home: "rear", memory: "off", wires: "fast", library: "basic", helper: true }, typical: [300, 700] },
-    robot: { best: { metros: ["fra", "ams"], brains: "medium", home: "rear", memory: "on", wires: "combo", library: "none" }, typical: [300, 700] }, // two Blackwell air racks; three B300 racks are more than 5,000 robots need
+    chat: { best: { metros: ["lon", "fra"], brains: "gb200", home: "super", memory: "on", wires: "fast", library: "none" }, typical: [250, 450] },
+    rag: { best: { metros: ["fra"], brains: "b300", home: "rear", memory: "on", wires: "combo", library: "smart" }, typical: [5, 300] }, // no index on the home metro: DATA and POWER are red
+    code: { best: { metros: ["iad", "sjc"], brains: "gb200", home: "super", memory: "plus", wires: "combo", library: "basic" }, typical: [20, 400] },
+    research: { best: { metros: ["par"], brains: "gb200", home: "super", memory: "on", wires: "combo", library: "smart" }, typical: [100, 500] },
+    drug: { best: { metros: ["lon"], brains: "b300", home: "rear", memory: "off", wires: "fast", library: "basic", helper: true }, typical: [300, 700] },
+    robot: { best: { metros: ["fra", "ams"], brains: "b200", home: "rear", memory: "on", wires: "combo", library: "none" }, typical: [300, 700] }, // two Blackwell air racks; three B300 racks are more than 5,000 robots need
   }
   /* Robots: ServiceFabric everywhere is within 3% of the COMBO, so that one near-miss also keeps three stars. */
   const threeStarAllowance = { robot: 2 }

@@ -99,6 +99,72 @@ const B200_NODES = [
   },
 ]
 
+/* 8-GPU PCIe servers for the L40S: air-cooled, no NVLink, a third of an HGX node's power. */
+const L40S_NODES = [
+  {
+    // NVIDIA OVX reference server with 8× L40S: 2× 4th Gen Xeon Scalable, 1 TB DDR5, 4× ConnectX-7
+    // 400G + BlueField-3 DPU, 4U, air. Node power is an estimate from 8× 350 W plus hosts.
+    // https://www.nvidia.com/en-us/data-center/products/ovx/
+    id: "l40s-a", letter: "A", form: "4U air PCIe node", who: "the GPU maker's reference design", reference: true,
+    kind: "node", gpusPerNode: 8, u: 4, cpu: "2× 56-core x86", memory: "1 TB DDR5", nics: "4× 400G + 1 DPU", nvme: "8× 2.5-in NVMe",
+    nodeKW: 4, cooling: "air", leadDelta: 0, priceMult: 1,
+  },
+  {
+    // A volume OEM's 4U server for eight double-width PCIe GPUs: 2× 4th/5th Gen Xeon Scalable,
+    // 32 DIMMs up to 8 TB, up to 8× 400G NICs, 24× 2.5-inch bays, 4× 2700 W Titanium supplies, air.
+    // Max node power estimated. Supermicro SYS-421GE-TNRT:
+    // https://www.supermicro.com/en/products/system/gpu/4u/sys-421ge-tnrt
+    id: "l40s-b", letter: "B", form: "4U air PCIe node, 24 bays", who: "a volume OEM",
+    kind: "node", gpusPerNode: 8, u: 4, cpu: "2× 64-core x86", memory: "up to 8 TB DDR5", nics: "up to 8× 400G", nvme: "up to 24× 2.5-in NVMe",
+    nodeKW: 4.2, cooling: "air", leadDelta: -1, priceMult: 0.96,
+  },
+  {
+    // A large OEM's 3U server for up to eight double-wide GPUs: 2× 4th Gen AMD EPYC, 24 DIMMs up to
+    // 3 TB DDR5, 6× PCIe 5.0 slots for NICs, 8× E1.S or 2.5-inch NVMe, air. Max node power estimated.
+    // Lenovo ThinkSystem SR675 V3: https://lenovopress.lenovo.com/lp1611-thinksystem-sr675-v3-server
+    id: "l40s-c", letter: "C", form: "3U air PCIe node", who: "a large OEM",
+    kind: "node", gpusPerNode: 8, u: 3, cpu: "2× 96-core x86", memory: "up to 3 TB DDR5", nics: "up to 6× 400G", nvme: "8× E1.S NVMe",
+    nodeKW: 4.3, cooling: "air", leadDelta: 1, priceMult: 1.02,
+  },
+]
+
+/* 8-GPU PCIe servers for the RTX PRO 6000 Blackwell Server Edition: air-cooled MGX boxes, no NVLink. */
+const RTX_NODES = [
+  {
+    // NVIDIA RTX PRO Server (MGX): 8× RTX PRO 6000 Blackwell Server Edition, 2× x86, ConnectX-8
+    // SuperNICs on a switched board, 768 GB GDDR7 and 12.8 TB/s a node, 4U, air. Node power is an
+    // estimate from 8× 600 W plus hosts and NICs.
+    // https://docs.nvidia.com/enterprise-reference-architectures/rtx-pro-ai-factory/latest/components.html
+    id: "rtx-a", letter: "A", form: "4U air MGX node", who: "the GPU maker's reference design", reference: true,
+    kind: "node", gpusPerNode: 8, u: 4, cpu: "2× 64-core x86", memory: "up to 2 TB DDR5", nics: "8× 400G on a switched board", nvme: "8× E1.S NVMe",
+    nodeKW: 7, cooling: "air", leadDelta: 0, priceMult: 1,
+  },
+  {
+    // A large OEM's 4U server for eight double-wide PCIe GPUs with 5th Gen AMD EPYC hosts: 24 DIMMs
+    // up to 3 TB DDR5, up to 8× 400G, 8× E3.S NVMe, air. Max node power estimated.
+    // Dell PowerEdge XE7745: https://www.dell.com/en-us/shop/ipovw/poweredge-xe7745
+    id: "rtx-b", letter: "B", form: "4U air PCIe node, AMD hosts", who: "a large OEM",
+    kind: "node", gpusPerNode: 8, u: 4, cpu: "2× 128-core x86", memory: "up to 3 TB DDR5", nics: "up to 8× 400G", nvme: "8× E3.S NVMe",
+    nodeKW: 7.2, cooling: "air", leadDelta: -1, priceMult: 0.97,
+  },
+  {
+    // A volume OEM's 4U PCIe GPU server with 5th Gen AMD EPYC: up to 8 double-width GPUs, 24 DIMMs
+    // up to 6 TB DDR5, 8× PCIe 5.0 slots, 24× 2.5-inch bays, air. Max node power estimated.
+    // Supermicro AS-4125GS-TNRT2: https://www.supermicro.com/en/products/system/gpu/4u/as-4125gs-tnrt2
+    id: "rtx-c", letter: "C", form: "4U air PCIe node, 24 bays", who: "a volume OEM",
+    kind: "node", gpusPerNode: 8, u: 4, cpu: "2× 96-core x86", memory: "up to 6 TB DDR5", nics: "up to 8× 400G", nvme: "up to 24× 2.5-in NVMe",
+    nodeKW: 7.4, cooling: "air", leadDelta: -2, priceMult: 0.95,
+  },
+  {
+    // A large OEM's 3U server for up to eight double-wide GPUs, also sold with this card: 2× AMD EPYC,
+    // up to 3 TB DDR5, 6× PCIe 5.0 slots, 8× E1.S NVMe, air. Max node power estimated.
+    // Lenovo ThinkSystem SR675 V3: https://lenovopress.lenovo.com/lp1611-thinksystem-sr675-v3-server
+    id: "rtx-d", letter: "D", form: "3U air PCIe node", who: "a large OEM",
+    kind: "node", gpusPerNode: 8, u: 3, cpu: "2× 96-core x86", memory: "up to 3 TB DDR5", nics: "up to 6× 400G", nvme: "8× E1.S NVMe",
+    nodeKW: 7.3, cooling: "air", leadDelta: 1, priceMult: 1.02,
+  },
+]
+
 /* HGX B300 8-GPU nodes: Blackwell Ultra on air, 800G NICs. */
 const B300_NODES = [
   {
@@ -234,10 +300,13 @@ const VR_RACKS = [
 ]
 
 export const REFARCH = {
+  l40s: L40S_NODES,
+  rtx6000: RTX_NODES,
   h100: HOPPER_NODES,
   h200: HOPPER_NODES,
   b200: B200_NODES,
   b300: B300_NODES,
+  b300n: B300_NODES,
   gb200: GB200_RACKS,
   gb300: GB300_RACKS,
   vr: VR_RACKS,

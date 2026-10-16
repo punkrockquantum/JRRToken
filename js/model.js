@@ -580,9 +580,20 @@ export function orcaHitMult(useCase, build, link) {
   return 1 + (base - 1) * retain
 }
 
+/**
+ * Storage, the KV host tier and the CPU hosts are sized to the crowd: a smaller users tier buys
+ * a smaller array, fewer hosts, less power (game assumption, the same mult^0.7 as the budget).
+ * ORCA is one real device and keeps its price whoever buys it.
+ */
+export function crowdScale(useCase) {
+  const scale = Number(useCase?.scale)
+  return Number.isFinite(scale) && scale > 0 ? scale : 1
+}
+
 function storageSpace(build, useCase) {
   const data = byId(DATA_TIERS, build?.data) || DATA_TIERS[0]
-  return (data.space || 0) + (build?.kv ? KV_TIER.space || 0 : 0) + (build?.orca && useCase?.orca ? ORCA.space || 0 : 0)
+  const sized = ((data.space || 0) + (build?.kv ? KV_TIER.space || 0 : 0)) * crowdScale(useCase)
+  return (sized > 0 ? Math.max(0.25, Math.round(sized * 4) / 4) : 0) + (build?.orca && useCase?.orca ? ORCA.space || 0 : 0)
 }
 
 /** Racks are paid once; storage and KV are duplicated at every site. The network bill adds its NRC. */
@@ -592,7 +603,7 @@ function hardwareCapex(useCase, platform, racks, data, build, siteCount = 1) {
   const kv = build?.kv ? KV_TIER.capex : 0
   const orca = build?.orca && useCase?.orca ? ORCA.capex : 0
   const host = build?.hosts === "grace" ? 450_000 : build?.hosts === "dpu" ? 700_000 : 0
-  return gpu + orca + (store + kv + host) * siteCount
+  return gpu + orca + Math.round((store + kv + host) * crowdScale(useCase)) * siteCount
 }
 
 function emptyResult(useCase, hall, platform, data, link, racks, build) {
@@ -785,8 +796,8 @@ export function evaluateBuild(useCaseId, build = {}) {
     warnings.push("Not enough racks for every site. Extra sites were not built.")
   }
 
-  const hostKW = build?.hosts === "grace" ? 12 : build?.hosts === "dpu" ? 8 : 0
-  const storageKW = data.kw + (kvOn ? KV_TIER.kw : 0) + (orcaOn ? ORCA.kw : 0)
+  const hostKW = (build?.hosts === "grace" ? 12 : build?.hosts === "dpu" ? 8 : 0) * crowdScale(useCase)
+  const storageKW = (data.kw + (kvOn ? KV_TIER.kw : 0)) * crowdScale(useCase) + (orcaOn ? ORCA.kw : 0)
   const perSiteRacks = planned ? planned.rows.map((row) => row.racks) : splitRacks(racks, siteCount)
   const edgeKW = planned ? planned.rows.filter((row) => row.role !== "inference").reduce((sum, row) => sum + row.powerMW * 1000, 0) : 0
   out.siteRacks = perSiteRacks

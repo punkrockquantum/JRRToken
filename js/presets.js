@@ -22,16 +22,73 @@ export const STORIES = {
 }
 
 /**
- * Platform and rack count. Vera Rubin ×1 is always offered; HUGE is the nerd-only trap.
- * The coding agents' 64k contexts on two coasts need a third NVL72 rack.
+ * The GPU tiles are NVIDIA platforms. `RACKS` holds the rack count a tile buys for the SMALL,
+ * MEDIUM and LARGE crowd of each story: the LARGE counts are the racks the story's tiles have
+ * always offered (budget racks stay few on purpose: that is the "too small for a million
+ * shoppers" lesson), the SMALL and MEDIUM counts are right-sized to the smaller crowd's demand
+ * and budget, never below one rack. Vera Rubin ×1 is always offered; HUGE is the nerd-only
+ * trap (several Vera Rubin racks). The coding agents' 64k contexts on two coasts need a third
+ * NVL72 rack.
  */
-const BRAINS = {
-  chat: { small: ["h100", 2], medium: ["b300", 6], big: ["gb200", 2], rubin: ["vr", 1], huge: ["vr", 4] },
-  rag: { small: ["h200", 2], medium: ["b300", 6], big: ["gb200", 2], rubin: ["vr", 1], huge: ["vr", 4] },
-  code: { small: ["h200", 2], medium: ["b300", 6], big: ["gb200", 3], rubin: ["vr", 1], huge: ["vr", 4] },
-  research: { small: ["h200", 2], medium: ["b300", 6], big: ["gb200", 2], rubin: ["vr", 1], huge: ["vr", 4] },
-  drug: { small: ["h200", 2], medium: ["b300", 4], big: ["gb200", 2], rubin: ["vr", 1], huge: ["vr", 4] },
-  robot: { small: ["h200", 4], medium: ["b200", 2], big: ["b300", 3], rubin: ["vr", 1], huge: ["vr", 2] },
+const RACKS = {
+  chat: { l40s: [2, 10, 22], rtx6000: [1, 6, 8], h100: [1, 2, 2], h200: [1, 2, 2], b200: [1, 1, 8], b300: [1, 1, 6], b300n: [1, 2, 12], gb200: [1, 1, 2], gb300: [1, 1, 2], vr: [1, 1, 1] },
+  rag: { l40s: [1, 4, 16], rtx6000: [1, 3, 8], h100: [1, 2, 2], h200: [1, 1, 2], b200: [1, 1, 6], b300: [1, 1, 6], b300n: [1, 2, 12], gb200: [1, 1, 2], gb300: [1, 1, 1], vr: [1, 1, 1] },
+  code: { l40s: [1, 12, 12], rtx6000: [1, 8, 8], h100: [1, 3, 2], h200: [1, 2, 2], b200: [1, 2, 10], b300: [1, 1, 6], b300n: [1, 2, 17], gb200: [1, 1, 3], gb300: [1, 1, 2], vr: [1, 1, 1] },
+  research: { l40s: [1, 6, 8], rtx6000: [1, 4, 8], h100: [1, 2, 2], h200: [1, 1, 2], b200: [1, 1, 7], b300: [1, 1, 6], b300n: [1, 2, 10], gb200: [1, 1, 2], gb300: [1, 1, 1], vr: [1, 1, 1] },
+  drug: { l40s: [1, 3, 15], rtx6000: [1, 2, 8], h100: [1, 1, 2], h200: [1, 1, 2], b200: [1, 1, 4], b300: [1, 1, 4], b300n: [1, 1, 7], gb200: [1, 1, 2], gb300: [1, 1, 1], vr: [1, 1, 1] },
+  robot: { l40s: [1, 3, 30], rtx6000: [1, 2, 9], h100: [1, 2, 8], h200: [1, 2, 4], b200: [1, 1, 2], b300: [1, 1, 3], b300n: [1, 2, 3], gb200: [1, 1, 2], gb300: [1, 1, 2], vr: [1, 1, 1] },
+}
+
+/**
+ * The six tiles of the simple GPU step, cheapest first: every NVIDIA platform the story can
+ * use. The 650B stories swap the HGX H100 for the GB300 reasoning rack (a 650B model spills on
+ * Hopper's 8-GPU islands); the drug lab's overnight batch gets the L40S instead of the H100;
+ * robot fleets never need an NVL72 rack, so they get the HGX B200 instead.
+ */
+const SIMPLE_BRAINS = {
+  chat: ["rtx6000", "h100", "h200", "b300", "gb200", "vr"],
+  rag: ["rtx6000", "h100", "h200", "b300", "gb200", "vr"],
+  code: ["rtx6000", "h200", "b300", "gb200", "gb300", "vr"],
+  research: ["rtx6000", "h200", "b300", "gb200", "gb300", "vr"],
+  drug: ["l40s", "rtx6000", "h200", "b300", "gb200", "vr"],
+  robot: ["rtx6000", "h100", "h200", "b200", "b300", "vr"],
+}
+
+/** The opening GPU tile: the strongest air-cooled rack the story was tuned on. */
+const DEFAULT_BRAINS = { chat: "b300", rag: "b300", code: "b300", research: "b300", drug: "b300", robot: "b200" }
+
+/**
+ * The words the tiles used before they were platforms, still accepted anywhere a choice set
+ * names one: SMALL was the Hopper tile, MEDIUM the air-cooled Blackwell, BIG the NVL72 rack
+ * (the HGX B300 for robots), RUBIN the Vera Rubin rack. HUGE stays a tile of its own.
+ */
+const LEGACY_BRAINS = {
+  chat: { small: "h100", medium: "b300", big: "gb200", rubin: "vr" },
+  rag: { small: "h200", medium: "b300", big: "gb200", rubin: "vr" },
+  code: { small: "h200", medium: "b300", big: "gb200", rubin: "vr" },
+  research: { small: "h200", medium: "b300", big: "gb200", rubin: "vr" },
+  drug: { small: "h200", medium: "b300", big: "gb200", rubin: "vr" },
+  robot: { small: "h200", medium: "b200", big: "b300", rubin: "vr" },
+}
+
+/** The platform id (or "huge") a brains value means for a story; the opening tile when it means nothing. */
+export function brainsId(useCaseId, brains) {
+  const story = RACKS[useCaseId] ? useCaseId : "chat"
+  if (brains === "huge") return "huge"
+  const legacy = LEGACY_BRAINS[story][brains]
+  if (legacy) return legacy
+  return RACKS[story][brains] ? brains : DEFAULT_BRAINS[story]
+}
+
+/** The simple GPU step's six tiles for a story, cheapest first. */
+export function simpleBrainIds(useCaseId) {
+  return SIMPLE_BRAINS[useCaseId] || SIMPLE_BRAINS.chat
+}
+
+/** Nerd mode's full list: every platform in roster order, then the HUGE trap. */
+export function nerdBrainIds(useCaseId) {
+  const racks = RACKS[useCaseId] || RACKS.chat
+  return [...PLATFORMS.map((platform) => platform.id).filter((id) => racks[id]), "huge"]
 }
 
 const LIBRARY = { none: "local", basic: "file", smart: "vector" }
@@ -79,23 +136,22 @@ export function hasCombo(useCaseId) {
   return Boolean(COMBO[useCaseId])
 }
 
-const BRAIN_IDS = ["small", "medium", "big", "rubin"]
-const NERD_BRAIN_IDS = ["small", "medium", "big", "rubin", "huge"]
 const LIBRARY_IDS = ["none", "basic", "smart"]
 const WIRE_IDS = ["cheap", "peer", "fast", "private", "combo"]
 const HOME_IDS = ["cool", "rear", "super"]
 const NERD_HOME_IDS = ["cool", "row", "rear", "super"]
 
-/** The tiles each step offers on the simple board (three) and in nerd mode (the full set). */
+/**
+ * The tiles each step offers on the simple board (three, six for the GPUs) and in nerd mode
+ * (the full set). The GPU lists differ by story: `simpleBrainIds` / `nerdBrainIds`.
+ */
 export const SIMPLE_IDS = {
-  brains: ["medium", "big", "rubin"],
   home: ["cool", "rear", "super"],
   memory: ["off", "on", "plus"],
   wires: ["cheap", "peer", "fast"],
   library: ["none", "basic", "smart"],
 }
 export const NERD_IDS = {
-  brains: NERD_BRAIN_IDS,
   home: NERD_HOME_IDS,
   memory: ["off", "on", "plus", "dpu"],
   wires: WIRE_IDS,
@@ -137,7 +193,7 @@ export function defaultChoices(useCaseId) {
   return {
     ...modelPicks(useCaseId),
     metros: (MISSION_SITES[useCaseId]?.defaults || ["lon"]).slice(0, 1),
-    brains: "medium",
+    brains: DEFAULT_BRAINS[useCaseId] || DEFAULT_BRAINS.chat,
     memory: false,
     library: "none",
     home: "cool",
@@ -164,10 +220,21 @@ export function memoryChoices(tile = "off") {
   return { memory: false, hosts: "standard" }
 }
 
-/** Snap any choice set onto the simple board: three tiles a step, no MCP, no HUGE. */
+/**
+ * The simple GPU tile a brains value snaps onto: HUGE and any nerd-only platform land on the
+ * story's biggest simple rack (the NVL72 rack, or the HGX B300 for robots).
+ */
+function simpleBrains(useCaseId, brains) {
+  const id = brainsId(useCaseId, brains)
+  const simple = simpleBrainIds(useCaseId)
+  if (simple.includes(id)) return id
+  return LEGACY_BRAINS[RACKS[useCaseId] ? useCaseId : "chat"].big
+}
+
+/** Snap any choice set onto the simple board: three tiles a step (six GPUs), no MCP, no HUGE. */
 export function simpleChoices(useCaseId, choices = {}) {
   const picked = { ...defaultChoices(useCaseId), ...choices }
-  const brains = { small: "medium", huge: "big" }[picked.brains] || (SIMPLE_IDS.brains.includes(picked.brains) ? picked.brains : "medium")
+  const brains = simpleBrains(useCaseId, picked.brains)
   const home = picked.home === "row" ? "rear" : SIMPLE_IDS.home.includes(picked.home) ? picked.home : "cool"
   const wires = wireIds(useCaseId).includes(picked.wires)
     ? picked.wires
@@ -194,6 +261,7 @@ export function simpleChoices(useCaseId, choices = {}) {
 export function nerdChoices(useCaseId, choices) {
   const next = { ...defaultChoices(useCaseId), ...choices, ...modelPicks(useCaseId, choices) }
   next.metros = cleanMetros(useCaseId, next.metros)
+  next.brains = brainsId(useCaseId, next.brains)
   return next
 }
 
@@ -203,12 +271,12 @@ export function nerdChoices(useCaseId, choices) {
  * and the memory or data the workload actually reuses.
  */
 const EXPERTS = {
-  chat: { metros: ["lon", "fra"], brains: "big", memory: true, hosts: "standard", home: "super", wires: "fast", library: "none" },
-  rag: { metros: ["fra"], brains: "medium", memory: true, hosts: "standard", home: "rear", wires: "combo", library: "smart" },
-  code: { metros: ["iad", "sjc"], brains: "big", memory: true, hosts: "grace", home: "super", wires: "combo", library: "basic" },
-  research: { metros: ["par"], brains: "big", memory: true, hosts: "standard", home: "super", wires: "combo", library: "smart" },
-  drug: { metros: ["lon"], brains: "medium", memory: false, hosts: "standard", home: "rear", wires: "private", library: "basic", helper: true },
-  robot: { metros: ["fra", "ams"], brains: "medium", memory: true, hosts: "standard", home: "rear", wires: "combo", library: "none" },
+  chat: { metros: ["lon", "fra"], brains: "gb200", memory: true, hosts: "standard", home: "super", wires: "fast", library: "none" },
+  rag: { metros: ["fra"], brains: "b300", memory: true, hosts: "standard", home: "rear", wires: "combo", library: "smart" },
+  code: { metros: ["iad", "sjc"], brains: "gb200", memory: true, hosts: "grace", home: "super", wires: "combo", library: "basic" },
+  research: { metros: ["par"], brains: "gb200", memory: true, hosts: "standard", home: "super", wires: "combo", library: "smart" },
+  drug: { metros: ["lon"], brains: "b300", memory: false, hosts: "standard", home: "rear", wires: "private", library: "basic", helper: true },
+  robot: { metros: ["fra", "ams"], brains: "b200", memory: true, hosts: "standard", home: "rear", wires: "combo", library: "none" },
 }
 
 export function expertChoices(useCaseId) {
@@ -265,14 +333,17 @@ export function comboMcp(useCaseId, wires) {
 }
 
 /**
- * The computers behind one BRAINS tile. The rack counts are set for the top users tier (the
- * business the story was written for); a smaller crowd scales them down with the demand, never
- * below one rack, so a tile is never more racks than the crowd can use.
+ * The computers behind one GPU tile: the platform and the rack count for the crowd the build
+ * serves (SMALL, MEDIUM or LARGE). HUGE is several Vera Rubin racks at every tier, never fewer
+ * than two, so it always out-spends the Vera Rubin tile.
  */
 export function brainPick(useCaseId, brains, users = "large") {
-  const picked = BRAINS[useCaseId]?.[brains] || BRAINS.chat.medium
-  const mult = usersTier(useCaseId, users).mult
-  return { platform: picked[0], racks: Math.max(1, Math.round(picked[1] * mult)) }
+  const story = RACKS[useCaseId] ? useCaseId : "chat"
+  const id = brainsId(story, brains)
+  const tier = usersTier(story, users)
+  const column = Math.max(0, USER_TIER_IDS.indexOf(tier.id))
+  if (id === "huge") return { platform: "vr", racks: Math.max(2, Math.round(4 * tier.mult)) }
+  return { platform: id, racks: RACKS[story][id][column] }
 }
 
 /**
@@ -283,7 +354,7 @@ export function brainPick(useCaseId, brains, users = "large") {
 export function choicesToBuild(useCaseId, choices, nerd = false) {
   const useCase = byId(USE_CASES, useCaseId)
   const picked = nerd ? nerdChoices(useCaseId, choices) : simpleChoices(useCaseId, choices)
-  const { platform, racks } = brainPick(useCaseId, BRAINS[useCaseId][picked.brains] ? picked.brains : "big", picked.users)
+  const { platform, racks } = brainPick(useCaseId, picked.brains, picked.users)
   const sites = cleanMetros(useCaseId, picked.metros)
   const helper = Boolean(useCase?.orca && picked.helper)
   const routes = assignRoutes(useCase, sites, helper, picked.wires, Boolean(picked.mcp))
@@ -338,7 +409,7 @@ export function allPresets(useCaseId) {
   const library = autoLibrary(useCaseId)
   const metroLists = cityChoices(useCaseId) ? [expert.metros.slice(0, 1), expert.metros] : [expert.metros]
   const list = []
-  for (const brains of BRAIN_IDS) {
+  for (const brains of simpleBrainIds(useCaseId)) {
     for (const memory of [false, true]) {
       for (const hosts of memory ? ["standard", "grace"] : ["standard"]) {
         for (const home of HOME_IDS) {
@@ -356,4 +427,4 @@ export function allPresets(useCaseId) {
   return list
 }
 
-export const PRESET_IDS = { brains: BRAIN_IDS, nerdBrains: NERD_BRAIN_IDS, library: LIBRARY_IDS, wires: WIRE_IDS, homes: HOME_IDS, nerdHomes: NERD_HOME_IDS }
+export const PRESET_IDS = { brains: simpleBrainIds("chat"), nerdBrains: nerdBrainIds("chat"), legacyBrains: Object.keys(LEGACY_BRAINS.chat), library: LIBRARY_IDS, wires: WIRE_IDS, homes: HOME_IDS, nerdHomes: NERD_HOME_IDS }

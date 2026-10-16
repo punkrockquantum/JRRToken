@@ -22,8 +22,77 @@
  * 1.3× and 2.2× are game steps around that, not a hardware measurement.
  */
 
+/**
+ * NVIDIA platforms, cheapest first. A game "rack" is the unit the tiles count: two 8-GPU
+ * nodes for the HGX and PCIe server platforms (16 GPUs), one NVL72 rack for the rack-scale
+ * ones. `hbmGB` / `hbmTBs` are the public per-GPU memory size and bandwidth (GDDR on the PCIe
+ * cards), `pflops` the dense tensor PFLOPS at `precision`, `domain` how many GPUs share one
+ * NVLink (or PCIe-switched) island. Prices, lead times, supply caps and tokens per GPU are
+ * game estimates, labelled as such in the UI.
+ */
 export const PLATFORMS = [
   {
+    // NVIDIA L40S datasheet: 48 GB GDDR6 with ECC, 864 GB/s, FP8 tensor 1,466 TFLOPS with
+    // sparsity (733 dense), 350 W, PCIe Gen4 x16, passive, no NVLink.
+    // https://www.nvidia.com/en-us/data-center/l40s/
+    // Two 8-GPU 4U PCIe servers per game rack (about 4 kW a server, estimate); server price estimate.
+    id: "l40s",
+    tag: "BUDGET PCIE",
+    name: "L40S Server",
+    family: "Ada Lovelace",
+    year: 2023,
+    gpu: "L40S",
+    sprite: "rackAir",
+    gpusPerRack: 16,
+    hbmGB: 48,
+    hbmTBs: 0.864,
+    pflops: 0.73,
+    precision: "FP8",
+    domain: 8,
+    rackKW: 8,
+    cooling: "air",
+    hostTB: 4,
+    tokPerGpu: 750,
+    supply: 60,
+    capex: 160000,
+    leadWeeks: 3,
+    learn:
+      "A PCIe inference card with 48 GB of GDDR6 and no NVLink. Cheap and in stock, but its memory is slow, so each GPU writes few tokens a second and big models spill across eight cards over PCIe.",
+  },
+  {
+    // NVIDIA RTX PRO 6000 Blackwell Server Edition datasheet: 96 GB GDDR7 with ECC, 1,597 GB/s,
+    // FP4 tensor 4 PFLOPS with sparsity (2 dense), FP8 2 PFLOPS with sparsity, up to 600 W
+    // configurable, PCIe Gen5 x16, passive, no NVLink.
+    // https://www.nvidia.com/en-us/data-center/rtx-pro-6000-blackwell-server-edition/
+    // The RTX PRO Server: an 8-GPU MGX air-cooled node, 768 GB and 12.8 TB/s aggregate.
+    // https://docs.nvidia.com/enterprise-reference-architectures/rtx-pro-ai-factory/latest/components.html
+    // Two 8-GPU servers per game rack (about 7 kW a server, estimate); server price estimate.
+    id: "rtx6000",
+    tag: "BUDGET BLACKWELL",
+    name: "RTX PRO 6000 Server",
+    family: "Blackwell (RTX PRO)",
+    year: 2025,
+    gpu: "RTX PRO 6000 Blackwell Server Edition",
+    sprite: "rackAir",
+    gpusPerRack: 16,
+    hbmGB: 96,
+    hbmTBs: 1.6,
+    pflops: 2,
+    precision: "FP4",
+    domain: 8,
+    rackKW: 14,
+    cooling: "air",
+    hostTB: 4,
+    tokPerGpu: 2200,
+    supply: 60,
+    capex: 240000,
+    leadWeeks: 3,
+    learn:
+      "Blackwell on a PCIe card: 96 GB of GDDR7 at 1.6 TB/s and FP4 maths, in an 8-GPU air-cooled server. A fifth of an HGX rack's price per GPU, but GDDR is five times slower than HBM, so it suits small models and modest crowds.",
+  },
+  {
+    // NVIDIA H100 SXM: 80 GB HBM3, 3.35 TB/s, FP8 ~2 PFLOPS dense, 700 W, NVLink 8-GPU HGX node.
+    // https://www.nvidia.com/en-us/data-center/h100/
     id: "h100",
     tag: "THE CLASSIC",
     name: "HGX H100",
@@ -48,6 +117,8 @@ export const PLATFORMS = [
       "The GPU that kicked off the AI boom. 80 GB of fast memory is small for today's giant models, so big models must be split across many GPUs.",
   },
   {
+    // NVIDIA H200 SXM: 141 GB HBM3e, 4.8 TB/s, same Hopper maths as H100, 700 W.
+    // https://www.nvidia.com/en-us/data-center/h200/
     id: "h200",
     tag: "MORE MEMORY",
     name: "HGX H200",
@@ -72,6 +143,8 @@ export const PLATFORMS = [
       "Same chip brain as H100 but much more memory (141 GB) and bandwidth. Generating tokens is mostly a memory job, so H200 is faster at inference.",
   },
   {
+    // NVIDIA HGX B200: 8× B200, 180 GB HBM3e and 8 TB/s a GPU, FP4 dense 9 PFLOPS a GPU, ~14 kW a node, air.
+    // https://www.nvidia.com/en-us/data-center/hgx/
     id: "b200",
     tag: "FP4 POWER",
     name: "HGX B200",
@@ -96,6 +169,8 @@ export const PLATFORMS = [
       "Blackwell adds FP4: smaller numbers, so each token needs less maths and memory. Still fits an air-cooled hall.",
   },
   {
+    // NVIDIA HGX B300: 8× Blackwell Ultra, 288 GB HBM3e a GPU, FP4 dense ~14 PFLOPS a GPU, 800G NICs, air.
+    // https://www.nvidia.com/en-us/data-center/hgx/
     id: "b300",
     tag: "BEST ON AIR",
     name: "HGX B300",
@@ -120,6 +195,35 @@ export const PLATFORMS = [
       "Blackwell Ultra: 288 GB per GPU and more FP4 power. The strongest choice that still runs on air.",
   },
   {
+    // The same HGX B300 node sold one at a time: 8× B300 (2.3 TB HBM3e), 8× 800G ConnectX-8,
+    // about 14 kW, air. https://www.nvidia.com/en-us/data-center/dgx-b300/
+    // Half an HGX B300 game rack: the smaller Blackwell Ultra option when six racks is too many.
+    id: "b300n",
+    tag: "ONE BLACKWELL NODE",
+    name: "HGX B300 node",
+    family: "Blackwell Ultra",
+    year: 2025,
+    gpu: "B300",
+    sprite: "rackAir",
+    gpusPerRack: 8,
+    hbmGB: 288,
+    hbmTBs: 8,
+    pflops: 14,
+    precision: "FP4",
+    domain: 8,
+    rackKW: 15,
+    cooling: "air",
+    hostTB: 2,
+    tokPerGpu: 15000,
+    supply: 24,
+    capex: 575000,
+    leadWeeks: 12,
+    learn:
+      "One 8-GPU Blackwell Ultra node in a rack of its own: the same 288 GB GPUs as the full HGX B300 rack at half the price, for a crowd that needs eight strong GPUs, not sixteen.",
+  },
+  {
+    // NVIDIA GB200 NVL72: 72 B200 + 36 Grace, 13.5 TB HBM3e, ~120 kW+ rack, liquid.
+    // https://www.nvidia.com/en-us/data-center/gb200-nvl72/
     id: "gb200",
     tag: "72 GPUS AS ONE",
     name: "GB200 NVL72",
@@ -144,6 +248,8 @@ export const PLATFORMS = [
       "72 GPUs joined by NVLink act like one giant GPU. Huge mixture-of-experts models love it. Too hot for air: liquid cooling only.",
   },
   {
+    // NVIDIA GB300 NVL72: 72 Blackwell Ultra + 36 Grace, 21 TB HBM3e, FP4 dense 1,100 PFLOPS a rack, liquid.
+    // https://www.nvidia.com/en-us/data-center/gb300-nvl72/
     id: "gb300",
     tag: "REASONING RACK",
     name: "GB300 NVL72",
@@ -168,6 +274,9 @@ export const PLATFORMS = [
       "Blackwell Ultra in a 72-GPU NVLink rack. Built for reasoning models that think in thousands of tokens. Liquid only.",
   },
   {
+    // NVIDIA Vera Rubin NVL72 (first branded with the 144-die count): 72 Rubin GPUs + 36 Vera CPUs, 20.7 TB HBM4 at 1,400 TB/s
+    // (288 GB and 19.2 TB/s a GPU), NVFP4 inference 3,600 PFLOPS a rack (50 a GPU; 35 dense training), liquid, 2026.
+    // https://www.nvidia.com/en-us/data-center/vera-rubin-nvl72/
     id: "vr",
     tag: "HBM4 NEXT GEN",
     name: "Vera Rubin NVL72",
@@ -930,10 +1039,13 @@ export const EDGE_LATE = 0.05
 
 /** One plain sentence per choice: what it does for you. */
 export const DOES = {
+  l40s: "A budget PCIe card: in stock and cheap, but slow GDDR6 memory and no NVLink, so few tokens a GPU.",
+  rtx6000: "Blackwell on a PCIe card: cheap FP4 tokens for small models, GDDR7 five times slower than HBM.",
   h100: "The classic: cheap and air-cooled, but slow memory and small NVLink islands.",
   h200: "Hopper with more, faster memory: fits bigger models per GPU.",
   b200: "Blackwell with FP4: roughly double Hopper's tokens, still air-cooled.",
   b300: "Blackwell Ultra: the strongest air-cooled rack.",
+  b300n: "One Blackwell Ultra node: eight strong GPUs at half a rack's price.",
   gb200: "72 GPUs acting as one: giant models fit, but it needs liquid cooling.",
   gb300: "GB200 with more memory: more agent context per rack. Liquid only.",
   vr: "Vera Rubin: the most tokens per watt, but the priciest rack and scarce.",

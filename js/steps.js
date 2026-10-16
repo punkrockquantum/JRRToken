@@ -7,7 +7,7 @@
 import { AUDIENCES, DATA_HOMES, DOES, HALLS, JOBS, KV_TIER, MODELS, ORCA, PLATFORMS, SITES, USER_BASES, USER_TIER_IDS, USE_CASES, byId, dataHomeFor, resolveUseCase, usersTier } from "./data.js"
 import { dataTrips } from "./latency.js"
 import { formatMoney, formatTokens, metroOffers, scenarioFor } from "./model.js"
-import { COMBO, NERD_IDS, SIMPLE_IDS, brainPick, cleanMetros, defaultChoices, maxMetros, memoryChoices, memoryTile, metroSets, modelPicks, wireIds } from "./presets.js"
+import { COMBO, NERD_IDS, SIMPLE_IDS, brainPick, brainsId, cleanMetros, defaultChoices, maxMetros, memoryChoices, memoryTile, metroSets, modelPicks, nerdBrainIds, simpleBrainIds, wireIds } from "./presets.js"
 import { designFor } from "./refarch.js"
 
 export const STEPS = [
@@ -37,20 +37,47 @@ export function prevStep(stepId) {
   return STEP_IDS[Math.max(0, stepIndex(stepId) - 1)]
 }
 
-const RACK_ART = { h100: "rackAir", h200: "rackAir", b200: "rackAir", b300: "rackAir", gb200: "rackLiquid", gb300: "rackLiquid", vr: "rackRubin" }
+const RACK_ART = { l40s: "rackAir", rtx6000: "rackAir", h100: "rackAir", h200: "rackAir", b200: "rackAir", b300: "rackAir", b300n: "rackAir", gb200: "rackLiquid", gb300: "rackLiquid", vr: "rackRubin" }
 
 /** Five words that tell a newcomer what each rack is good at. */
 const GPU_HINTS = {
+  l40s: "cheapest card, slow memory, air",
+  rtx6000: "budget pick for small models",
   h100: "the classic, runs on air",
   h200: "more memory, runs on air",
   b200: "FP4 maths, runs on air",
   b300: "strongest rack on air",
+  b300n: "one strong node, half the price",
   gb200: "72 GPUs as one, liquid",
   gb300: "reasoning rack, liquid only",
-  vr: "next gen, liquid, arrives late",
+  vr: "next gen, liquid, due 2026",
+}
+
+/** The tag over the tile: what the player must know about the hall before picking it. */
+const GPU_TAG = {
+  l40s: "INCLUDED · AIR",
+  rtx6000: "INCLUDED · AIR",
+  h100: "INCLUDED · AIR",
+  h200: "INCLUDED · AIR",
+  b200: "INCLUDED · AIR",
+  b300: "INCLUDED · AIR",
+  b300n: "INCLUDED · AIR",
+  gb200: "NEEDS LIQUID",
+  gb300: "NEEDS LIQUID",
+  vr: "NEEDS LIQUID · 2026",
 }
 
 const GPU_LEARN = {
+  l40s: [
+    "A PCIe inference card from 2023 with 48 GB of GDDR6 memory and no NVLink.",
+    "Its memory is four times slower than an H100's, so each GPU writes few tokens a second, and a 70B model needs all eight cards in the server.",
+    "Pick it when the crowd is small and the money is tight: it is in stock and the cheapest rack on the board.",
+  ],
+  rtx6000: [
+    "Blackwell on a PCIe card: 96 GB of GDDR7 memory, FP4 maths, in an 8-GPU air-cooled server.",
+    "A fifth of an HGX rack's price per GPU, but GDDR is five times slower than HBM, so it suits small models and modest crowds.",
+    "Pick it for a 70B or 100B model and a small or medium crowd; a million shoppers need HBM racks.",
+  ],
   h100: [
     "The GPU that kicked off the AI boom in 2022.",
     "80 GB of memory per GPU is small for today's giant models, so a big model is split across many GPUs.",
@@ -71,6 +98,11 @@ const GPU_LEARN = {
     "It is the strongest rack that still runs on air cooling.",
     "Pick it when you want a lot of answers without waiting for a liquid hall.",
   ],
+  b300n: [
+    "One 8-GPU Blackwell Ultra node in a rack of its own: the same 288 GB GPUs as the HGX B300 rack.",
+    "Half a rack's price for eight strong GPUs on air.",
+    "Pick it when the crowd needs eight of the best air-cooled GPUs, not sixteen.",
+  ],
   gb200: [
     "72 GPUs joined by NVLink act as one giant GPU.",
     "Huge models love that shared memory.",
@@ -88,7 +120,7 @@ const GPU_LEARN = {
   ],
 }
 
-const SIZE_TAG = { small: "SMALL", medium: "MEDIUM", big: "BIG", rubin: "NEWEST", huge: "HUGE" }
+const HUGE_TAG = "HUGE · NEEDS LIQUID"
 
 /** The three model sizes: what each one is, what it needs, and when to pick it. */
 const MODEL_TILES = {
@@ -132,12 +164,12 @@ const USERS_ART = { small: "user", medium: "user", large: "hero" }
 
 /** One line per story and GPU tile: the reason that pops up for two seconds when it is picked. */
 const GPU_WHY = {
-  chat: { h100: "Cheap and quick to get, but each rack answers few shoppers.", b300: "Six strong air racks: plenty of shoppers, no liquid hall needed.", gb200: "Two NVL72 racks answer the whole crowd, if the hall can cool them.", vr: "The fastest rack, but it lands after the 16-week deadline." },
-  rag: { h200: "Fits a 70B model, but slow on 16k-token prompts.", b300: "Air-cooled Blackwell fits a small power room.", gb200: "One NVL72 rack would do; two blow the power room.", vr: "Scarce and late for a 20-week deadline." },
-  code: { h200: "Too little memory for 64k-token agent contexts.", b300: "Six air racks keep up until the contexts fill the memory.", gb200: "Three NVL72 racks hold a big model and its long contexts.", vr: "Arrives too late for a 26-week launch." },
-  research: { h200: "A 650B model does not fit well on Hopper islands.", b300: "Works, but a big model spills across small NVLink islands.", gb200: "72 GPUs as one is how a 650B reasoning model wants to run.", vr: "Inside the 36-week deadline, but the priciest rack on the board." },
-  drug: { h200: "Cheap racks, but a 100B model screens slowly on them.", b300: "Four Blackwell Ultra racks screen the library fast on air.", gb200: "More rack than the lab's power room can feed.", vr: "The lab would pay for speed it cannot power." },
-  robot: { h100: "Cheap, but too few tokens a second for a 70B model.", h200: "Four Hopper racks still miss the fleet's 50 ms first word.", b200: "Two Blackwell racks on air serve the whole fleet from the plants.", b300: "Three racks is more than the fleet needs; the money shows in the token price.", vr: "A 210 kW rack far above what the fleet needs: power and money wasted." },
+  chat: { rtx6000: "Cheap FP4 tokens for a small crowd; a million shoppers need far more than eight PCIe racks.", h100: "Cheap and quick to get, but each rack answers few shoppers.", h200: "More memory than the H100, but the same slow maths for a million shoppers' prompts.", b300: "Six strong air racks: plenty of shoppers, no liquid hall needed.", gb200: "Two NVL72 racks answer the whole crowd, if the hall can cool them.", vr: "The fastest rack, but it lands after the 16-week deadline." },
+  rag: { rtx6000: "A budget rack for a small office; 16k-token prompts crawl on GDDR memory at scale.", h100: "Fits a 70B model, but slow on 16k-token prompts.", h200: "Fits a 70B model, but slow on 16k-token prompts.", b300: "Air-cooled Blackwell fits a small power room.", gb200: "One NVL72 rack would do; two blow the power room.", vr: "Scarce and late for a 20-week deadline." },
+  code: { rtx6000: "FP4 fits the 650B model across eight cards, but PCIe islands and GDDR make it crawl on 64k contexts.", h200: "Too little memory for 64k-token agent contexts.", b300: "Six air racks keep up until the contexts fill the memory.", gb200: "Three NVL72 racks hold a big model and its long contexts.", gb300: "Two reasoning racks hold the contexts, but the third rack's worth of developers waits.", vr: "Arrives too late for a 26-week launch." },
+  research: { rtx6000: "A 650B model on PCIe islands: it loads, but every long answer crawls.", h200: "A 650B model does not fit well on Hopper islands.", b300: "Works, but a big model spills across small NVLink islands.", gb200: "72 GPUs as one is how a 650B reasoning model wants to run.", gb300: "One reasoning rack: 72 GPUs as one, but one rack for ten thousand analysts.", vr: "Inside the 36-week deadline, but the priciest rack on the board." },
+  drug: { l40s: "The cheapest cards: an overnight batch forgives slow memory, but fifteen racks still miss the candidates.", rtx6000: "Cheap FP4 screening for a small lab; the big library needs HBM racks.", h200: "Cheap racks, but a 100B model screens slowly on them.", b300: "Four Blackwell Ultra racks screen the library fast on air.", gb200: "More rack than the lab's power room can feed.", vr: "The lab would pay for speed it cannot power." },
+  robot: { rtx6000: "Nine PCIe racks serve the fleet in time and cheaply; the plants' power rooms can feed them.", h100: "Cheap, but eight Hopper racks for what two Blackwell racks do.", h200: "Four Hopper racks still miss the fleet's 50 ms first word.", b200: "Two Blackwell racks on air serve the whole fleet from the plants.", b300: "Three racks is more than the fleet needs; the money shows in the token price.", vr: "A 210 kW rack far above what the fleet needs: power and money wasted." },
 }
 
 const HALL_META = {
@@ -479,19 +511,20 @@ export function stepTiles(useCaseId, stepId, nerd = false, choices = {}) {
   }
   if (stepId === "gpu") {
     const { users } = modelPicks(useCaseId, choices)
-    return ids.brains.map((id) => {
+    return (nerd ? nerdBrainIds(useCaseId) : simpleBrainIds(useCaseId)).map((id) => {
       const pick = brainPick(useCaseId, id, users)
       const platform = byId(PLATFORMS, pick.platform)
-      const spec = platform ? `${platform.hbmGB} GB HBM, ${platform.hbmTBs} TB/s, ${platform.rackKW} kW, ${formatMoney(platform.capex)}, lead ${platform.leadWeeks} weeks` : ""
+      const memory = platform ? `${platform.hbmGB} GB ${platform.hbmTBs < 2 ? "GDDR" : "HBM"}` : ""
+      const spec = platform ? `${memory}, ${platform.hbmTBs} TB/s, ${platform.pflops} PFLOPS ${platform.precision}, ${platform.rackKW} kW, ${formatMoney(platform.capex)}, lead ${platform.leadWeeks} weeks` : ""
       return {
         id,
         label: `NVIDIA ${platform?.name || pick.platform} ×${pick.racks}`,
-        hint: GPU_HINTS[pick.platform] || "",
-        tag: SIZE_TAG[id],
+        hint: id === "huge" ? "more racks than the job needs" : GPU_HINTS[pick.platform] || "",
+        tag: id === "huge" ? HUGE_TAG : GPU_TAG[pick.platform] || "",
         art: RACK_ART[pick.platform] || "rackAir",
         lines: GPU_LEARN[pick.platform] || ["A rack of GPUs."],
-        nerd: platform?.id === "vr" ? `${spec}. 35 PFLOPS. Announced as NVL144.` : spec,
-        why: GPU_WHY[useCaseId]?.[pick.platform] || DOES[pick.platform] || "",
+        nerd: platform?.id === "vr" ? `${spec}. Announced as NVL144.` : spec,
+        why: id === "huge" ? "Several Vera Rubin racks: the money runs out before the hall pays off." : GPU_WHY[useCaseId]?.[pick.platform] || DOES[pick.platform] || "",
         patch: { brains: id },
         platform,
         racks: pick.racks,
@@ -546,7 +579,7 @@ export function stepTiles(useCaseId, stepId, nerd = false, choices = {}) {
 export function stepValue(useCaseId, stepId, choices = {}) {
   if (stepId === "model") return modelPicks(useCaseId, choices)
   if (stepId === "location") return cleanMetros(useCaseId, choices.metros)
-  if (stepId === "gpu") return choices.brains || "medium"
+  if (stepId === "gpu") return brainsId(useCaseId, choices.brains)
   if (stepId === "cooling") return choices.home || "cool"
   if (stepId === "memory") return memoryTile(choices)
   if (stepId === "wires") return choices.wires || "peer"
@@ -603,7 +636,7 @@ export function allSimple(useCaseId, picks = {}) {
   const first = modelPicks(useCaseId, picks)
   const qpu = qpuRelevant(useCaseId) ? [false, true] : [false]
   for (const metros of metroSets(useCaseId, metroShortList(useCaseId))) {
-    for (const brains of SIMPLE_IDS.brains) {
+    for (const brains of simpleBrainIds(useCaseId)) {
       for (const home of SIMPLE_IDS.home) {
         for (const memory of SIMPLE_IDS.memory) {
           for (const wires of wireIds(useCaseId)) {
