@@ -8,3 +8,6 @@ data/
 
 # Static demo build output (npm run build:static)
 dist/
+
+# wrangler's account cache, written here by `npm run deploy:worker` (deploy/intake-worker has its own)
+.wrangler/
