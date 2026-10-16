@@ -150,7 +150,7 @@ test("the capacity line says what the hall did to the racks: liquid racks on air
   const fit = helped("rag", expertChoices("rag"), false).lines[1].text
   assert.match(fit, /^Your 6× HGX B300 racks at 30 kW each fit the rear-door hall in Frankfurt at 70 kW a rack, fitted out in 6 weeks\.$/)
   const tight = helped("rag", { ...expertChoices("rag"), metros: ["lon"], brains: "big", home: "super" }, true).lines[1].text
-  assert.match(tight, /drew [\d,]+ kW against the [\d,]+ kW power room in London\. Digital Realty would have advised Frankfurt, where 100% of the scenario's power was on offer against 80% in London, or fewer racks\.$/)
+  assert.match(tight, /drew [\d,]+ kW against the [\d,]+ kW power room in London\. Digital Realty would have advised Frankfurt, where 100% of the scenario's power was on offer against 95% in London, or fewer racks\.$/)
   const nerd = helped("rag", expertChoices("rag"), true).lines[1].show
   assert.match(nerd, /IT \d+ kW × PUE 1\.28 = \d+ kW facility against 0\.27 MW; [\d.]+ of 18 rack positions\.$/)
 })
@@ -186,7 +186,7 @@ test("the time line reads the lead parts: the slowest part, pre-built halls, the
   /* A London liquid hall for RAG waits four extra weeks; Frankfurt had liquid capacity ready. */
   const fitOut = helped("rag", { ...expertChoices("rag"), metros: ["lon"], brains: "small", home: "super" }, true)
   assert.match(fitOut.lines[3].text, /The slowest part was Liquid hall fit-out at 14 weeks\. Digital Realty would have advised Frankfurt, where liquid capacity was ready 4 weeks sooner\./)
-  assert.match(fitOut.lines[1].text, /^Your 2× HGX H200 racks are air-cooled at 23 kW each: the air hall at 40 kW a rack was ready now in London, instead of the liquid hall's fit-out of 14 weeks\.$/)
+  assert.match(fitOut.lines[1].text, /^Your 2× HGX H200 racks are air-cooled at 22 kW each: the air hall at 40 kW a rack was ready now in London, instead of the liquid hall's fit-out of 14 weeks\.$/)
   assert.match(fitOut.lines[3].show, /Lead parts: HGX H200 8 weeks, Liquid hall fit-out 14 weeks, /)
   const liquidFit = helped("rag", { ...expertChoices("rag"), metros: ["lon"], brains: "big", home: "super" }, true).lines[1].text
   assert.match(liquidFit, /^Your 2× GB200 NVL72 racks drew [\d,]+ kW against the [\d,]+ kW power room in London\./)

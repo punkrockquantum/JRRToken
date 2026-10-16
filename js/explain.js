@@ -195,7 +195,7 @@ export function thinkLines(result) {
     `Demand ${num(result.demand)} tok/s versus supply ${num(result.throughput)} tok/s.`,
     `Decode is limited by HBM bandwidth against the bytes of the weights and the KV cache. Hosts: ${result.hosts || "standard"}.`,
     `TTFT ${ms(result.ttft)} is prefill ${ms(result.prefillS)} plus network ${ms(result.netDelayS)}. ${legs}`,
-    `Power: ${result.racks || 0} racks × ${result.platform?.rackKW || 0} kW × PUE ${result.hall?.pue ?? "—"} makes ${num(result.facilityKW)} kW against ${Number(result.powerMW || 0).toFixed(2)} MW.`,
+    `Power: ${result.powerLine || `${result.racks || 0} racks × ${result.platform?.rackKW || 0} kW IT × PUE ${result.pue ?? "—"} = ${num(result.facilityKW)} kW facility`}, against the ${Number(result.powerMW || 0).toFixed(2)} MW offer (${num((result.powerMW || 0) * 1000)} kW). Rack kW is IT power from the node datasheets; cooling only changes the PUE.`,
     `Cost ${formatMoney(result.costPerM, 3)} per million tokens, with capex amortisation inside the hourly cost.${accelerator}`,
     crit ? `Lead-time critical path: ${crit.name}, ${crit.weeks} weeks.` : "",
     `People-power: about ${num(result.fteEquivalent)} people, net ${formatMoney(result.annualSavings || 0)} a year.`,

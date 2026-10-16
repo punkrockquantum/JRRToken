@@ -29,13 +29,23 @@
  * cards), `pflops` the dense tensor PFLOPS at `precision`, `domain` how many GPUs share one
  * NVLink (or PCIe-switched) island. Prices, lead times, supply caps and tokens per GPU are
  * game estimates, labelled as such in the UI.
+ *
+ * Rack power is IT power, built the same way for every platform:
+ *   rackKW = nodesPerRack × nodeKW + torKW
+ * `gpuW` is the GPU's published maximum board power, `nodeKW` the published maximum system
+ * power of the 8-GPU node (the DGX datasheets, which are the HGX node in NVIDIA's own box) or
+ * of the whole NVL72 rack, `torKW` the top-of-rack switching the game adds (about 1 kW for a
+ * 100/400G switch, 1.5 kW for an 800G one; estimates). Cooling never changes IT power: the
+ * hall's PUE turns it into facility power (model.js). tests/power.test.js pins the sums.
  */
 export const PLATFORMS = [
   {
     // NVIDIA L40S datasheet: 48 GB GDDR6 with ECC, 864 GB/s, FP8 tensor 1,466 TFLOPS with
     // sparsity (733 dense), 350 W, PCIe Gen4 x16, passive, no NVLink.
     // https://www.nvidia.com/en-us/data-center/l40s/
-    // Two 8-GPU 4U PCIe servers per game rack (about 4 kW a server, estimate); server price estimate.
+    // Two 8-GPU 4U PCIe servers per game rack: 8 × 350 W of cards plus two CPUs, memory,
+    // NICs and fans is about 4.5 kW a server at full load (estimate; the servers ship with
+    // 2 × 2.7 kW or larger supplies). 2 × 4.5 + 1 kW of top-of-rack switching = 10 kW.
     id: "l40s",
     tag: "BUDGET PCIE",
     name: "L40S Server",
@@ -49,7 +59,11 @@ export const PLATFORMS = [
     pflops: 0.73,
     precision: "FP8",
     domain: 8,
-    rackKW: 8,
+    gpuW: 350,
+    nodeKW: 4.5,
+    nodesPerRack: 2,
+    torKW: 1,
+    rackKW: 10,
     cooling: "air",
     hostTB: 4,
     tokPerGpu: 750,
@@ -66,7 +80,8 @@ export const PLATFORMS = [
     // https://www.nvidia.com/en-us/data-center/rtx-pro-6000-blackwell-server-edition/
     // The RTX PRO Server: an 8-GPU MGX air-cooled node, 768 GB and 12.8 TB/s aggregate.
     // https://docs.nvidia.com/enterprise-reference-architectures/rtx-pro-ai-factory/latest/components.html
-    // Two 8-GPU servers per game rack (about 7 kW a server, estimate); server price estimate.
+    // Two 8-GPU servers per game rack: 8 × 600 W of cards plus the host is about 6.5 kW a
+    // server at full load (estimate). 2 × 6.5 + 1 kW of top-of-rack switching = 14 kW.
     id: "rtx6000",
     tag: "BUDGET BLACKWELL",
     name: "RTX PRO 6000 Server",
@@ -80,6 +95,10 @@ export const PLATFORMS = [
     pflops: 2,
     precision: "FP4",
     domain: 8,
+    gpuW: 600,
+    nodeKW: 6.5,
+    nodesPerRack: 2,
+    torKW: 1,
     rackKW: 14,
     cooling: "air",
     hostTB: 4,
@@ -93,6 +112,8 @@ export const PLATFORMS = [
   {
     // NVIDIA H100 SXM: 80 GB HBM3, 3.35 TB/s, FP8 ~2 PFLOPS dense, 700 W, NVLink 8-GPU HGX node.
     // https://www.nvidia.com/en-us/data-center/h100/
+    // The 8-GPU node draws ~10.2 kW max (DGX H100 datasheet, the HGX H100 node in NVIDIA's box):
+    // https://www.nvidia.com/en-us/data-center/dgx-h100/  2 × 10.2 + 1.2 kW of 400G top-of-rack = 21.6 ≈ 22 kW.
     id: "h100",
     tag: "THE CLASSIC",
     name: "HGX H100",
@@ -106,7 +127,11 @@ export const PLATFORMS = [
     pflops: 2,
     precision: "FP8",
     domain: 8,
-    rackKW: 23,
+    gpuW: 700,
+    nodeKW: 10.2,
+    nodesPerRack: 2,
+    torKW: 1.2,
+    rackKW: 22,
     cooling: "air",
     hostTB: 4,
     tokPerGpu: 3000,
@@ -119,6 +144,8 @@ export const PLATFORMS = [
   {
     // NVIDIA H200 SXM: 141 GB HBM3e, 4.8 TB/s, same Hopper maths as H100, 700 W.
     // https://www.nvidia.com/en-us/data-center/h200/
+    // The 8-GPU node draws ~10.2 kW max (DGX H200 datasheet): https://www.nvidia.com/en-us/data-center/dgx-h200/
+    // 2 × 10.2 + 1.2 kW of 400G top-of-rack = 21.6 ≈ 22 kW.
     id: "h200",
     tag: "MORE MEMORY",
     name: "HGX H200",
@@ -132,7 +159,11 @@ export const PLATFORMS = [
     pflops: 2,
     precision: "FP8",
     domain: 8,
-    rackKW: 23,
+    gpuW: 700,
+    nodeKW: 10.2,
+    nodesPerRack: 2,
+    torKW: 1.2,
+    rackKW: 22,
     cooling: "air",
     hostTB: 4,
     tokPerGpu: 4200,
@@ -143,8 +174,10 @@ export const PLATFORMS = [
       "Same chip brain as H100 but much more memory (141 GB) and bandwidth. Generating tokens is mostly a memory job, so H200 is faster at inference.",
   },
   {
-    // NVIDIA HGX B200: 8× B200, 180 GB HBM3e and 8 TB/s a GPU, FP4 dense 9 PFLOPS a GPU, ~14 kW a node, air.
+    // NVIDIA HGX B200: 8× B200, 180 GB HBM3e and 8 TB/s a GPU, FP4 dense 9 PFLOPS a GPU, 1,000 W a GPU, air.
     // https://www.nvidia.com/en-us/data-center/hgx/
+    // The 8-GPU node draws ~14.3 kW max (DGX B200 datasheet): https://www.nvidia.com/en-us/data-center/dgx-b200/
+    // 2 × 14.3 + 1.5 kW of 800G top-of-rack = 30.1 ≈ 30 kW.
     id: "b200",
     tag: "FP4 POWER",
     name: "HGX B200",
@@ -158,7 +191,11 @@ export const PLATFORMS = [
     pflops: 9,
     precision: "FP4",
     domain: 8,
-    rackKW: 31,
+    gpuW: 1000,
+    nodeKW: 14.3,
+    nodesPerRack: 2,
+    torKW: 1.5,
+    rackKW: 30,
     cooling: "air",
     hostTB: 4,
     tokPerGpu: 11000,
@@ -171,6 +208,9 @@ export const PLATFORMS = [
   {
     // NVIDIA HGX B300: 8× Blackwell Ultra, 288 GB HBM3e a GPU, FP4 dense ~14 PFLOPS a GPU, 800G NICs, air.
     // https://www.nvidia.com/en-us/data-center/hgx/
+    // The 8-GPU node draws ~14 kW max (DGX B300 datasheet): https://www.nvidia.com/en-us/data-center/dgx-b300/
+    // About 1,100 W a GPU in the air-cooled node (estimate from that figure; the liquid NVL72 runs it at 1,400 W).
+    // 2 × 14 + 1.5 kW of 800G top-of-rack = 29.5 ≈ 30 kW.
     id: "b300",
     tag: "BEST ON AIR",
     name: "HGX B300",
@@ -184,6 +224,10 @@ export const PLATFORMS = [
     pflops: 14,
     precision: "FP4",
     domain: 8,
+    gpuW: 1100,
+    nodeKW: 14,
+    nodesPerRack: 2,
+    torKW: 1.5,
     rackKW: 30,
     cooling: "air",
     hostTB: 4,
@@ -196,8 +240,9 @@ export const PLATFORMS = [
   },
   {
     // The same HGX B300 node sold one at a time: 8× B300 (2.3 TB HBM3e), 8× 800G ConnectX-8,
-    // about 14 kW, air. https://www.nvidia.com/en-us/data-center/dgx-b300/
+    // ~14 kW max, air. https://www.nvidia.com/en-us/data-center/dgx-b300/
     // Half an HGX B300 game rack: the smaller Blackwell Ultra option when six racks is too many.
+    // 1 × 14 + 1 kW of top-of-rack switching (a share of a smaller switch) = 15 kW.
     id: "b300n",
     tag: "ONE BLACKWELL NODE",
     name: "HGX B300 node",
@@ -211,6 +256,10 @@ export const PLATFORMS = [
     pflops: 14,
     precision: "FP4",
     domain: 8,
+    gpuW: 1100,
+    nodeKW: 14,
+    nodesPerRack: 1,
+    torKW: 1,
     rackKW: 15,
     cooling: "air",
     hostTB: 2,
@@ -222,8 +271,10 @@ export const PLATFORMS = [
       "One 8-GPU Blackwell Ultra node in a rack of its own: the same 288 GB GPUs as the full HGX B300 rack at half the price, for a crowd that needs eight strong GPUs, not sixteen.",
   },
   {
-    // NVIDIA GB200 NVL72: 72 B200 + 36 Grace, 13.5 TB HBM3e, ~120 kW+ rack, liquid.
-    // https://www.nvidia.com/en-us/data-center/gb200-nvl72/
+    // NVIDIA GB200 NVL72: 72 B200 + 36 Grace, 13.5 TB HBM3e, liquid. The whole rack is the
+    // unit: 72 × 1,200 W of GPUs, 36 Grace CPUs and nine NVLink switch trays make 120 to 132 kW
+    // (NVIDIA quotes ~120 kW for the DGX GB200 rack; 132 kW is the full reference rack).
+    // https://www.nvidia.com/en-us/data-center/gb200-nvl72/  No separate top-of-rack: the switch trays are inside the figure.
     id: "gb200",
     tag: "72 GPUS AS ONE",
     name: "GB200 NVL72",
@@ -237,6 +288,10 @@ export const PLATFORMS = [
     pflops: 10,
     precision: "FP4",
     domain: 72,
+    gpuW: 1200,
+    nodeKW: 132,
+    nodesPerRack: 1,
+    torKW: 0,
     rackKW: 132,
     cooling: "liquid",
     hostTB: 17,
@@ -250,6 +305,7 @@ export const PLATFORMS = [
   {
     // NVIDIA GB300 NVL72: 72 Blackwell Ultra + 36 Grace, 21 TB HBM3e, FP4 dense 1,100 PFLOPS a rack, liquid.
     // https://www.nvidia.com/en-us/data-center/gb300-nvl72/
+    // 72 × 1,400 W of GPUs plus Grace and the NVLink switch trays: up to ~142 kW a rack (the rack is the unit).
     id: "gb300",
     tag: "REASONING RACK",
     name: "GB300 NVL72",
@@ -263,6 +319,10 @@ export const PLATFORMS = [
     pflops: 15,
     precision: "FP4",
     domain: 72,
+    gpuW: 1400,
+    nodeKW: 142,
+    nodesPerRack: 1,
+    torKW: 0,
     rackKW: 142,
     cooling: "liquid",
     hostTB: 17,
@@ -277,6 +337,8 @@ export const PLATFORMS = [
     // NVIDIA Vera Rubin NVL72 (first branded with the 144-die count): 72 Rubin GPUs + 36 Vera CPUs, 20.7 TB HBM4 at 1,400 TB/s
     // (288 GB and 19.2 TB/s a GPU), NVFP4 inference 3,600 PFLOPS a rack (50 a GPU; 35 dense training), liquid, 2026.
     // https://www.nvidia.com/en-us/data-center/vera-rubin-nvl72/
+    // Rack power is not published at this writing: 72 × ~1,800 W of GPUs plus Vera CPUs and
+    // switch trays lands in the 180 to 230 kW band quoted for the rack; the game uses 210 kW (estimate).
     id: "vr",
     tag: "HBM4 NEXT GEN",
     name: "Vera Rubin NVL72",
@@ -290,6 +352,10 @@ export const PLATFORMS = [
     pflops: 35,
     precision: "FP4",
     domain: 72,
+    gpuW: 1800,
+    nodeKW: 210,
+    nodesPerRack: 1,
+    torKW: 0,
     rackKW: 210,
     cooling: "liquid",
     hostTB: 54,
@@ -811,6 +877,8 @@ export const USE_CASES = USE_CASE_TEMPLATES.map((template) => resolveUseCase(tem
 /**
  * The scenario card dealt for each use case. Budget, power, and deadline are game values.
  * `pricePerM` is what the customer pays per million good tokens (game estimate).
+ * `powerMW` is the offer for the story's top crowd; a smaller crowd scales it down (model.js
+ * scenarioFor), never below `POWER_FLOOR_MW`.
  */
 export const SCENARIOS = {
   chat: { where: "Shoppers in London and Frankfurt", users: "60% London, 40% Frankfurt", budget: 9_000_000, powerMW: 0.6, deadlineWeeks: 16, pricePerM: 0.55 },
@@ -827,6 +895,24 @@ export const SCENARIOS = {
   drug: { where: "A lab in Cambridge, UK", users: "One lab in Cambridge, UK", budget: 8_000_000, powerMW: 0.18, deadlineWeeks: 30, pricePerM: 0.5 },
   robot: { where: "Factory floors near Frankfurt and Amsterdam", users: "Stuttgart (70%) and Rotterdam (30%)", budget: 9_000_000, powerMW: 0.5, deadlineWeeks: 16, pricePerM: 0.8 },
 }
+
+/**
+ * The power floor (user rule: "the available power for each site must be sufficient to at
+ * least run the smallest model on the least powerful hardware"). The smallest model at the
+ * smallest crowd needs one rack of the least powerful platform, so the floor is that rack's
+ * IT power through the air hall's PUE, rounded UP to the smallest offer on the ladder of
+ * suite sizes Digital Realty would quote (game ladder) and never below 100 kW. Every scenario
+ * power, at every crowd and after every metro's share, is at least this.
+ */
+export const POWER_OFFERS_MW = [0.1, 0.25, 0.5, 1, 2]
+
+export function powerFloorMW() {
+  const smallestRackKW = Math.min(...PLATFORMS.map((platform) => platform.rackKW))
+  const airPue = Math.max(...HALLS.filter((hall) => hall.cooling === "air").map((hall) => hall.pue))
+  const needMW = Math.max(POWER_OFFERS_MW[0], (smallestRackKW * airPue) / 1000)
+  return POWER_OFFERS_MW.find((offer) => offer >= needMW - 1e-9) ?? POWER_OFFERS_MW[POWER_OFFERS_MW.length - 1]
+}
+/* POWER_FLOOR_MW is exported below HALLS, which the floor reads. */
 
 /**
  * Where the model weights and the training or reference data live today. Scenario fiction
@@ -876,7 +962,8 @@ export const METRO_OFFERS = {
     { id: "par", powerMult: 1.15, priceMult: 0.85, liquidWeeks: 0, note: "cheap power, far from shoppers" },
   ],
   rag: [
-    { id: "lon", powerMult: 0.8, priceMult: 1, liquidWeeks: 4, note: "near staff, a tight power room" },
+    // 95%: the opening racks fit on air with a few kW to spare; the index and KV tier beside them need Frankfurt or a rear door.
+    { id: "lon", powerMult: 0.95, priceMult: 1, liquidWeeks: 4, note: "near staff, a tight power room" },
     { id: "fra", powerMult: 1, priceMult: 1, liquidWeeks: 0, note: "beside the company cloud" },
     { id: "par", powerMult: 0.95, priceMult: 0.85, liquidWeeks: 0, note: "cheap power, far from both" },
     { id: "ams", powerMult: 0.85, priceMult: 1, liquidWeeks: 3, note: "power is tight this year" },
@@ -1114,6 +1201,9 @@ export const HALLS = [
       "Your space in a direct-to-chip liquid PlatformDIGITAL hall: 12 rack positions, with an 8 to 12 week fit-out (game: 10). Digital Realty's London lab supports 150 kW per rack or more. This game allows up to 240 kW so a next-gen rack still fits (estimate). PUE 1.20 is a game assumption, not a published site figure.",
   },
 ]
+
+/** The smallest power offer any scenario, crowd or metro makes: see powerFloorMW above. */
+export const POWER_FLOOR_MW = powerFloorMW()
 
 export const LESSONS = {
   token: "A token is a small word-part, about 4 characters. AI gives every token a mathematical value.",

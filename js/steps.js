@@ -6,7 +6,7 @@
  */
 import { AUDIENCES, DATA_HOMES, DOES, HALLS, JOBS, KV_TIER, MODELS, ORCA, PLATFORMS, SITES, USER_BASES, USER_TIER_IDS, USE_CASES, byId, dataHomeFor, resolveUseCase, usersTier } from "./data.js"
 import { dataTrips } from "./latency.js"
-import { evaluateBuild, formatMoney, formatTokens, metroOffers, scenarioFor } from "./model.js"
+import { effectivePue, evaluateBuild, formatMoney, formatTokens, metroOffers, scenarioFor } from "./model.js"
 import { COMBO, NERD_IDS, SIMPLE_IDS, brainPick, brainsId, choicesToBuild, cleanMetros, defaultChoices, maxMetros, memoryChoices, memoryTile, metroSets, modelPicks, nerdBrainIds, simpleBrainIds, wireIds } from "./presets.js"
 import { designFor } from "./refarch.js"
 
@@ -511,12 +511,17 @@ export function stepTiles(useCaseId, stepId, nerd = false, choices = {}) {
   }
   if (stepId === "gpu") {
     const { users } = modelPicks(useCaseId, choices)
+    const hall = byId(HALLS, HALL_META[choices.home]?.hallId || "A") || HALLS[0]
     return (nerd ? nerdBrainIds(useCaseId) : simpleBrainIds(useCaseId)).map((id) => {
       const pick = brainPick(useCaseId, id, users)
       const platform = byId(PLATFORMS, pick.platform)
       const memory = platform ? `${platform.hbmGB} GB ${platform.hbmTBs < 2 ? "GDDR" : "HBM"}` : ""
       /* Memory, bandwidth, dense PFLOPS and power are the public datasheet figures; the rack price and lead are game estimates. */
       const spec = platform ? `${memory}, ${platform.hbmTBs} TB/s, ${platform.pflops} PFLOPS ${platform.precision} dense, ${platform.rackKW} kW a rack; ${formatMoney(platform.capex)} a rack and a ${platform.leadWeeks}-week lead (estimates)` : ""
+      /* The tile's racks as power: IT kW, and facility kW through the hall the board is on (cooling only changes the PUE). */
+      const pue = platform ? effectivePue(platform, hall) : hall.pue
+      const itKW = platform ? pick.racks * platform.rackKW : 0
+      const power = platform ? `. ${pick.racks} rack${pick.racks === 1 ? "" : "s"} = ${itKW} kW IT, ${Math.round(itKW * pue)} kW at PUE ${pue} in the ${hall.name.toLowerCase()}` : ""
       return {
         id,
         label: `NVIDIA ${platform?.name || pick.platform} ×${pick.racks}`,
@@ -524,7 +529,7 @@ export function stepTiles(useCaseId, stepId, nerd = false, choices = {}) {
         tag: id === "huge" ? HUGE_TAG : GPU_TAG[pick.platform] || "",
         art: RACK_ART[pick.platform] || "rackAir",
         lines: GPU_LEARN[pick.platform] || ["A rack of GPUs."],
-        nerd: platform?.id === "vr" ? `${spec}. Announced as NVL144.` : spec,
+        nerd: platform?.id === "vr" ? `${spec}${power}. Announced as NVL144.` : `${spec}${power}`,
         why: id === "huge" ? "Several Vera Rubin racks: the money runs out before the hall pays off." : GPU_WHY[useCaseId]?.[pick.platform] || DOES[pick.platform] || "",
         patch: { brains: id },
         platform,
@@ -608,9 +613,19 @@ export function applyTile(useCaseId, stepId, tileId, choices = {}, nerd = false)
   }
   const tile = stepTiles(useCaseId, stepId, true, base).find((item) => item.id === tileId) || stepTiles(useCaseId, stepId, false, base).find((item) => item.id === tileId)
   const next = tile ? { ...base, ...tile.patch } : base
-  /* A reference architecture belongs to one platform: a new GPU tile drops a design built for another. */
-  if (stepId === "gpu") dropForeignDesign(useCaseId, next)
+  /* A reference architecture belongs to one platform: a new GPU tile drops a design built for another.
+   * A GPU the player picked is theirs: the first step stops re-deriving it (brainsAuto). */
+  if (stepId === "gpu") {
+    dropForeignDesign(useCaseId, next)
+    next.brainsAuto = false
+  }
   return stepId === "model" ? affordableChoices(useCaseId, next, nerd) : next
+}
+
+/** True when a choice set fits its scenario: inside the budget and the power offer, and the model loads. */
+export function fitsChoices(useCaseId, choices = {}, nerd = false) {
+  const result = evaluateBuild(useCaseId, choicesToBuild(useCaseId, choices, nerd))
+  return Boolean(result.ok) && !result.overBudget && !result.overPower && result.bottleneck !== "fit"
 }
 
 function dropForeignDesign(useCaseId, choices) {
@@ -628,10 +643,23 @@ export function budgetOf(useCaseId, choices = {}, nerd = false) {
  * A choice set the budget affords: the set itself when it already does, else the cheapest GPU
  * tile (the lists run cheapest first) that fits with the rest of the board as it is, else the
  * opening picture at this model and crowd with the cheapest GPU that fits.
+ *
+ * A GPU the player has not picked themselves (no GPU-step tap yet: `brainsAuto` unset or true)
+ * is a hidden default, and a hidden default follows the crowd both ways: the story's opening
+ * rack when it fits the new budget and power offer, else the cheapest tile that does. So a
+ * crowd that shrinks and grows back lands on the same opening build, and the POWER light is
+ * never red on a board the player has not touched.
  */
 export function affordableChoices(useCaseId, choices = {}, nerd = false) {
-  if (!budgetOf(useCaseId, choices, nerd).over) return choices
   const brains = nerd ? nerdBrainIds(useCaseId) : simpleBrainIds(useCaseId)
+  if (choices.brainsAuto !== false) {
+    const opening = defaultChoices(useCaseId).brains
+    for (const id of [opening, ...brains.filter((item) => item !== opening)]) {
+      const next = dropForeignDesign(useCaseId, { ...choices, brains: id, brainsAuto: true })
+      if (fitsChoices(useCaseId, next, nerd)) return next
+    }
+  }
+  if (!budgetOf(useCaseId, choices, nerd).over) return choices
   for (const id of brains) {
     const next = dropForeignDesign(useCaseId, { ...choices, brains: id })
     if (!budgetOf(useCaseId, next, nerd).over) return next

@@ -1,4 +1,4 @@
-import { DATA_HOMES, DATA_TIERS, EDGE_LATE, EGRESS_PER_GB, FTE_HOURS, HALLS, HORIZON_WEEKS, HUMAN_WORK, IN_METRO_KM, KV_TIER, METRO_OFFERS, MISSION_SITES, NETWORKS, ORCA, PLATFORMS, SCENARIOS, SITES, TRAIN_BONUS_CAP, USER_BASES, USE_CASES, byId, dataHomeFor, resolveUseCase } from "./data.js"
+import { DATA_HOMES, DATA_TIERS, EDGE_LATE, EGRESS_PER_GB, FTE_HOURS, HALLS, HORIZON_WEEKS, HUMAN_WORK, IN_METRO_KM, KV_TIER, METRO_OFFERS, MISSION_SITES, NETWORKS, ORCA, PLATFORMS, POWER_FLOOR_MW, SCENARIOS, SITES, TRAIN_BONUS_CAP, USER_BASES, USE_CASES, byId, dataHomeFor, resolveUseCase } from "./data.js"
 import { HOURS_PER_MONTH, blankFabric, destinationsNeeded, liveShare, networkBill } from "./network.js"
 import { ROUTE, oneWayS, roundTripS } from "./physics.js"
 import { designFor, racksNeeded, withDesign } from "./refarch.js"
@@ -177,6 +177,16 @@ export function hostParkShare(useCase, hosts, kvOn) {
 export function effectivePue(platform, hall) {
   if (!hall) return AIR_PUE
   return platform?.cooling !== "liquid" && hall.cooling === "liquid" ? Math.max(hall.pue, AIR_PUE) : hall.pue
+}
+
+/**
+ * The power sum in one line for the nerd panels: racks × rack kW of IT (plus the storage,
+ * KV and host kW beside them) through the hall's PUE to facility kW at the meter.
+ * e.g. "6 racks × 30 kW IT × PUE 1.38 = 248 kW facility".
+ */
+export function powerLine(racks, rackKW, extraKW, pue, facilityKW) {
+  const extra = extraKW > 0.5 ? ` + ${Math.round(extraKW)} kW storage and hosts` : ""
+  return `${racks} rack${racks === 1 ? "" : "s"} × ${rackKW} kW IT${extra} × PUE ${pue} = ${Math.round(facilityKW)} kW facility`
 }
 
 export function blankBuild(useCaseId = null) {
@@ -816,6 +826,8 @@ export function evaluateBuild(useCaseId, build = {}) {
   const pue = effectivePue(platform, hall)
   out.pue = pue
   out.facilityKW = out.itKW * pue
+  out.rackItKW = racks * platform.rackKW
+  out.powerLine = powerLine(racks, platform.rackKW, out.itKW - out.rackItKW, pue, out.facilityKW)
   out.siteKW = Math.max(...perSiteRacks) * platform.rackKW + storageKW + hostKW
   // Space counts the cabinets the chosen design really fills at this hall's rack cap; the game's rack units otherwise.
   const cabinets = (count) => (design ? racksNeeded(design, hall, count * platform.gpusPerRack) : count)
@@ -825,7 +837,8 @@ export function evaluateBuild(useCaseId, build = {}) {
   const scenario = scenarioFor(useCase)
   out.scenario = scenario
   out.budget = scenario.budget
-  out.powerMW = Math.round(scenario.powerMW * terms.powerMult * 1000) / 1000
+  // The metro's share of the offer, never below the power floor (data.js POWER_FLOOR_MW).
+  out.powerMW = Math.max(POWER_FLOOR_MW, Math.round(scenario.powerMW * terms.powerMult * 1000) / 1000)
   out.powerCapKW = (out.powerMW * 1000) / pue
   out.priceMult = terms.priceMult
   out.powerUsedMW = (out.siteKW * pue) / 1000
@@ -1096,11 +1109,24 @@ function settle(out) {
  * The scenario card for a story at its users tier: the budget and the power allocation grow
  * with the business (`useCase.scale`, 1 at the middle tier); the deadline and the token price do not.
  */
+/**
+ * The power a crowd is offered: the story's top-crowd figure scaled down with the crowd,
+ * rounded up to 10 kW, and never below the floor (one rack of the least powerful platform
+ * through the air hall's PUE, rounded up to a 100 kW suite: data.js powerFloorMW). The same
+ * floor holds after a metro's share (evaluateBuild), so no site is ever offered less than
+ * the smallest model on the least powerful hardware needs.
+ */
+export function tierPowerMW(baseMW, scale = 1) {
+  const scaled = Math.ceil(baseMW * scale * 100 - 1e-9) / 100
+  return Math.max(POWER_FLOOR_MW, scaled)
+}
+
 export function scenarioFor(useCase) {
   const base = SCENARIOS[useCase?.id] || { where: "", budget: BUDGET, powerMW: 1, deadlineWeeks: 26, pricePerM: 1 }
   const scale = useCase?.scale > 0 ? useCase.scale : 1
-  if (scale === 1) return base
-  return { ...base, budget: Math.round((base.budget * scale) / 10_000) * 10_000, powerMW: Math.round(base.powerMW * scale * 1000) / 1000 }
+  const powerMW = tierPowerMW(base.powerMW, scale)
+  if (scale === 1) return powerMW === base.powerMW ? base : { ...base, powerMW }
+  return { ...base, budget: Math.round((base.budget * scale) / 10_000) * 10_000, powerMW }
 }
 
 function fmtWeeks(value) {

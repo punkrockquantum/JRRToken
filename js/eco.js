@@ -35,7 +35,7 @@ function powerPart(r) {
       why: `These racks draw ${used.toFixed(2)} MW against the ${cap.toFixed(2)} MW available in ${where}, so they brown out.`,
       ask: `Would a hall that wastes less power, fewer racks, or a metro with more power keep the lights steady?`,
       step: (r.metroTerms?.powerMult || 1) < 1 ? "location" : "gpu",
-      detail: `${Math.round(r.siteKW || 0)} kW of IT at PUE ${r.pue} against a ${Math.round(r.powerCapKW || 0)} kW cap; overflow billed at 8×.`,
+      detail: `${r.powerLine || `${Math.round(r.siteKW || 0)} kW of IT at PUE ${r.pue}`}, against ${Math.round((r.powerMW || 0) * 1000)} kW offered (${Math.round(r.powerCapKW || 0)} kW of IT at this PUE); overflow billed at 8×.`,
     }
   }
   if ((r.priceMult || 1) > 1.1) {
@@ -47,7 +47,7 @@ function powerPart(r) {
       detail: `Power price ×${(r.priceMult || 1).toFixed(2)} (game value).`,
     }
   }
-  return { state: "green", why: `${used.toFixed(2)} of ${cap.toFixed(2)} MW in ${where}: the lights stay on.`, ask: "", detail: `PUE ${r.pue}, ${Math.round(r.facilityKW || 0)} kW at the meter.` }
+  return { state: "green", why: `${used.toFixed(2)} of ${cap.toFixed(2)} MW in ${where}: the lights stay on.`, ask: "", detail: `${r.powerLine || `PUE ${r.pue}, ${Math.round(r.facilityKW || 0)} kW at the meter`}, of ${Math.round(cap * 1000)} kW offered.` }
 }
 
 function coolingPart(r) {
