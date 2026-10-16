@@ -74,11 +74,13 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
       story/location; tile and learn copy say it plainly; a test iterates stories × metros × simple wire tiles
       (commit c51c949: shared `js/physics.js` table, per-request ingest, demand-relative idle, right-sized fabric,
       public-only shared-pipe penalty, IX/eyeball lead times; 0 of 300 story × metro × tile combinations mis-ordered)
-- [ ] C2 Budget guard: a tile whose pick would exceed the scenario budget is disabled with an "OVER BUDGET by $X"
+- [x] C2 Budget guard: a tile whose pick would exceed the scenario budget is disabled with an "OVER BUDGET by $X"
       tag and a learn line saying what to drop; defaults always affordable; nerd rack stepper / site designer clamp
       at the budget; power and deadline stay soft consequences; the "can't afford" results path is unreachable.
       Score floor 100: score = max(100, ...) so weak-but-legal builds land ~200–450, near-misses 700–1,100, best
       ~1,400; balance checks, results copy, star thresholds, plan and tests updated
+      (commit 55cd45c: `tileGuard`/`budgetOf`/`affordableChoices` in js/steps.js, floor via `shapeScore` with a
+      square-root knee at 450 so no ranking changes; naive/maxed now 100–126, typical 149–418, best 1,400)
 - [ ] C3 Accuracy sweep: ServiceFabric facts (10G/100G ports, 50 Mbps–100 Gbps, 15-day port SLA, minutes to
       live), cross connect, dark fibre physics, internet/peering assumptions, GPU specs, model bytes at FP8/FP4,
       users → demand, cloud IaaS rates, 4.9 µs/km, haversine, PUE; every unpublished number says "estimate" or
