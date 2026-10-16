@@ -698,46 +698,78 @@ export const SITES = [
   { id: "sjc", metro: "Silicon Valley", lat: 37.34, lon: -121.89 },
 ]
 
-/** Where each mission's users sit (game assumption). Shares sum to 1. */
+/**
+ * Who sends prompts, and from where (game assumption). Every place has a `kind`: "customers"
+ * are the people (or robots) the service exists for; "employees" are the company's own team,
+ * who also prompt it (support agents escalate, engineers debug, analysts ask). Shares are the
+ * share of requests and sum to 1, so the request leg's latency is this share-weighted trip
+ * and a metro close to a big share is a fast metro. Customers-only and employees-only stories
+ * are both fine; `AUDIENCES` names the groups on the location tiles.
+ */
 export const USER_BASES = {
   chat: {
-    name: "Shoppers in London and Frankfurt",
+    name: "Shoppers in London and Frankfurt, a support team in Leeds",
     places: [
-      { city: "London", lat: 51.51, lon: -0.13, share: 0.6 },
-      { city: "Frankfurt", lat: 50.11, lon: 8.68, share: 0.4 },
+      { city: "London", lat: 51.51, lon: -0.13, share: 0.54, kind: "customers" },
+      { city: "Frankfurt", lat: 50.11, lon: 8.68, share: 0.36, kind: "customers" },
+      { city: "Leeds", lat: 53.8, lon: -1.55, share: 0.1, kind: "employees" },
     ],
   },
   rag: {
-    name: "Corporate HQ in London",
-    places: [{ city: "London", lat: 51.51, lon: -0.13, share: 1 }],
+    name: "Staff at a London head office",
+    places: [{ city: "London", lat: 51.51, lon: -0.13, share: 1, kind: "employees" }],
   },
   code: {
     name: "Developers on the US east and west coasts",
     places: [
-      { city: "New York", lat: 40.71, lon: -74.01, share: 0.4 },
-      { city: "Toronto", lat: 43.65, lon: -79.38, share: 0.25 },
-      { city: "San Francisco", lat: 37.77, lon: -122.42, share: 0.25 },
-      { city: "Seattle", lat: 47.61, lon: -122.33, share: 0.1 },
+      { city: "New York", lat: 40.71, lon: -74.01, share: 0.4, kind: "employees" },
+      { city: "Toronto", lat: 43.65, lon: -79.38, share: 0.25, kind: "employees" },
+      { city: "San Francisco", lat: 37.77, lon: -122.42, share: 0.25, kind: "employees" },
+      { city: "Seattle", lat: 47.61, lon: -122.33, share: 0.1, kind: "employees" },
     ],
   },
   research: {
     name: "Analysts in London and Paris",
     places: [
-      { city: "London", lat: 51.51, lon: -0.13, share: 0.6 },
-      { city: "Paris", lat: 48.86, lon: 2.35, share: 0.4 },
+      { city: "London", lat: 51.51, lon: -0.13, share: 0.6, kind: "employees" },
+      { city: "Paris", lat: 48.86, lon: 2.35, share: 0.4, kind: "employees" },
     ],
   },
   drug: {
-    name: "Lab in Cambridge, UK",
-    places: [{ city: "Cambridge", lat: 52.2, lon: 0.12, share: 1 }],
+    name: "Scientists at a lab in Cambridge, UK",
+    places: [{ city: "Cambridge", lat: 52.2, lon: 0.12, share: 1, kind: "employees" }],
   },
   robot: {
-    name: "Factory floors in Germany and the Netherlands",
+    name: "Robots in Stuttgart and Rotterdam, engineers in Munich",
     places: [
-      { city: "Stuttgart", lat: 48.78, lon: 9.18, share: 0.7 },
-      { city: "Rotterdam", lat: 51.92, lon: 4.48, share: 0.3 },
+      { city: "Stuttgart", lat: 48.78, lon: 9.18, share: 0.64, kind: "customers" },
+      { city: "Rotterdam", lat: 51.92, lon: 4.48, share: 0.28, kind: "customers" },
+      { city: "Munich", lat: 48.14, lon: 11.58, share: 0.08, kind: "employees" },
     ],
   },
+}
+
+/** What each audience is called on the location tiles and in the scenario brief. */
+export const AUDIENCES = {
+  chat: { customers: "Shoppers", employees: "Support team" },
+  rag: { customers: "", employees: "Staff" },
+  code: { customers: "", employees: "Developers" },
+  research: { customers: "", employees: "Analysts" },
+  drug: { customers: "", employees: "Scientists" },
+  robot: { customers: "Robots", employees: "Engineers" },
+}
+
+/**
+ * What the workload has to do, in plain words. The numbers on screen come from USE_CASES
+ * (demand, response target, context, output) and DATA_HOMES, so the brief and the maths agree.
+ */
+export const JOBS = {
+  chat: "Answer shoppers' questions the moment they type them. Every request starts in a shopper's browser, so the first word must come back before they give up, and the model only has to remember the chat, not search for anything.",
+  rag: "Answer staff questions from the company's own documents. Each answer looks the documents up first, so the hall needs a fast path to where the documents live, and staff want the first word quickly but will wait a little for a sourced answer.",
+  code: "Work through coding tasks for developers: read a repo, call tools, write and test changes. One task means many tool calls back to the repos and APIs, so the data path is used over and over and the GPUs sit idle whenever that path is slow.",
+  research: "Write long, sourced reports for analysts. Each report pulls papers from the archive several times and then reasons for thousands of tokens, so this job wants big GPU clusters near the papers more than it wants to be near the analysts.",
+  drug: "Screen millions of drug candidates overnight for a lab. Nobody waits on a single answer, so this is batch work: total throughput, the bulk data feed from the candidate libraries, and the ORCA hand-off matter; a slow link just screens fewer candidates.",
+  robot: "Guide robot fleets on two factory floors in real time. Every robot asks many times a second and needs its answer in a few milliseconds, so the hall must be close to the factories with a steady private link; the internet is too slow and too jittery.",
 }
 
 /**

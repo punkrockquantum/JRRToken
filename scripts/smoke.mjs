@@ -342,7 +342,13 @@ try {
     for (const step of BUILD_STEPS) {
       await click(`[data-key="step-${step}"]`)
       await waitFor(`document.querySelector('[data-key="step-panel"]').classList.contains('step-${step}')`, `${step} step`)
-      if (step === "location" && !(await has('[data-key="tiny-map"]'))) throw new Error("The LOCATION step should draw the tiny map")
+      if (step === "location") {
+        if (!(await has('[data-key="who-where"]'))) throw new Error("The LOCATION step should show who asks and where the data lives")
+        const rows = await evaluate(`[...document.querySelectorAll('.step-location .tile')].map((t) => t.querySelectorAll('.tile-row').length)`)
+        if (!rows.length || rows.some((n) => n < 2)) throw new Error(`Every metro tile should list its audience and data trips: ${JSON.stringify(rows)}`)
+        const brief = await text('[data-key="ww-needs"]')
+        if (!/tokens a second/.test(brief) || !/First word within/.test(brief)) throw new Error(`The job brief should carry the demand and first-word target: ${brief}`)
+      }
       const tiles = await evaluate(`document.querySelectorAll('.step-panel .tile').length`)
       if (step !== "qpu" && tiles !== 3 && step !== "location") throw new Error(`${step}: the simple board shows 3 tiles, saw ${tiles}`)
       const simpleText = await text(".screen.game")

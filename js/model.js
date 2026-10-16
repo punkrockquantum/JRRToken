@@ -253,15 +253,22 @@ export function siteReach(useCaseId, siteIds) {
  */
 export function metroDistances(useCaseId, siteId) {
   const site = byId(SITES, siteId)
-  if (!site) return { usersKm: 0, dataKm: 0, worstKm: 0, worstCity: "" }
+  if (!site) return { usersKm: 0, dataKm: 0, worstKm: 0, worstCity: "", customersKm: null, employeesKm: null }
   const places = USER_BASES[useCaseId]?.places || []
   const usersKm = places.reduce((sum, place) => sum + place.share * kmBetween(place, site), 0)
   const worst = places.reduce((far, place) => {
     const km = kmBetween(place, site)
     return !far || km > far.km ? { km, city: place.city } : far
   }, null) || { km: 0, city: "" }
+  // Share-weighted trip to each audience on its own (null when the story has none of that kind),
+  // so a tile can say how close a metro is to the customers, the employees, and the data.
+  const kindKm = (kind) => {
+    const mine = places.filter((place) => place.kind === kind)
+    const total = mine.reduce((sum, place) => sum + place.share, 0)
+    return total > 0 ? mine.reduce((sum, place) => sum + (place.share / total) * kmBetween(place, site), 0) : null
+  }
   const home = DATA_HOMES[useCaseId]
-  return { usersKm, dataKm: home ? kmBetween(site, home) : 0, worstKm: worst.km, worstCity: worst.city }
+  return { usersKm, dataKm: home ? kmBetween(site, home) : 0, worstKm: worst.km, worstCity: worst.city, customersKm: kindKm("customers"), employeesKm: kindKm("employees") }
 }
 
 /** The metros Digital Realty offers this story, with what is available in each. */

@@ -7,7 +7,7 @@
  * build. Where the player chose poorly the line says what Digital Realty would have advised;
  * the closing line quotes only published facts. Pure: no DOM, no state.
  */
-import { DATA_HOMES, HALLS, IN_METRO_KM, METRO_OFFERS, NETWORKS, SITES, USER_BASES, byId } from "./data.js"
+import { AUDIENCES, DATA_HOMES, HALLS, IN_METRO_KM, METRO_OFFERS, NETWORKS, SITES, USER_BASES, byId } from "./data.js"
 import { dataTrips, fibreRttS } from "./latency.js"
 import { kmBetween, siteReach } from "./model.js"
 import { COMBO, expertChoices, maxMetros, nerdChoices, simpleChoices } from "./presets.js"
@@ -35,11 +35,27 @@ const metroName = (id) => byId(SITES, id)?.metro || id
 const list = (items) => (items.length > 1 ? `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}` : items[0] || "")
 const sentence = (value) => (value && !/[.!?]$/.test(value) ? `${value}.` : value)
 
-/** "60% London, 40% Frankfurt" or "all in Cambridge". */
+/**
+ * "60% London, 40% Frankfurt" or "all in Cambridge". Percentages are each place's share of
+ * requests straight from USER_BASES, so every number on the card traces to the data. Stories
+ * with customers list the customers here and the staff in `staffWords`.
+ */
 function usersWords(id) {
   const places = USER_BASES[id]?.places || []
-  if (places.length === 1) return `all in ${places[0].city}`
-  return places.map((place) => `${pct(place.share)} ${place.city}`).join(", ")
+  const pool = places.some((place) => place.kind === "customers") ? places.filter((place) => place.kind === "customers") : places
+  if (pool.length === 1 && pool.length === places.length) return `all in ${pool[0].city}`
+  return pool.map((place) => `${pct(place.share)} ${place.city}`).join(", ")
+}
+
+/** ", and your support team in Leeds sends the other 10%" when a story has staff beside its customers. */
+function staffWords(id) {
+  const places = USER_BASES[id]?.places || []
+  if (!places.some((place) => place.kind === "customers")) return ""
+  const staff = places.filter((place) => place.kind === "employees")
+  if (!staff.length) return ""
+  const name = (AUDIENCES[id]?.employees || "team").toLowerCase()
+  const share = staff.reduce((sum, place) => sum + place.share, 0)
+  return `, and your ${name} in ${list(staff.map((place) => place.city))} sends the other ${pct(share)}`
 }
 
 /** The player's metros as Digital Realty offers them, and the longest liquid fit-out among them. */
@@ -59,7 +75,7 @@ function placeLine(result, id) {
   const trips = dataTrips(result.useCase)
   const dataKm = reach.dataNearKm || 0
   const near = reach.avgKm < 1 ? "in the same city" : `about ${hop(reach.avgKm)} away`
-  let text = `Your ${who} are ${usersWords(id)}: ${names.length > 1 ? `halls in ${list(names)} put them` : `a ${names[0]} hall puts them`} ${near}`
+  let text = `Your ${who} are ${usersWords(id)}${staffWords(id)}: ${names.length > 1 ? `halls in ${list(names)} put them` : `a ${names[0]} hall puts them`} ${near}`
   if (home) {
     if (dataKm <= IN_METRO_KM) text += `; your ${home.what} sit in ${home.label}, the same metro, so the data path never leaves the building.`
     else if (trips > 0) text += `; your ${home.what} in ${home.label}, ${kmText(dataKm)} away, stay reachable over ServiceFabric at ${msText(fibreRttS(dataKm))} a retrieval.`
@@ -221,8 +237,16 @@ function storyLine(result, id) {
   if (maxMetros(id) > 1 && sites.length === 1) {
     const other = expertChoices(id).metros.find((metro) => metro !== sites[0].id)
     const otherSite = byId(SITES, other)
+    // The customers (or, for staff-only stories, the staff) who would gain the most trip-km
+    // weighted by their share: a 70% factory beats a 10% engineering office.
     const places = USER_BASES[id]?.places || []
-    const far = places.reduce((top, place) => (!top || kmBetween(place, sites[0]) > kmBetween(top, sites[0]) ? place : top), null)
+    const pool = places.some((place) => place.kind === "customers") ? places.filter((place) => place.kind === "customers") : places
+    const far = otherSite
+      ? pool.reduce((top, place) => {
+          const gain = place.share * Math.max(0, kmBetween(place, sites[0]) - kmBetween(place, otherSite))
+          return !top || gain > top.gain ? { place, gain } : top
+        }, null)?.place
+      : null
     if (otherSite && far) {
       const now = kmBetween(far, sites[0])
       const then = kmBetween(far, otherSite)

@@ -4,7 +4,8 @@
  * what each tile sets in a choice set, the one-line reason shown when a tile is picked, and
  * the enumeration of every simple picture for the balance checks. No DOM here.
  */
-import { DATA_HOMES, DOES, HALLS, KV_TIER, ORCA, PLATFORMS, SITES, USE_CASES, byId } from "./data.js"
+import { AUDIENCES, DATA_HOMES, DOES, HALLS, JOBS, KV_TIER, ORCA, PLATFORMS, SITES, USER_BASES, USE_CASES, byId } from "./data.js"
+import { dataTrips } from "./latency.js"
 import { formatMoney, metroOffers } from "./model.js"
 import { COMBO, NERD_IDS, SIMPLE_IDS, brainPick, cleanMetros, defaultChoices, maxMetros, memoryChoices, memoryTile, metroSets, wireIds } from "./presets.js"
 import { designFor } from "./refarch.js"
@@ -219,8 +220,82 @@ export function qpuNotNeeded(useCaseId) {
 }
 
 const km = (value) => `${Math.round(value).toLocaleString("en-GB")} km`
+const pct = (share) => `${Math.round(share * 100)}%`
 
-/** Two different figures on every metro tile: the trip to the users and the trip to the model and data. */
+/**
+ * Who prompts this story and from where, as the location step shows it: one entry per
+ * audience with its cities and request share, plus the model and data home.
+ */
+export function audienceSummary(useCaseId) {
+  const names = AUDIENCES[useCaseId] || {}
+  const places = USER_BASES[useCaseId]?.places || []
+  const groups = ["customers", "employees"].map((kind) => {
+    const mine = places.filter((place) => place.kind === kind)
+    if (!mine.length) return null
+    const share = mine.reduce((sum, place) => sum + place.share, 0)
+    const cities = mine.length === 1 ? mine[0].city : mine.map((place) => `${place.city} ${pct(place.share / share)}`).join(", ")
+    return { kind, name: names[kind] || kind, cities, share }
+  }).filter(Boolean)
+  const home = DATA_HOMES[useCaseId]
+  return { groups, data: home ? { city: home.city, label: home.label, what: home.what } : null }
+}
+
+/**
+ * The job in plain words plus the three numbers the maths runs on: who asks and how much,
+ * how fast the first word must come, and how often an answer goes back to the data.
+ */
+export function jobBrief(useCaseId) {
+  const uc = byId(USE_CASES, useCaseId)
+  if (!uc) return { job: "", needs: [] }
+  const { groups, data } = audienceSummary(useCaseId)
+  const who = groups.map((group) => `${group.name.toLowerCase()} (${pct(group.share)} of requests)`).join(" and ")
+  const demand = `${Math.round(uc.demand / 1000).toLocaleString("en-GB")}K tokens a second`
+  const first = uc.ttft < 1 ? `${Math.round(uc.ttft * 1000)} ms` : `${uc.ttft} s`
+  const trips = dataTrips(uc)
+  const dataLine = trips > 0
+    ? `${trips} trip${trips === 1 ? "" : "s"} back to the data for every answer, and the data lives in ${data?.city || "the cloud"}`
+    : `no retrieval: the model answers from memory, and its weights start in ${data?.city || "the cloud"}`
+  return {
+    job: JOBS[useCaseId] || uc.blurb,
+    needs: [
+      `${demand} of answers for ${who}`,
+      `First word within ${first}${uc.ttft >= 5 ? " (batch: nobody is waiting on one answer)" : ""}`,
+      dataLine,
+    ],
+  }
+}
+
+/** The audience distances on a metro tile: customers, employees, then the model and data. */
+export function metroRows(useCaseId, offer) {
+  const names = AUDIENCES[useCaseId] || {}
+  const rows = []
+  // Row labels get one short word ("Support team" → "Support") so three columns fit a tile.
+  const short = (label) => (label.length > 8 ? label.split(" ")[0] : label)
+  if (Number.isFinite(offer.customersKm)) rows.push({ id: "customers", label: short(names.customers || "Customers"), km: offer.customersKm })
+  if (Number.isFinite(offer.employeesKm)) rows.push({ id: "employees", label: short(names.employees || "Employees"), km: offer.employeesKm })
+  rows.push({ id: "data", label: "Data", km: offer.dataKm })
+  return rows.map((row) => ({ ...row, text: row.km <= 60 ? "same city" : km(row.km) }))
+}
+
+/**
+ * Why this metro is tempting against the others on the short list: the audience or data it
+ * is nearest to, else what Digital Realty notes about it (power, price). Every tile differs.
+ */
+export function metroPitch(useCaseId, offer, offers = metroOffers(useCaseId)) {
+  const rows = metroRows(useCaseId, offer)
+  const wins = rows.filter((row) => {
+    const field = `${row.id}Km`
+    return offers.every((other) => other.id === offer.id || !(Number.isFinite(other[field]) && other[field] < offer[field]))
+  })
+  if (wins.length) {
+    const names = wins.map((row) => (row.id === "data" ? "the model & data" : `the ${row.label.toLowerCase()}`))
+    const first = wins[0]
+    return `Nearest ${names.join(" and ")}${first.km <= 60 ? " (same city)" : ` (${km(first.km)})`}`
+  }
+  return offer.note.charAt(0).toUpperCase() + offer.note.slice(1)
+}
+
+/** One line on every metro tile: the trip to the users and the trip to the model and data. */
 function metroHint(offer) {
   return `Users: ${km(offer.usersKm)} · Data: ${km(offer.dataKm)}`
 }
@@ -236,9 +311,10 @@ function metroLines(useCaseId, offer) {
   const liquid = offer.liquidWeeks > 0 ? `A liquid hall here takes ${offer.liquidWeeks} extra weeks to fit out.` : "A liquid hall here is ready to fit out now."
   const power = offer.powerMult === 1 ? "The full power allocation is available." : offer.powerMult > 1 ? `About ${Math.round((offer.powerMult - 1) * 100)}% more power than the scenario asks for is available.` : `Only about ${Math.round(offer.powerMult * 100)}% of the scenario's power is available this year.`
   const price = offer.priceMult === 1 ? "" : offer.priceMult < 1 ? ` Power is about ${Math.round((1 - offer.priceMult) * 100)}% cheaper.` : ` Power is about ${Math.round((offer.priceMult - 1) * 100)}% dearer.`
+  const trips = metroRows(useCaseId, offer).map((row) => `${row.text} from the ${row.label.toLowerCase()}`).join(", ")
   return [
     `${offer.site?.metro || offer.id}: ${offer.note}.`,
-    `About ${Math.round(offer.usersKm).toLocaleString("en-GB")} km from the users and ${Math.round(offer.dataKm).toLocaleString("en-GB")} km from ${home?.label || "the data"}.`,
+    `${trips.charAt(0).toUpperCase()}${trips.slice(1)}; the model and data live in ${home?.label || "the cloud"}. Requests pay the trip to whoever asks; every retrieval pays the trip to the data.`,
     `${power}${price} ${liquid}`,
   ]
 }
@@ -254,11 +330,13 @@ function metroWhy(useCaseId, offer) {
 export function stepTiles(useCaseId, stepId, nerd = false) {
   const ids = nerd ? NERD_IDS : SIMPLE_IDS
   if (stepId === "location") {
-    return metroOffers(useCaseId).map((offer) => ({
+    const offers = metroOffers(useCaseId)
+    return offers.map((offer) => ({
       id: offer.id,
       label: offer.site?.metro || offer.id,
-      hint: metroHint(offer),
-      tag: offer.note.toUpperCase(),
+      hint: metroPitch(useCaseId, offer, offers),
+      rows: metroRows(useCaseId, offer),
+      tag: metroHint(offer).toUpperCase(),
       art: "user",
       lines: metroLines(useCaseId, offer),
       nerd: metroNerd(offer),

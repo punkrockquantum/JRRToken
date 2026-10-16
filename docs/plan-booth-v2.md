@@ -118,6 +118,11 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
       `touch-action: manipulation`, no tap highlight, no selection or callout on tiles, `?` and scene dots
       carry a 44 px halo. A touch-emulated pass (iPad UA, DPR 2) confirmed tap picks, `?` opens on tap,
       a 700 ms hold opens the popover without changing the pick.
-- [ ] Smoke both kiosk viewports through the whole flow, both rounds (passes today; re-run before shipping)
-- [ ] 1600×1000 screenshots of title, intro, each step, results, league (kept out of the repo in `.shots/`)
-- [ ] Stamp the build and final commit
+- [x] Smoke at 1920×1080, 1600×1000, 1180×820 and 1024×768 through the whole flow, both rounds, both modes
+- [x] Screenshots of every screen at all four viewports (kept out of the repo in `.shots/`)
+- [x] Stamp the build and final commit
+
+## Follow-up (16 Oct)
+- [x] Location step: tiny map removed; a WHO & WHERE brief (audiences with request shares, model & data home, the job, the three numbers the maths uses) sits above four metro tiles
+- [x] Every metro tile shows a distinct pitch and three distances: customers, employees, data (`metroRows`, `metroPitch`, `jobBrief`, `audienceSummary` in `js/steps.js`; `customersKm` / `employeesKm` in `metroDistances`)
+- [x] Audiences carry a `kind` and a request share (`USER_BASES`); chat and robotics gained an employee audience (Leeds support team, Munich engineers) so request latency is the share-weighted trip over everyone who prompts

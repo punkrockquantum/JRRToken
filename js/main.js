@@ -9,7 +9,6 @@ import { plainCoach } from "./coach.js"
 import { createFloor } from "./floor.js"
 import { createAdvanceGate, createIntro, matchingScene, sceneCaption, scenesFor, setIntroDetail } from "./intro.js"
 import { leagueCsv, leagueJson, ordinal, rankOf, sortLeague, upsertEntry } from "./league.js"
-import { mapCaption, mapPoints } from "./map.js"
 import { STAR_POINTS, defaultSitePlans, evaluateBuild, formatMoney, formatScore, formatTokens, stars } from "./model.js"
 import { blockedReason, peopleCount, peopleLead, savingsLine } from "./results.js"
 import { attemptPayload, syncStatusLine } from "./attempt.js"
@@ -18,7 +17,7 @@ import { fetchLeague, recordAttempt } from "./sync.js"
 import { isMuted, loadMute, play, setMuted, unlock } from "./sound.js"
 import { spriteImg } from "./sprites.js"
 import { STORIES, brainPick, choicesToBuild, maxMetros, nerdChoices, simpleChoices } from "./presets.js"
-import { BUILD_STEP_IDS, STEPS, STEP_IDS, applyTile, nextStep, prevStep, qpuRelevant, simpleDefaults, stepIndex, stepTiles, stepValue, untouchedSteps } from "./steps.js"
+import { BUILD_STEP_IDS, STEPS, STEP_IDS, applyTile, audienceSummary, jobBrief, nextStep, prevStep, qpuRelevant, simpleDefaults, stepIndex, stepTiles, stepValue, untouchedSteps } from "./steps.js"
 import { canImprove, roundEntry, roundHint, roundLine } from "./rounds.js"
 
 const LEAGUE_KEY = "token-quest-league-v1"
@@ -687,7 +686,7 @@ function bindTile(tile, onPick, learn) {
   })
 }
 
-function picture({ key, art, tag = "", label, hint = "", on, lines, nerd = "", onPick, scale = 2, locked = false, extra = null }) {
+function picture({ key, art, tag = "", label, hint = "", rows = null, on, lines, nerd = "", onPick, scale = 2, locked = false, extra = null }) {
   const learn = { title: label, lines, nerd }
   const tile = el("button", {
     type: "button",
@@ -701,6 +700,9 @@ function picture({ key, art, tag = "", label, hint = "", on, lines, nerd = "", o
       tag ? el("span", { class: "tile-tag", text: tag }) : null,
       el("span", { class: "tile-title", text: label }),
       hint ? el("span", { class: "tile-hint", text: hint }) : null,
+      rows?.length
+        ? el("span", { class: "tile-rows" }, rows.map((row) => el("span", { class: "tile-row" }, [el("span", { class: "row-label", text: row.label }), el("b", { text: row.text })])))
+        : null,
     ]),
     extra,
   ])
@@ -848,6 +850,7 @@ function stepPanel(stepId, result) {
       tag: tile.tag || "",
       label: tile.label,
       hint: tile.hint,
+      rows: tile.rows || null,
       on: isOn(tile),
       lines: tile.lines,
       nerd: impact ? detailLine(impact.detail) : tile.nerd || "",
@@ -889,7 +892,7 @@ function stepPanel(stepId, result) {
       el("h2", { id: "step-title", text: `${stepIndex(stepId) + 1}. ${step.title}` }),
       el("p", { class: "fine", "data-key": "step-hint", text: subtitle }),
     ]),
-    stepId === "location" ? tinyMap(id, choices) : null,
+    stepId === "location" ? whoWhere(id) : null,
     el("div", { class: `tiles count-${wraps.length}` }, wraps),
     nerdLine ? el("p", { class: "row-nerd", "data-key": "step-nerd", text: nerdLine }) : null,
     stepId === "gpu" && state.nerd ? refarchPanel(result, selected) : null,
@@ -954,53 +957,21 @@ function metroSummary(id, choices) {
   return picked.length > 1 ? `Chosen: ${picked.join(" + ")}.` : `Chosen: ${picked[0] || "none"}.`
 }
 
-const SVG_NS = "http://www.w3.org/2000/svg"
-
-function svgEl(tag, props = {}, children = []) {
-  const node = document.createElementNS(SVG_NS, tag)
-  for (const [key, value] of Object.entries(props)) {
-    if (value == null || value === false) continue
-    if (key === "text") node.textContent = value
-    else node.setAttribute(key, String(value))
-  }
-  for (const child of [].concat(children)) if (child) node.append(child)
-  return node
-}
-
-/** The tiny map: users, the model and data home, the metros on offer, and the trips the chosen metros make. */
-function tinyMap(id, choices) {
-  const picked = stepValue(id, "location", choices)
-  const { width, height, points, links } = mapPoints(id, picked)
-  const svg = svgEl("svg", { class: "tiny-map", viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": `Map: ${mapCaption(id, picked)}` }, [
-    ...links.map((link) => svgEl("line", { class: `map-link ${link.kind}`, x1: link.from.x, y1: link.from.y, x2: link.to.x, y2: link.to.y })),
-    ...points.map((p) => {
-      const label = p.labelText ? svgEl("text", { x: p.labelX, y: p.labelY, text: p.labelText }) : null
-      if (p.kind === "users") {
-        return svgEl("g", { class: "map-users" }, [
-          svgEl("circle", { cx: p.x, cy: p.y, r: 4 + Math.round(5 * (p.share || 0)) }),
-          label,
-        ])
-      }
-      if (p.kind === "data") {
-        return svgEl("g", { class: "map-data" }, [
-          svgEl("rect", { x: p.x - 5, y: p.y - 5, width: 10, height: 10, transform: `rotate(45 ${p.x} ${p.y})` }),
-          label,
-        ])
-      }
-      return svgEl("g", { class: `map-metro${p.on ? " on" : ""}`, "data-metro": p.id }, [
-        svgEl("circle", { cx: p.x, cy: p.y, r: p.on ? 5 : 3.5 }),
-        label,
-      ])
-    }),
-  ])
-  return el("figure", { class: "map-wrap", "data-key": "tiny-map" }, [
-    svg,
-    el("figcaption", { class: "fine map-legend" }, [
-      el("span", { class: "legend users", text: "users" }),
-      el("span", { class: "legend data", text: "model & data" }),
-      el("span", { class: "legend metro", text: "Digital Realty metro" }),
-      el("span", { class: "map-caption", "data-key": "map-caption", text: mapCaption(id, picked) }),
+/**
+ * The brief above the metro tiles: who prompts this job and from where, where the model and
+ * data live, what the job has to do, and the three numbers the maths runs on.
+ */
+function whoWhere(id) {
+  const { groups, data } = audienceSummary(id)
+  const brief = jobBrief(id)
+  const chip = (label, value, key) => el("div", { class: "ww-chip", "data-key": `ww-${key}` }, [el("span", { class: "fine", text: label }), el("strong", { text: value })])
+  return el("div", { class: "who-where", "data-key": "who-where" }, [
+    el("div", { class: "ww-chips" }, [
+      ...groups.map((group) => chip(`${group.name.toUpperCase()} · ${Math.round(group.share * 100)}% OF REQUESTS`, group.cities, group.kind)),
+      data ? chip("MODEL & DATA", `${data.city} · ${data.what}`, "data") : null,
     ]),
+    el("p", { class: "ww-job", "data-key": "ww-job", text: brief.job }),
+    el("ul", { class: "ww-needs", "data-key": "ww-needs" }, brief.needs.map((need) => el("li", { text: need }))),
   ])
 }
 

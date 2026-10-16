@@ -130,7 +130,7 @@ test("the weak builds are weak and the best builds are best, so the lines have s
 
 test("the place line quotes the real distances: 60% London shoppers from a Paris hall, Ashburn weights an ocean away", () => {
   const paris = helped("chat", WEAK.chat, false).lines[0].text
-  assert.match(paris, /^Your shoppers are 60% London, 40% Frankfurt: a Paris hall puts them about 397 km \/ 5 ms away; your 70 GB of weights and 2 TB of fine-tuning data copy once from a public cloud region in Northern Virginia \(Ashburn\), 6,186 km away\. Digital Realty would have advised London and Frankfurt: in the same cities as the shoppers\.$/)
+  assert.match(paris, /^Your shoppers are 54% London, 36% Frankfurt, and your support team in Leeds sends the other 10%: a Paris hall puts them about 419 km \/ 5 ms away; your 70 GB of weights and 2 TB of fine-tuning data copy once from a public cloud region in Northern Virginia \(Ashburn\), 6,186 km away\. Digital Realty would have advised London and Frankfurt: about 27 km \/ under 1 ms from the shoppers\.$/)
   const rag = helped("rag", WEAK.rag, false).lines[0].text
   assert.match(rag, /a Paris hall puts them about 343 km \/ 4 ms away; your 70 GB of weights and 30 TB of documents in the company's cloud tenancy in Frankfurt, 478 km away, stay reachable over ServiceFabric at 6 ms a retrieval\./)
   assert.match(rag, /Digital Realty would have advised Frankfurt: in the same metro as the data\.$/)
@@ -197,8 +197,8 @@ test("the time line reads the lead parts: the slowest part, pre-built halls, the
 test("the story line: ORCA's London home, the second metro a one-metro build missed, data gravity for the heavy libraries", () => {
   assert.equal(helped("drug", expertChoices("drug"), false).lines[4].text, "ORCA PT-3 is installed at Digital Realty's London Innovation Lab, so the quantum helper sat in the same hall as your GPUs, a cross connect away.")
   assert.match(helped("drug", WEAK.drug, false).lines[4].text, /^ORCA PT-3 is installed at Digital Realty's London Innovation Lab: from Paris the quantum helper was a remote link, 343 km \/ 4 ms away\. London would have kept it in the hall\.$/)
-  assert.match(helped("robot", WEAK.robot, false).lines[4].text, /^A second hall in Frankfurt would have put the 70% of robots in Stuttgart 152 km \/ 2 ms away instead of 729 km \/ 9 ms\.$/)
-  assert.match(helped("chat", { ...expertChoices("chat"), metros: ["lon"] }, false).lines[4].text, /^A second hall in Frankfurt would have put the 40% of shoppers in Frankfurt in their own city instead of 638 km \/ 8 ms\.$/)
+  assert.match(helped("robot", WEAK.robot, false).lines[4].text, /^A second hall in Frankfurt would have put the 64% of robots in Stuttgart 152 km \/ 2 ms away instead of 729 km \/ 9 ms\.$/)
+  assert.match(helped("chat", { ...expertChoices("chat"), metros: ["lon"] }, false).lines[4].text, /^A second hall in Frankfurt would have put the 36% of shoppers in Frankfurt in their own city instead of 638 km \/ 8 ms\.$/)
   assert.match(helped("rag", expertChoices("rag"), false).lines[4].text, /^Data gravity: the 30 TB of documents stay in Frankfurt, and your Frankfurt hall reaches them over an in-building cross connect to the cloud on-ramp\.$/)
   assert.match(helped("research", WEAK.research, false).lines[4].text, /^Data gravity: 400 TB of papers live in Paris; from Frankfurt every retrieval crossed 478 km \/ 6 ms\. A Paris hall would have reached them over an in-building cross connect\.$/)
   for (const id of ["chat", "code", "robot"]) assert.equal(helped(id, expertChoices(id), false).lines.length, 5, `${id} on both metros has no story line`)

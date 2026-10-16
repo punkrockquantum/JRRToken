@@ -33,9 +33,12 @@ test("closer to people is the site lesson: every metro tile says how far it is f
       /* Two different figures on every tile, both from the haversine table. */
       const users = metroDistances(id, tile.id)
       assert.notEqual(Math.round(users.usersKm), Math.round(users.dataKm), `${id} ${tile.id}: users ${Math.round(users.usersKm)} km and data ${Math.round(users.dataKm)} km must differ`)
-      assert.equal(tile.hint, `Users: ${km(offer.usersKm)} · Data: ${km(offer.dataKm)}`)
-      assert.match(tile.hint, /^Users: [\d,]+ km · Data: [\d,]+ km$/)
-      assert.match(tile.lines[1], /^About [\d,]+ km from the users and [\d,]+ km from /)
+      assert.equal(tile.tag, `Users: ${km(offer.usersKm)} · Data: ${km(offer.dataKm)}`.toUpperCase())
+      assert.ok(tile.rows.length >= 2 && tile.rows.length <= 3, `${id} ${tile.id} lists each audience and the data`)
+      assert.equal(tile.rows.at(-1).label, "Data")
+      assert.equal(tile.rows.at(-1).text, offer.dataKm <= 60 ? "same city" : km(offer.dataKm))
+      assert.match(tile.hint, /^(Beside|Close to|[A-Z])/, `${id} ${tile.id} pitch: ${tile.hint}`)
+      assert.match(tile.lines[1], /from the .*; the model and data live in /)
       assert.ok(tile.nerd.startsWith(`Farthest users: ${users.worstCity} ${km(users.worstKm)}. `), `${id} ${tile.id} nerd line names the farthest region: ${tile.nerd}`)
       assert.ok(users.worstKm >= users.usersKm - 1e-9)
       /* The weighted average is the share-weighted haversine, and the data figure is the plain haversine. */
@@ -53,7 +56,12 @@ test("closer to people is the site lesson: every metro tile says how far it is f
   const drug = Object.fromEntries(metroOffers("drug").map((offer) => [offer.id, offer]))
   assert.ok(Math.abs(drug.lon.usersKm - 79) < 10 && Math.abs(drug.lon.dataKm - 464) < 20, `London is 79 km from the Cambridge lab and 464 km from its Dublin data (${Math.round(drug.lon.usersKm)}, ${Math.round(drug.lon.dataKm)})`)
   const chat = Object.fromEntries(metroOffers("chat").map((offer) => [offer.id, offer]))
-  assert.ok(chat.lon.usersKm < chat.par.usersKm && chat.fra.usersKm < chat.par.usersKm, "London and Frankfurt are nearer the shoppers than Paris")
+  assert.ok(chat.lon.customersKm < chat.par.customersKm && chat.fra.customersKm < chat.par.customersKm, "London and Frankfurt are nearer the shoppers than Paris")
+  assert.ok(chat.lon.employeesKm < chat.fra.employeesKm, "London is nearer the Leeds support team than Frankfurt")
+  assert.ok(chat.lon.customersKm !== chat.lon.employeesKm && chat.lon.employeesKm !== chat.lon.dataKm, "every audience is a different trip from London")
+  for (const id of ["rag", "code", "research", "drug"]) {
+    for (const offer of metroOffers(id)) assert.equal(offer.customersKm, null, `${id} ${offer.id}: a staff-only story has no customer trip`)
+  }
   assert.ok(Math.abs(chat.lon.dataKm - 5917) < 60, `London is about 5,900 km from the weights in Ashburn (${Math.round(chat.lon.dataKm)})`)
 })
 
@@ -166,7 +174,7 @@ test("the plain explanation names the second site without nerd units", () => {
   const plain = explainResult(result, choices, { nerd: false })
   const line = plain.lines.map((item) => item.show).join(" ")
   assert.match(line, /second site in Frankfurt/)
-  assert.match(line, /40% of users/)
+  assert.match(line, /36% of users/)
   assert.doesNotMatch(line, /\bms\b/)
   const nerd = explainResult(result, choices, { nerd: true })
   assert.match(nerd.lines.map((item) => item.show).join(" "), /from \d+ ms to (\d+|under 1) ms/)
