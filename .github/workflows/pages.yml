@@ -1,12 +1,13 @@
 # Publishes the static demo (no server, no /api) to GitHub Pages.
 # One-time setup in the repo: Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
-# Runs on every push to main, or by hand from the Actions tab (Run workflow) once this file is on main.
+# Runs on every push to the game branch (main holds an older project), or by hand from the Actions tab.
+# The github-pages environment must allow this branch: Settings -> Environments -> github-pages -> Deployment branches.
 # A project site lives under https://<owner>.github.io/<repo>/, so the build gets BASE_PATH=/<repo>.
 name: Deploy static demo to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, cursor/token-quest-datacenter-game]
   workflow_dispatch:
 
 permissions:
@@ -28,6 +29,8 @@ jobs:
           node-version: 22
       - id: pages
         uses: actions/configure-pages@v6
+        with:
+          enablement: true
       - name: Build dist/
         run: npm run build:static
         env:

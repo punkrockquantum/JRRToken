@@ -184,10 +184,10 @@ try {
   const resetBooth = async () => {
     for (let i = 0; i < 5; i += 1) await click("#logo")
     await waitFor(`!document.getElementById('staff').hidden`, "staff dialog")
-    await evaluate(`document.querySelector('#staff-pin').value = '2510'; [...document.querySelectorAll('#staff button')].find((b) => b.textContent === 'UNLOCK').click()`)
+    await evaluate(`document.querySelector('#staff-pin').value = '8462'; [...document.querySelectorAll('#staff button')].find((b) => b.textContent === 'UNLOCK').click()`)
     await waitFor(`document.querySelector('[data-key="dl-xlsx"]') && !document.querySelector('[data-key="dl-xlsx"]').disabled`, "excel download")
     await click('[data-key="dl-xlsx"]')
-    const downloaded = await evaluate(`fetch('/api/export.xlsx', { headers: { 'X-Staff-Pin': '2510' }, cache: 'no-store' }).then((res) => res.status + ' ' + (res.headers.get('content-type') || ''))`)
+    const downloaded = await evaluate(`fetch('/api/export.xlsx', { headers: { 'X-Staff-Pin': '8462' }, cache: 'no-store' }).then((res) => res.status + ' ' + (res.headers.get('content-type') || ''))`)
     if (!/^200 /.test(downloaded) || !/spreadsheetml\.sheet/.test(downloaded)) throw new Error(`Excel download failed: ${downloaded}`)
     console.log(`excel download: ${downloaded}`)
     await evaluate(`window.confirm = () => true`)

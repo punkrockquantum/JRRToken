@@ -30,11 +30,13 @@ The server only serves `index.html`, `css/`, `js/` and `assets/`-style files: `d
 
 ## Staff actions (export / reset)
 
-Set `STAFF_PIN` before starting (`STAFF_PIN=2510 npm start`) and send it as the `X-Staff-Pin` header:
+The kiosk's on-screen staff tools use a local PIN (default `8462`; the code is public, so change it on the booth machine from the browser console with `localStorage.setItem("token-quest-staff-pin", "your-pin")`). The server's `STAFF_PIN` is separate and must not match the client PIN.
+
+Set `STAFF_PIN` before starting (`STAFF_PIN=<choose-a-pin> npm start`) and send it as the `X-Staff-Pin` header:
 
 ```sh
-curl -H "X-Staff-Pin: 2510" -o leaderboard.xlsx http://127.0.0.1:8080/api/export.xlsx
-curl -X POST -H "X-Staff-Pin: 2510" http://127.0.0.1:8080/api/reset
+curl -H "X-Staff-Pin: <your-pin>" -o leaderboard.xlsx http://127.0.0.1:8080/api/export.xlsx
+curl -X POST -H "X-Staff-Pin: <your-pin>" http://127.0.0.1:8080/api/reset
 ```
 
 Reset never deletes anything: `data/attempts.jsonl` is renamed to `attempts-<timestamp>.jsonl` (with a copy
@@ -185,7 +187,7 @@ free tier shows an interstitial page on the first visit.
   paths store them centrally; the static path stores nothing server-side (the league stays in each player's
   browser, and only that browser's staff panel can export it).
 - Set `STAFF_PIN` on any host that is not the kiosk laptop. The server PIN must differ from the staff-panel
-  PIN in `js/main.js` (`2510`): that one is in a public JavaScript file and only unlocks the panel in the
+  PIN in `js/main.js` (default `8462`, overridable via localStorage): that one is in a public JavaScript file and only unlocks the panel in the
   browser, so never reuse it as `STAFF_PIN`.
 - HTTPS only. Render, Fly, Netlify, Vercel, Cloudflare, GitHub Pages and both tunnels terminate TLS for you;
   do not publish the plain-HTTP Docker port directly to the internet.

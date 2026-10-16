@@ -21,7 +21,9 @@ import { BUILD_STEP_IDS, STEPS, STEP_IDS, applyTile, audienceSummary, jobBrief, 
 import { canImprove, roundEntry, roundHint, roundLine } from "./rounds.js"
 
 const LEAGUE_KEY = "token-quest-league-v1"
-const STAFF_PIN = "2510"
+// The kiosk's local staff PIN guards on-laptop tools only (download/clear the local league). The
+// code is public, so staff can set their own: localStorage.setItem("token-quest-staff-pin", "....").
+const STAFF_PIN = (typeof localStorage !== "undefined" && localStorage.getItem("token-quest-staff-pin")) || "8462"
 const IDLE_MS = 180000
 const RUN_MS = 4600
 const FIRST_SCENARIO = "chat"
