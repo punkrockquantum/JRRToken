@@ -75,7 +75,7 @@ const GPU_LEARN = {
   ],
   rtx6000: [
     "Blackwell on a PCIe card: 96 GB of GDDR7 memory, FP4 maths, in an 8-GPU air-cooled server.",
-    "A fifth of an HGX rack's price per GPU, but GDDR is five times slower than HBM, so it suits small models and modest crowds.",
+    "About a fifth of an HGX rack's price per GPU (estimate), but GDDR is five times slower than HBM, so it suits small models and modest crowds.",
     "Pick it for a 70B or 100B model and a small or medium crowd; a million shoppers need HBM racks.",
   ],
   h100: [
@@ -151,7 +151,7 @@ const MODEL_TILES = {
     hint: "mixture of experts, wants 72 GPUs as one",
     lines: [
       "A 650-billion-parameter mixture-of-experts model (DeepSeek-class: 671B in total, about 37B active per token).",
-      "671 GB of weights at FP8: too big for an 8-GPU server at FP8 on Hopper, so it spills across islands unless a 72-GPU NVLink rack holds it whole.",
+      "671 GB of weights at FP8: too big for eight H100s (640 GB), a tight fit on eight H200s or FP4 Blackwell cards with little room left for context, so it runs best when a 72-GPU NVLink rack holds it whole.",
       "Pick it for reasoning, long reports and hard code, and plan an NVL72 rack for it.",
     ],
     nerd: "671B total / 37B active. 671 GB FP8 / 1.3 TB FP16. MLA KV cache 0.07 MB per token. Quality ×1.3 (game). NVL72 domain ×1.5, 8-GPU islands ×0.75.",
@@ -211,7 +211,7 @@ const HALL_WHY = {
 
 const MEMORY_TILES = {
   off: { label: "KV cache OFF", hint: "GPUs re-read every chat", art: "gremlin", phrase: "Turning the KV cache off", inWords: "with the KV cache off", lines: ["With the KV cache off, the GPU throws away its notes at the end of each chat.", "The next question makes it re-read the whole conversation.", "Leave it off only for one-off questions."], nerd: "No saved chats. Prefill runs again on every turn." },
-  on: { label: "KV cache ON", hint: "remembers chats, skips re-reading", art: "chest", phrase: "Turning the KV cache on", inWords: "with the KV cache on", lines: ["The KV cache is the GPU's notes on what it already read.", "A KV cache tier parks those notes and reloads them, so a follow-up skips the re-read.", "Turn it on when people keep the conversation going."], nerd: `Lead ${KV_TIER.leadWeeks} weeks, ${formatMoney(KV_TIER.capex)} and ${KV_TIER.kw} kW per site. Parks the KV cache instead of prefill.` },
+  on: { label: "KV cache ON", hint: "remembers chats, skips re-reading", art: "chest", phrase: "Turning the KV cache on", inWords: "with the KV cache on", lines: ["The KV cache is the GPU's notes on what it already read.", "A KV cache tier parks those notes and reloads them, so a follow-up skips the re-read.", "Turn it on when people keep the conversation going."], nerd: `Lead ${KV_TIER.leadWeeks} weeks, ${formatMoney(KV_TIER.capex)} and ${KV_TIER.kw} kW per site (game values). Parks the KV cache instead of prefill.` },
   plus: { label: "KV cache ON + CPU host memory", hint: "parks long contexts on CPUs", art: "rackAir", phrase: "Adding CPU host memory to the KV cache", inWords: "with the KV cache parked on CPU hosts", lines: ["Grace or Vera class hosts keep a big CPU memory pool beside the GPUs.", "It parks very long contexts, past about 32k tokens, so agents skip even more prefill.", "For short chats it is just extra cost and power."], nerd: "Game value: $450k and 12 kW per site. With the KV tier on, contexts past 32k tokens skip more prefill (the full effect at 64k)." },
   dpu: { label: "KV cache ON + BlueField DPUs", hint: "secure multi-tenant hosts", art: "token", phrase: "Adding BlueField DPUs beside the KV cache", inWords: "with the KV cache and BlueField DPUs", lines: ["BlueField-class DPUs move data and keep tenants apart.", "The GPUs are interrupted less, which matters when many customers share a hall.", "They add cost and a little power, and they take the security work off the GPUs."], nerd: "Game value: $700k and 8 kW per site. A small tenancy haircut comes off." },
 }
@@ -304,7 +304,7 @@ export function usersDerivation(useCaseId, tierId) {
   const demand = `${formatTokens(tier.demand)} tokens a second`
   const scenario = scenarioFor(resolveUseCase(useCaseId, { users: tier.id }))
   const money = tier.scale === 1
-    ? `This is the business the story was written for: a ${formatMoney(scenario.budget)} budget and ${scenario.powerMW} MW of power.`
+    ? `This is the business the story was written for: a ${formatMoney(scenario.budget)} budget and ${scenario.powerMW} MW of power (game values).`
     : `A business this size brings a ${formatMoney(scenario.budget)} budget and ${scenario.powerMW} MW of power (×${tier.scale} of the top tier, game assumption).`
   if (spec.kind === "batch") {
     const perDay = count(tier.candidatesPerDay)
@@ -515,7 +515,8 @@ export function stepTiles(useCaseId, stepId, nerd = false, choices = {}) {
       const pick = brainPick(useCaseId, id, users)
       const platform = byId(PLATFORMS, pick.platform)
       const memory = platform ? `${platform.hbmGB} GB ${platform.hbmTBs < 2 ? "GDDR" : "HBM"}` : ""
-      const spec = platform ? `${memory}, ${platform.hbmTBs} TB/s, ${platform.pflops} PFLOPS ${platform.precision}, ${platform.rackKW} kW, ${formatMoney(platform.capex)}, lead ${platform.leadWeeks} weeks` : ""
+      /* Memory, bandwidth, dense PFLOPS and power are the public datasheet figures; the rack price and lead are game estimates. */
+      const spec = platform ? `${memory}, ${platform.hbmTBs} TB/s, ${platform.pflops} PFLOPS ${platform.precision} dense, ${platform.rackKW} kW a rack; ${formatMoney(platform.capex)} a rack and a ${platform.leadWeeks}-week lead (estimates)` : ""
       return {
         id,
         label: `NVIDIA ${platform?.name || pick.platform} ×${pick.racks}`,
@@ -662,7 +663,7 @@ export function tileGuard(useCaseId, stepId, tile, choices = {}, nerd = false) {
 
 /** One plain line for a blocked tile: the shortfall, and the first other-step change that would pay for it. */
 function dropLine(useCaseId, stepId, next, money, nerd) {
-  const lead = `Over the ${formatMoney(money.budget)} budget by ${formatMoney(money.overBy)}.`
+  const lead = `Over the ${formatMoney(money.budget)} budget by ${formatMoney(money.overBy)} (game prices).`
   for (const other of DROP_ORDER) {
     if (other === stepId || (other === "qpu" && !qpuRelevant(useCaseId))) continue
     const current = stepValue(useCaseId, other, next)

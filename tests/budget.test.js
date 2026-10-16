@@ -108,7 +108,7 @@ test("budget guard: no selectable tile on any step lands over the budget, and ev
               assert.notEqual(stepId, "model", "the first step sets the budget and is never blocked")
               assert.ok(money.over, `${useCase.id} ${stepId} ${tile.id} blocked but affordable`)
               assert.match(guard.tag, /^OVER BUDGET by \$[\d.,]+[kM]?$/, guard.tag)
-              assert.match(guard.line, /^Over the \$[\d.,]+[kM]? budget by \$[\d.,]+[kM]?\. /, guard.line)
+              assert.match(guard.line, /^Over the \$[\d.,]+[kM]? budget by \$[\d.,]+[kM]? \(game prices\)\. /, guard.line)
               assert.ok(/To afford it, (pick|drop) .+ on the [A-Z &]+ step\.$|needs a cheaper GPU\.$/.test(guard.line), guard.line)
             } else {
               assert.ok(!money.over, `${useCase.id} ${nerd ? "nerd" : "simple"} ${users} ${stepId} ${tile.id}: selectable yet ${money.spend} > ${money.budget}`)

@@ -48,7 +48,7 @@ export function whyLine(useCase, result, { ingress, batch }) {
   const target = formatSeconds(useCase.ttft)
   const first = formatSeconds(result.ttft)
   const net = result.net || {}
-  const monthly = `${formatMoney(net.mrc || 0)}/mo`
+  const monthly = `${formatMoney(net.mrc || 0)}/mo (estimate)`
   const weeks = Math.round((net.leadDays || 0) / 7)
   const wait = weeks <= 0 ? "no wait" : `${weeks} wk wait`
   if (batch) {
@@ -131,6 +131,6 @@ export function detailLine(detail) {
   })
   const weeks = detail.leadDays / 7
   const lead = detail.leadDays <= 0 ? "no lead time" : weeks < 1 ? `${detail.leadDays} d lead` : `${Math.round(weeks)} wk lead`
-  const tail = [`P(miss) ${pct(detail.pMiss)}`, `${formatMoney(detail.mrc)}/mo`, detail.nrc > 0 ? `${formatMoney(detail.nrc)} once` : null, lead].filter(Boolean)
+  const tail = [`P(miss) ${pct(detail.pMiss)}`, `${formatMoney(detail.mrc)}/mo est.`, detail.nrc > 0 ? `${formatMoney(detail.nrc)} once est.` : null, lead].filter(Boolean)
   return [...legs, tail.join(" · ")].join(". ")
 }

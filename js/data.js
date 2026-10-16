@@ -88,7 +88,7 @@ export const PLATFORMS = [
     capex: 240000,
     leadWeeks: 3,
     learn:
-      "Blackwell on a PCIe card: 96 GB of GDDR7 at 1.6 TB/s and FP4 maths, in an 8-GPU air-cooled server. A fifth of an HGX rack's price per GPU, but GDDR is five times slower than HBM, so it suits small models and modest crowds.",
+      "Blackwell on a PCIe card: 96 GB of GDDR7 at 1.6 TB/s and FP4 maths, in an 8-GPU air-cooled server. About a fifth of an HGX rack's price per GPU (estimate), but GDDR is five times slower than HBM, so it suits small models and modest crowds.",
   },
   {
     // NVIDIA H100 SXM: 80 GB HBM3, 3.35 TB/s, FP8 ~2 PFLOPS dense, 700 W, NVLink 8-GPU HGX node.

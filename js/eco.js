@@ -103,12 +103,13 @@ function computePart(r) {
   const rackTok = Number.isFinite(r.rackTok) ? r.rackTok : r.throughput || 0
   const coverage = r.demand > 0 ? Math.min(1, rackTok / r.demand) : 0
   const tokens = `${Math.round(rackTok).toLocaleString("en-GB")} of ${Math.round(r.demand || 0).toLocaleString("en-GB")} tok/s`
+  // Defensive: the board's budget guard never lets a player reach an over-budget build.
   if (r.overBudget) {
     return {
       state: "red",
-      why: `${r.racks}× ${r.platform?.name} costs ${formatMoney(r.finance)} more than the budget, so the factory is never paid for.`,
+      why: `${r.racks}× ${r.platform?.name} costs ${formatMoney(r.finance)} more than the budget (game prices), so the factory is never paid for.`,
       ask: `Would fewer racks, or a cheaper rack, still serve the crowd inside the budget?`,
-      detail: `Spend ${formatMoney(r.budgetSpend)} of ${formatMoney(r.budget)}.`,
+      detail: `Spend ${formatMoney(r.budgetSpend)} of ${formatMoney(r.budget)} (game values).`,
     }
   }
   if (r.bottleneck === "fit") {
@@ -157,7 +158,7 @@ function dataPart(r) {
     }
   }
   if (!needs && dataId !== "local") {
-    return { state: "amber", why: `${r.data?.name} holds nothing this job reads: cost and power for nothing.`, ask: `Would local drives do, since nothing here is looked up?`, detail: `${formatMoney(r.data?.capex || 0)} and ${r.data?.kw || 0} kW per site.` }
+    return { state: "amber", why: `${r.data?.name} holds nothing this job reads: cost and power for nothing.`, ask: `Would local drives do, since nothing here is looked up?`, detail: `${formatMoney(r.data?.capex || 0)} and ${r.data?.kw || 0} kW per site (game values).` }
   }
   const prefillHeavy = !r.kv && (useCase.reuse || 0) >= 0.4 && (r.prefillShare || 0) >= 0.3
   if (prefillHeavy) {
@@ -176,7 +177,7 @@ function dataPart(r) {
     return { state: "amber", why: `CPU host memory parks contexts past 32k tokens; these prompts are ${(useCase.ctx || 0).toLocaleString("en-GB")} tokens.`, ask: `Would standard hosts do the same job for less?`, detail: `Host park share ${pct(r.hostPark)}.`, step: "memory" }
   }
   if (r.hosts === "dpu") {
-    return { state: "amber", why: `BlueField DPUs isolate tenants; this job has one.`, ask: `Would standard hosts do, since nothing here is multi-tenant?`, detail: `$700k and 8 kW per site.`, step: "memory" }
+    return { state: "amber", why: `BlueField DPUs isolate tenants; this job has one.`, ask: `Would standard hosts do, since nothing here is multi-tenant?`, detail: `$700k and 8 kW per site (game values).`, step: "memory" }
   }
   if (r.transfer && !r.transfer.local && r.transfer.hours > 48) {
     return {

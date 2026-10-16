@@ -1450,6 +1450,8 @@ function showResult() {
   const footer = el("p", { class: "dr-footer", "data-key": "dr-footer" }, [
     el("b", { text: "DIGITAL REALTY" }),
     el("span", { text: DR_FOOTER }),
+    /* Every dollar figure on the results card is a game estimate; say so where the money is read. */
+    el("span", { class: "fine price-note", "data-key": "result-price-note", text: " Game numbers are estimates." }),
   ])
   const syncLine = el("p", { class: "sync-line", "data-key": "sync-line", text: state.syncLine || syncStatusLine(null, { rank, players }) })
   const people = el("div", { class: `people-card${blocked || result.annualSavings < 0 ? " bad" : ""}`, "data-key": "people-card" }, [
