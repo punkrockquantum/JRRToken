@@ -2,8 +2,39 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>FLUX — AI Workload Planner</title>
+    <meta name="description" content="Digital Realty Solution Architecture tool: plan, price and simulate AI infrastructure deployments — architectures, tokenomics, power and economics." />
+
+    <!-- PWA: installable, offline-capable app shell -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="color-scheme" content="dark" />
+
+    <!-- iOS: add-to-home-screen / standalone behaviour -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="FLUX" />
+    <meta name="application-name" content="FLUX" />
+
+    <!-- Icons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
+
+    <!-- iOS launch (splash) images -->
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="splash/splash-750x1334.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/splash-1242x2208.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/splash-1125x2436.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="splash/splash-828x1792.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/splash-1242x2688.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/splash-1170x2532.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/splash-1284x2778.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/splash-1179x2556.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/splash-1290x2796.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/splash-1206x2622.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/splash-1320x2868.png" />
     <style>
       /* Monochrome (black & white) theme. */
       * { box-sizing: border-box; }
@@ -16,6 +47,57 @@
       header { padding: 1.25rem 1.5rem; border-bottom: 1px solid #333333; }
       h1 { margin: 0 0 0.35rem; font-size: 1.4rem; letter-spacing: 0.02em; }
       main { padding: 1.25rem 1.5rem; max-width: 1220px; }
+      /* Respect iOS safe areas when launched standalone (viewport-fit=cover). */
+      @supports (padding: env(safe-area-inset-top)) {
+        header {
+          padding-top: calc(1.25rem + env(safe-area-inset-top));
+          padding-left: calc(1.5rem + env(safe-area-inset-left));
+          padding-right: calc(1.5rem + env(safe-area-inset-right));
+        }
+        main {
+          padding-left: calc(1.5rem + env(safe-area-inset-left));
+          padding-right: calc(1.5rem + env(safe-area-inset-right));
+          padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+        }
+      }
+      /* Install hint / prompt (hidden until triggered). */
+      #pwaInstall {
+        display: none;
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: calc(0.9rem + env(safe-area-inset-bottom, 0px));
+        z-index: 1000;
+        max-width: min(92vw, 520px);
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.7rem 0.9rem;
+        background: #0d0d0d;
+        border: 1px solid #555555;
+        border-radius: 12px;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+        font-size: 0.9rem;
+        line-height: 1.3;
+      }
+      #pwaInstall.show { display: flex; }
+      #pwaInstall .pwa-text { flex: 1; }
+      #pwaInstall strong { color: #ffffff; }
+      #pwaInstall kbd {
+        background: #1a1a1a;
+        border: 1px solid #555555;
+        border-radius: 5px;
+        padding: 0.05rem 0.35rem;
+        font-family: inherit;
+        font-size: 0.82rem;
+      }
+      #pwaInstall button { padding: 0.35rem 0.7rem; }
+      #pwaInstallClose {
+        background: transparent;
+        border: none;
+        color: #a3a3a3;
+        font-size: 1.1rem;
+        padding: 0 0.2rem;
+      }
       .panel {
         background: #0d0d0d;
         border: 1px solid #333333;
@@ -5221,6 +5303,81 @@
       buildProfileSelect();
       renderMethod();
       render();
+      })();
+    </script>
+
+    <div id="pwaInstall" role="dialog" aria-live="polite" aria-label="Install FLUX">
+      <span class="pwa-text" id="pwaInstallText"></span>
+      <button id="pwaInstallBtn" type="button">Install</button>
+      <button id="pwaInstallClose" type="button" aria-label="Dismiss">&times;</button>
+    </div>
+
+    <script>
+      /* PWA: register the service worker and offer install. */
+      (function () {
+        if ("serviceWorker" in navigator) {
+          window.addEventListener("load", function () {
+            navigator.serviceWorker.register("sw.js").catch(function (err) {
+              console.warn("FLUX: service worker registration failed", err);
+            });
+          });
+        }
+
+        var banner = document.getElementById("pwaInstall");
+        var text = document.getElementById("pwaInstallText");
+        var installBtn = document.getElementById("pwaInstallBtn");
+        var closeBtn = document.getElementById("pwaInstallClose");
+        if (!banner) return;
+
+        var DISMISS_KEY = "flux-pwa-install-dismissed";
+        function dismissed() {
+          try { return localStorage.getItem(DISMISS_KEY) === "1"; } catch (e) { return false; }
+        }
+        function remember() {
+          try { localStorage.setItem(DISMISS_KEY, "1"); } catch (e) {}
+        }
+        function hide() { banner.classList.remove("show"); }
+        function show() { banner.classList.add("show"); }
+
+        closeBtn.addEventListener("click", function () { remember(); hide(); });
+
+        var nav = window.navigator;
+        var standalone =
+          (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+          nav.standalone === true;
+        var isIOS = /iphone|ipad|ipod/i.test(nav.userAgent) ||
+          (nav.platform === "MacIntel" && nav.maxTouchPoints > 1);
+
+        if (standalone || dismissed()) return;
+
+        // Chromium: use the real install prompt.
+        var deferredPrompt = null;
+        window.addEventListener("beforeinstallprompt", function (e) {
+          e.preventDefault();
+          deferredPrompt = e;
+          text.innerHTML = "<strong>Install FLUX</strong> for a full-screen, offline app.";
+          installBtn.style.display = "";
+          show();
+        });
+        installBtn.addEventListener("click", function () {
+          if (!deferredPrompt) return;
+          deferredPrompt.prompt();
+          deferredPrompt.userChoice.finally(function () {
+            deferredPrompt = null;
+            remember();
+            hide();
+          });
+        });
+        window.addEventListener("appinstalled", function () { remember(); hide(); });
+
+        // iOS Safari: no install API — show manual Add to Home Screen hint.
+        if (isIOS) {
+          installBtn.style.display = "none";
+          text.innerHTML =
+            "<strong>Install FLUX:</strong> tap the Share icon, then " +
+            "<kbd>Add to Home Screen</kbd>.";
+          setTimeout(show, 1200);
+        }
       })();
     </script>
   </body>
