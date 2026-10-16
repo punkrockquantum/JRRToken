@@ -1,0 +1,29 @@
+# Token Quest intake Worker (Cloudflare Workers free tier). Deploy from this folder:
+#
+#   npx wrangler login
+#   npx wrangler secret put GITHUB_TOKEN      # fine-grained PAT: Contents read/write on PLAYERS_REPO only
+#   npx wrangler deploy                       # prints https://token-quest-intake.<account>.workers.dev
+#
+# Everything else is a plain variable below (no secrets in this file). Full steps: HOSTING.md,
+# section "Hosted player sheet".
+name = "token-quest-intake"
+main = "src/worker.mjs"
+compatibility_date = "2025-10-01"
+workers_dev = true
+
+[vars]
+# The PRIVATE repo that holds players.json and PLAYERS.md (names + emails live only there).
+PLAYERS_REPO = "punkrockquantum/token-quest-players"
+PLAYERS_BRANCH = "main"
+# Browser origins allowed to call the API (comma-separated). Add "http://127.0.0.1:8099" while
+# testing a local `npm run serve:static` build against the deployed Worker.
+ALLOWED_ORIGINS = "https://punkrockquantum.github.io"
+# Per-IP token buckets, kept in memory per isolate. A venue's Wi-Fi shares one public IP, so keep
+# the attempt limit comfortably above "games per minute at the booth".
+RATE_LIMIT_ATTEMPTS_PER_MINUTE = "20"
+RATE_LIMIT_READS_PER_MINUTE = "60"
+
+# Optional: persisted Workers Logs in the dashboard (`npx wrangler tail` streams them live without
+# this). The Worker never logs names or email addresses, only method, path, status and timing.
+# [observability]
+# enabled = true

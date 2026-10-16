@@ -5,6 +5,16 @@
  * queued in localStorage ("token-quest-sync-queue") and retried on the next call, on page load
  * and when the browser comes back online. Nothing here ever shows the UI an email address.
  *
+ * WHERE THE CALLS GO: same origin by default (the kiosk laptop's own server). The hosted static
+ * demo can point them at the intake Worker instead by defining `window.TOKEN_QUEST_INTAKE`
+ * (an absolute http(s) URL, injected into dist/index.html by scripts/build-static.mjs when the
+ * build runs with INTAKE_URL set). Every request is then `${TOKEN_QUEST_INTAKE}/api/...`.
+ * Without it the hosted game behaves as before: /api/* answers 404 and nothing is collected.
+ *
+ * RETRIES: a 5xx, a 429 or a body of { ok: false, error: "store_unavailable" } means "valid but
+ * not stored yet", so the attempt stays queued and is re-sent later. Any other non-ok answer is a
+ * rejection and is dropped (never retried).
+ *
  * ---------------------------------------------------------------------------------------
  * PAYLOAD for recordAttempt(payload)  ->  POST /api/attempt  (JSON)
  * ---------------------------------------------------------------------------------------
@@ -44,10 +54,28 @@ const MAX_QUEUE = 500
 const MAX_TRIES = 25
 const TIMEOUT_MS = 6000
 
+/**
+ * The base URL for /api calls: "" (same origin) unless `value` is an absolute http(s) URL, which is
+ * returned without trailing slashes. Anything else (blank, relative, other schemes, not a string)
+ * means same origin, so a broken injection can only ever fall back to the kiosk behaviour.
+ */
+export function resolveIntakeBase(value) {
+  if (typeof value !== "string") return ""
+  const text = value.trim()
+  if (!text || !/^https?:\/\//i.test(text)) return ""
+  try {
+    const url = new URL(text)
+    if (url.username || url.password || url.search || url.hash) return ""
+    return `${url.origin}${url.pathname.replace(/\/+$/, "")}`
+  } catch {
+    return ""
+  }
+}
+
 const deps = {
   fetch: typeof fetch === "function" ? (...args) => fetch(...args) : null,
   storage: typeof localStorage !== "undefined" ? localStorage : null,
-  baseUrl: "",
+  baseUrl: resolveIntakeBase(typeof window !== "undefined" ? window.TOKEN_QUEST_INTAKE : ""),
 }
 
 /** Test hook: swap fetch, storage or the base URL. Returns the active bindings. */
@@ -83,7 +111,7 @@ async function request(path, init = {}) {
   try {
     const response = await deps.fetch(`${deps.baseUrl}${path}`, { cache: "no-store", signal: controller?.signal, ...init })
     const data = await response.json().catch(() => null)
-    if (response.status >= 500) return { transport: "retry", data }
+    if (response.status >= 500 || response.status === 429 || data?.error === "store_unavailable") return { transport: "retry", data }
     return { transport: "ok", status: response.status, data: data ?? { ok: false, error: "bad_response", message: "The server sent an unreadable reply." } }
   } catch {
     return { transport: "offline" }

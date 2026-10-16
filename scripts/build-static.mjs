@@ -6,6 +6,9 @@
  *   npm run build:static                       -> dist/
  *   BASE_PATH=/JRRToken npm run build:static   -> for hosts that serve the site under a subpath
  *                                                 (GitHub Pages project sites)
+ *   INTAKE_URL=https://... npm run build:static -> the hosted game posts finished games to that
+ *                                                 intake Worker (deploy/intake-worker) instead of
+ *                                                 its own origin; see HOSTING.md "Hosted player sheet"
  *   npm run serve:static                       -> build, then preview dist/ on http://127.0.0.1:8099/
  *   node scripts/build-static.mjs --help       -> all options
  *
@@ -17,8 +20,12 @@
  * BASE_PATH: the game's own URLs are relative (index.html, css/game.css, the ES module imports), so a
  * subpath works without rewriting. The build still rewrites any root-relative href="/...", src="/..."
  * and url(/...) it finds in HTML/CSS and reports the count (expected: 0). JavaScript is never rewritten:
- * the /api/* calls in js/sync.js and js/main.js get a 404 on a static host and the game falls back to
- * localStorage, which is the intended demo behaviour.
+ * without INTAKE_URL the /api/* calls in js/sync.js and js/main.js get a 404 on a static host and the
+ * game falls back to localStorage, which is the intended demo behaviour.
+ *
+ * INTAKE_URL: when set, dist/index.html gets one inline line before </head>,
+ * <script>window.TOKEN_QUEST_INTAKE = "https://..."</script>, which js/sync.js reads at start-up and
+ * prefixes to its /api calls. Nothing else changes; the source index.html is never touched.
  */
 import http from "node:http"
 import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
@@ -42,6 +49,8 @@ Usage: node scripts/build-static.mjs [options]
 
   --out <dir>      Output directory (env OUT_DIR, default ./dist). It is emptied first.
   --base <path>    Serve-under-subpath prefix such as /JRRToken (env BASE_PATH, default none)
+  --intake <url>   Intake Worker the hosted game posts finished games to (env INTAKE_URL, default
+                   none: /api stays same-origin and a static host collects nothing)
   --serve          After building, preview the output on http://127.0.0.1:<port><base>/
   --port <n>       Preview port (env PREVIEW_PORT, default ${DEFAULT_PORT})
   -h, --help       Show this help`
@@ -50,7 +59,7 @@ Usage: node scripts/build-static.mjs [options]
 function parseArgs(argv) {
   const flags = {}
   const booleans = new Set(["serve", "help"])
-  const valued = new Set(["out", "base", "port"])
+  const valued = new Set(["out", "base", "port", "intake"])
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]
     if (arg === "-h") {
@@ -80,6 +89,35 @@ export function normaliseBasePath(value) {
     throw new BuildError(`BASE_PATH must be a plain path such as /JRRToken (got ${JSON.stringify(text)})`)
   }
   return `/${segments.join("/")}`
+}
+
+/** "" when unset; otherwise an absolute http(s) URL without credentials, query, hash or trailing slash. */
+export function normaliseIntakeUrl(value) {
+  const text = String(value ?? "").trim()
+  if (!text) return ""
+  let url
+  try {
+    url = new URL(text)
+  } catch {
+    throw new BuildError(`INTAKE_URL must be an absolute URL such as https://token-quest-intake.example.workers.dev (got ${JSON.stringify(text)})`)
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") throw new BuildError(`INTAKE_URL must use http(s) (got ${JSON.stringify(text)})`)
+  if (url.username || url.password || url.search || url.hash) throw new BuildError("INTAKE_URL must not carry credentials, a query string or a fragment")
+  return `${url.origin}${url.pathname.replace(/\/+$/, "")}`
+}
+
+/** The one line the hosted game reads at start-up (js/sync.js). */
+export function intakeScript(intake) {
+  const literal = JSON.stringify(intake).replace(/</g, "\\u003c")
+  return `<script>window.TOKEN_QUEST_INTAKE = ${literal}</script>`
+}
+
+/** Inserts the intake script before </head> (so it runs before the module script). Unchanged when intake is "". */
+export function injectIntake(html, intake) {
+  if (!intake) return html
+  const marker = /<\/head>/i.exec(html)
+  if (!marker) throw new BuildError("index.html has no </head> to inject the intake URL before")
+  return `${html.slice(0, marker.index)}  ${intakeScript(intake)}\n  ${html.slice(marker.index)}`
 }
 
 function within(candidate, root) {
@@ -201,7 +239,7 @@ function resolveUrl(url, file, dist, base, problems) {
  * and every relative ES module import. Also counts the /api calls that remain in JavaScript so the
  * log says plainly what happens to them on a static host.
  */
-export async function verifyDist(dist, base) {
+export async function verifyDist(dist, base, intake = "") {
   const problems = []
   const counts = { links: 0, urls: 0, imports: 0, api: 0 }
   const check = async (target, label) => {
@@ -212,6 +250,9 @@ export async function verifyDist(dist, base) {
   if (!(await exists(indexFile))) throw new BuildError("dist/index.html is missing")
   const html = await readFile(indexFile, "utf8")
   if (!/<script[^>]+type=["']module["']/.test(html)) problems.push("index.html has no <script type=\"module\">")
+  const intakeTags = html.split("window.TOKEN_QUEST_INTAKE").length - 1
+  if (intake && (intakeTags !== 1 || !html.includes(intakeScript(intake)))) problems.push("index.html does not carry exactly one intake URL")
+  if (!intake && intakeTags !== 0) problems.push("index.html carries an intake URL although none was requested")
   for (const match of html.matchAll(/(?:href|src)\s*=\s*["']([^"']+)["']/g)) {
     const url = match[1]
     if (isExternal(url)) continue
@@ -253,7 +294,7 @@ export async function verifyDist(dist, base) {
   return { problems, counts }
 }
 
-export async function build({ out = DEFAULT_OUT, base = "", log = () => {} } = {}) {
+export async function build({ out = DEFAULT_OUT, base = "", intake = "", log = () => {} } = {}) {
   const dist = path.resolve(out)
   assertSafeOutDir(dist)
   for (const source of SOURCES) {
@@ -268,17 +309,22 @@ export async function build({ out = DEFAULT_OUT, base = "", log = () => {} } = {
   await mkdir(dist, { recursive: true })
   const ctx = { base, files: 0, bytes: 0, rewritten: 0, skipped: [] }
   for (const source of SOURCES) await copyTree(path.join(ROOT, source), path.join(dist, source), ctx)
+  if (intake) {
+    const indexFile = path.join(dist, "index.html")
+    await writeFile(indexFile, injectIntake(await readFile(indexFile, "utf8"), intake))
+  }
   await writeFile(path.join(dist, "404.html"), notFoundPage(base))
   if (await exists(HEADERS_TEMPLATE)) await copyFile(HEADERS_TEMPLATE, path.join(dist, "_headers"))
 
-  const { problems, counts } = await verifyDist(dist, base)
+  const { problems, counts } = await verifyDist(dist, base, intake)
   log(`build:static -> ${path.relative(ROOT, dist) || dist}/ (${ctx.files} game files, ${Math.round(ctx.bytes / 1024)} KB) base path: ${base || "(none)"}`)
   log(`  root-relative URLs rewritten in html/css: ${ctx.rewritten}`)
   if (ctx.skipped.length) log(`  skipped (never published): ${ctx.skipped.join(", ")}`)
   log(`  checked ${counts.links} index.html links, ${counts.urls} css url()s, ${counts.imports} module imports: ${problems.length ? `${problems.length} problem(s)` : "all present"}`)
-  log(`  /api calls left in js: ${counts.api} (a static host answers 404; the game keeps scores in localStorage)`)
+  if (intake) log(`  intake URL: ${intake} (finished games are posted to ${intake}/api/attempt; ${counts.api} /api calls in js)`)
+  else log(`  /api calls left in js: ${counts.api} (no INTAKE_URL: a static host answers 404; the game keeps scores in localStorage)`)
   if (problems.length) throw new BuildError(`The static build would not load:\n  - ${problems.join("\n  - ")}`)
-  return { dist, base, ...ctx, counts }
+  return { dist, base, intake, ...ctx, counts }
 }
 
 /** Previews dist/ with the kiosk's own static handler (same MIME types and no-store rules as the server). */
@@ -339,10 +385,11 @@ if (isMain) {
       process.exit(0)
     }
     const base = normaliseBasePath(flags.base ?? process.env.BASE_PATH ?? "")
+    const intake = normaliseIntakeUrl(flags.intake ?? process.env.INTAKE_URL ?? "")
     const out = flags.out ?? process.env.OUT_DIR ?? DEFAULT_OUT
     const port = Number(flags.port ?? process.env.PREVIEW_PORT ?? DEFAULT_PORT)
     if (!Number.isInteger(port) || port < 0 || port > 65535) throw new BuildError(`Invalid port: ${flags.port ?? process.env.PREVIEW_PORT}`)
-    const result = await build({ out: path.resolve(ROOT, out), base, log })
+    const result = await build({ out: path.resolve(ROOT, out), base, intake, log })
     if (flags.serve) {
       const server = await serve({ dist: result.dist, base, port, log })
       const stop = () => server.close(() => process.exit(0))

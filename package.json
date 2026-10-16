@@ -12,6 +12,8 @@
     "export": "node scripts/serve.mjs --export",
     "test": "node --test",
     "test:server": "node --test tests/server.test.js tests/xlsx.test.js",
+    "test:intake": "node --test tests/intake.test.js tests/sync.test.js",
+    "intake:deploy": "npx --yes wrangler deploy --config deploy/intake-worker/wrangler.toml",
     "balance": "node scripts/balance.mjs",
     "build:static": "node scripts/build-static.mjs",
     "serve:static": "node scripts/build-static.mjs --serve",

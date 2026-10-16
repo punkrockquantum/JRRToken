@@ -196,3 +196,134 @@ free tier shows an interstitial page on the first visit.
   shared widely.
 - Treat `/data` on a host like the Desktop workbook: pick an EU/UK region, keep the PIN private, export, then
   delete the disk or volume after the event.
+
+## Hosted player sheet
+
+The public GitHub Pages demo can record finished games too, without a server of ours and without a
+single email address touching this (public) repo or the kiosk laptop:
+
+```
+browser on punkrockquantum.github.io/JRRToken  --POST /api/attempt-->  Cloudflare Worker (deploy/intake-worker)
+                                                                            |  GitHub Contents API, fine-grained PAT
+                                                                            v
+                                                   private repo punkrockquantum/token-quest-players
+                                                     players.json  (source of truth: every attempt)
+                                                     PLAYERS.md    (the sheet: rewritten after EVERY game)
+```
+
+- **Every game is a commit.** `POST /api/attempt` validates (same rules as the kiosk server), appends
+  the attempt to `players.json` and regenerates `PLAYERS.md`, and only then answers
+  `{ ok: true, attempts, best, latest, rank, players, newBest }`, so the results screen's
+  `ATTEMPT n · BEST · RANK` line works exactly as at the booth. A first-time player adds a Players
+  row; a returning player (same email, any letter case) has Attempts, Latest score, Best score and
+  Last played updated in place; the Attempts table always gains one row. There is no batching or
+  "write later": if GitHub cannot be written (three compare-and-swap tries with backoff) the Worker
+  answers `503 { ok: false, error: "store_unavailable" }`, `js/sync.js` keeps the attempt in the
+  browser's queue and re-sends it on the next game, page load or reconnect.
+- **The private repo is the sheet.** Staff open `PLAYERS.md` in `punkrockquantum/token-quest-players`
+  on GitHub (it renders as two tables; the first line reads `Updated <time> · <n> players · <m> games`
+  so you can see it moving). The Worker has no export endpoint. `players.json` is the raw list if you
+  want to load it into Excel. Sample:
+
+```md
+# Token Quest players
+
+Updated 2026-10-16T14:12:03.000Z · 2 players · 3 games
+
+## Players
+
+| # | Name | Email | Attempts | Best score | Latest score | Best job | First played (UTC) | Last played (UTC) |
+| ---: | --- | --- | ---: | ---: | ---: | --- | --- | --- |
+| 1 | Grace Hopper | grace@example.com | 1 | 1,500 | 1,500 | Drug discovery | 2026-10-16 14:08 | 2026-10-16 14:08 |
+| 2 | Ada Lovelace | ada@example.com | 2 | 1,200 | 1,200 | Chat | 2026-10-16 14:05 | 2026-10-16 14:12 |
+
+## Attempts
+
+| Played at (UTC) | Name | Email | Job | Score |
+| --- | --- | --- | --- | ---: |
+| 2026-10-16 14:12 | Ada Lovelace | ada@example.com | Chat | 1,200 |
+| 2026-10-16 14:08 | Grace Hopper | grace@example.com | Drug discovery | 1,500 |
+| 2026-10-16 14:05 | Ada Lovelace | ada@example.com | Chat + RAG | 900 |
+```
+
+- **Nothing changes until you opt in.** Without the `INTAKE_URL` repository variable the Pages build is
+  the local-league demo described above (`/api/*` is 404, nothing is collected). The kiosk laptop is
+  untouched either way: `js/sync.js` only leaves its own origin when `window.TOKEN_QUEST_INTAKE` is
+  defined, and only `scripts/build-static.mjs` ever defines it (in `dist/index.html`, never in the
+  source).
+
+### Set it up (two logins: GitHub and Cloudflare)
+
+Everything below is prepared in the repo; nothing has been deployed yet.
+
+```sh
+# (a) the private repo that will hold the sheet (GitHub login #1)
+gh auth login
+gh repo create punkrockquantum/token-quest-players --private --add-readme
+
+# (b) a fine-grained token for that ONE repo: https://github.com/settings/personal-access-tokens/new
+#     Resource owner: punkrockquantum · Repository access: Only select repositories -> token-quest-players
+#     Repository permissions -> Contents: Read and write (Metadata: Read-only is added automatically)
+#     Expiration: a few days after the event. Copy it once; it is only ever pasted into the Worker secret.
+
+# (c) deploy the Worker (Cloudflare login #2; free plan is enough). Check PLAYERS_REPO and
+#     ALLOWED_ORIGINS in deploy/intake-worker/wrangler.toml first (defaults match this project).
+cd deploy/intake-worker
+npx wrangler login
+npx wrangler secret put GITHUB_TOKEN          # paste the PAT from (b)
+npx wrangler deploy                           # prints https://token-quest-intake.<account>.workers.dev
+curl -s https://token-quest-intake.<account>.workers.dev/api/health
+#     -> {"ok":true,"service":"token-quest-intake","repo":"punkrockquantum/token-quest-players",...}
+#        a 503 here means the token or repo name is wrong; nothing else needs fixing
+cd ../..
+
+# (d) tell the Pages build where the Worker is (repository variable, not a secret: the URL is public)
+gh variable set INTAKE_URL --repo punkrockquantum/JRRToken --body https://token-quest-intake.<account>.workers.dev
+
+# (e) rebuild and redeploy the site, then play one game and watch PLAYERS.md in the private repo
+gh workflow run pages.yml --repo punkrockquantum/JRRToken --ref cursor/token-quest-datacenter-game
+gh run watch --repo punkrockquantum/JRRToken
+```
+
+Optional smoke test straight at the Worker (then delete the row from `players.json` in the private
+repo; the next real game rewrites `PLAYERS.md`):
+
+```sh
+curl -s -X POST https://token-quest-intake.<account>.workers.dev/api/attempt \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Test Player","email":"test@example.com","score":1,"consent":true,"consentAt":"2026-10-16T12:00:00Z"}'
+```
+
+To switch collection off again: `gh variable delete INTAKE_URL --repo punkrockquantum/JRRToken` and
+re-run the workflow (the site goes back to the local-league demo), then `npx wrangler delete` in
+`deploy/intake-worker` and delete or archive the private repo.
+
+### Privacy and limits
+
+- Emails live only in the private repo (and transiently in the Worker while it writes). The public
+  game repo, the Pages site, the Worker's logs and its commit messages never contain them; `GET
+  /api/league` returns names and scores only. Delete the private repo after the event, and revoke
+  the PAT (GitHub → Settings → Developer settings → Fine-grained tokens).
+- The kiosk laptop's `data/` and Desktop workbook stay completely separate from this sheet: the booth
+  posts to its own server, the hosted game posts to the Worker, and nothing merges them.
+- The Worker URL is public, so the limits matter: JSON only, 16 KB body cap, `consent` must be
+  literally `true`, the browser `Origin` must be on `ALLOWED_ORIGINS` (default
+  `https://punkrockquantum.github.io`), and each IP gets a token bucket (20 attempts and 60 reads per
+  minute by default). That bucket lives in the Worker's memory, so it is per IP *per isolate*: good
+  enough against a careless script, not a hard cap. For a hard cap add a WAF rate-limiting rule for
+  the Worker route in the Cloudflare dashboard. Remember a venue's Wi-Fi shares one public IP.
+- Anyone who finds the URL can still post a valid-looking row; junk is deleted by editing
+  `players.json` in the private repo. The same attempt re-posted by the browser's retry queue
+  (same email, `playedAt` and score) is recognised and not duplicated.
+- GitHub's Contents API gives 5,000 requests an hour to the token; a game costs two to four. The free
+  Workers plan allows 100,000 requests a day and 10 ms of CPU per request, comfortable for thousands
+  of games; `players.json` grows about 400 bytes per game.
+
+### Verify locally
+
+```sh
+npm run test:intake                                   # tests/intake.test.js + tests/sync.test.js
+for f in deploy/intake-worker/src/*.mjs; do node --check "$f"; done
+INTAKE_URL=https://token-quest-intake.example.workers.dev npm run build:static && grep TOKEN_QUEST_INTAKE dist/index.html
+npm run build:static && ! grep -q TOKEN_QUEST_INTAKE dist/index.html   # without INTAKE_URL nothing is injected
+```

@@ -1,0 +1,5 @@
+# Local secrets for `npx wrangler dev` (GITHUB_TOKEN=...) must never be committed.
+.dev.vars
+.dev.vars.*
+.wrangler/
+node_modules/
