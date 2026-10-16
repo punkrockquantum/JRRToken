@@ -36,7 +36,7 @@ jobs:
         env:
           BASE_PATH: ${{ steps.pages.outputs.base_path }}
           # Repository variable (Settings -> Secrets and variables -> Actions -> Variables), e.g.
-          # https://token-quest-intake.<account>.workers.dev. Unset = nothing is collected.
+          # https://tokenquest.<account-subdomain>.workers.dev. Unset = nothing is collected.
           INTAKE_URL: ${{ vars.INTAKE_URL }}
       - uses: actions/upload-pages-artifact@v5
         with:

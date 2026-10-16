@@ -1,23 +1,40 @@
-# Token Quest intake Worker (Cloudflare Workers free tier). Deploy from this folder:
+# Token Quest on one URL: this Worker serves the game (static assets built into ../../dist by
+# `npm run build:worker`) and the /api/* JSON routes on the same origin,
+# https://tokenquest.<account-subdomain>.workers.dev
 #
-#   npx wrangler login
-#   npx wrangler secret put GITHUB_TOKEN      # fine-grained PAT: Contents read/write on PLAYERS_REPO only
-#   npx wrangler deploy                       # prints https://token-quest-intake.<account>.workers.dev
+# Deploy from the repo root (the first time: `cd deploy/intake-worker && npx wrangler login &&
+# npx wrangler secret put GITHUB_TOKEN && cd ../..`):
 #
-# Everything else is a plain variable below (no secrets in this file). Full steps: HOSTING.md,
-# section "Hosted player sheet".
-name = "token-quest-intake"
+#   npm run deploy:worker        # = npm run build:worker && npx wrangler deploy -c deploy/intake-worker/wrangler.toml
+#
+# Everything here is a plain variable (no secrets in this file). Full steps: HOSTING.md, section
+# "One URL on workers.dev". workers.dev names are always <worker>.<account-subdomain>.workers.dev;
+# a bare https://tokenquest.workers.dev is not something Cloudflare hands out. To put the game on a
+# domain you own instead, add (after the zone is on Cloudflare):
+#   routes = [{ pattern = "tokenquest.example.com", custom_domain = true }]
+name = "tokenquest"
 main = "src/worker.mjs"
-compatibility_date = "2025-10-01"
+compatibility_date = "2026-10-01"
 workers_dev = true
+
+[assets]
+# dist/ as produced by `npm run build:worker` (index.html, 404.html, _headers, css/, js/, assets/).
+# Paths are relative to this file.
+directory = "../../dist"
+binding = "ASSETS"
+# Unknown paths get dist/404.html with a 404 status (so the staff panel's /api probes stay honest).
+not_found_handling = "404-page"
+# Only the API reaches the script; every other request is answered straight from the assets, with
+# the cache rules in dist/_headers (HTML/JS/CSS no-store, fonts one year).
+run_worker_first = ["/api/*"]
 
 [vars]
 # The PRIVATE repo that holds players.json and PLAYERS.md (names + emails live only there).
 PLAYERS_REPO = "punkrockquantum/token-quest-players"
 PLAYERS_BRANCH = "main"
-# Browser origins allowed to call the API (comma-separated). Add "http://127.0.0.1:8099" while
-# testing a local `npm run serve:static` build against the deployed Worker.
-ALLOWED_ORIGINS = "https://punkrockquantum.github.io"
+# The game on this Worker is same-origin and needs no CORS. These extra browser origins may also
+# call the API: the GitHub Pages copy (when its build gets INTAKE_URL) and a local preview.
+ALLOWED_ORIGINS = "https://punkrockquantum.github.io, http://127.0.0.1:8099"
 # Per-IP token buckets, kept in memory per isolate. A venue's Wi-Fi shares one public IP, so keep
 # the attempt limit comfortably above "games per minute at the booth".
 RATE_LIMIT_ATTEMPTS_PER_MINUTE = "20"

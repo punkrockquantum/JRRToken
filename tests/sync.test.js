@@ -13,7 +13,7 @@ import { QUEUE_KEY, bindSync, fetchLeague, flushQueue, pendingCount, recordAttem
 import { build, injectIntake, intakeScript, normaliseIntakeUrl } from "../scripts/build-static.mjs"
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const INTAKE = "https://token-quest-intake.example.workers.dev"
+const INTAKE = "https://tokenquest.example.workers.dev"
 
 const attempt = (overrides = {}) => ({
   name: "Ada Lovelace",
@@ -139,7 +139,7 @@ test("build-static: the intake URL is validated and injected as one script line 
   assert.equal(normaliseIntakeUrl("  "), "")
   assert.equal(normaliseIntakeUrl(`${INTAKE}/`), INTAKE)
   assert.equal(normaliseIntakeUrl("https://example.com/intake//"), "https://example.com/intake")
-  assert.throws(() => normaliseIntakeUrl("token-quest-intake.example.workers.dev"), /absolute URL/)
+  assert.throws(() => normaliseIntakeUrl("tokenquest.example.workers.dev"), /absolute URL/)
   assert.throws(() => normaliseIntakeUrl("ftp://example.com"), /http\(s\)/)
   assert.throws(() => normaliseIntakeUrl(`${INTAKE}?x=1`), /query/)
   assert.throws(() => normaliseIntakeUrl("https://user:pw@example.com"), /credentials/)
@@ -185,7 +185,7 @@ test("build-static: dist/index.html carries the intake URL only when the build w
   const code = await new Promise((resolve) => child.once("exit", resolve))
   assert.equal(code, 0, output)
   assert.ok((await readFile(path.join(out, "index.html"), "utf8")).includes(intakeScript(INTAKE)), "trailing slash normalised, script present")
-  assert.match(output, /intake URL: https:\/\/token-quest-intake\.example\.workers\.dev/)
+  assert.match(output, /intake URL: https:\/\/tokenquest\.example\.workers\.dev/)
 
   const bad = spawn(process.execPath, [path.join(ROOT, "scripts", "build-static.mjs"), "--out", path.join(dir, "bad")], { env: { ...process.env, INTAKE_URL: "not a url" }, stdio: ["ignore", "pipe", "pipe"] })
   let badOutput = ""

@@ -99,7 +99,7 @@ export function normaliseIntakeUrl(value) {
   try {
     url = new URL(text)
   } catch {
-    throw new BuildError(`INTAKE_URL must be an absolute URL such as https://token-quest-intake.example.workers.dev (got ${JSON.stringify(text)})`)
+    throw new BuildError(`INTAKE_URL must be an absolute URL such as https://tokenquest.example.workers.dev (got ${JSON.stringify(text)})`)
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") throw new BuildError(`INTAKE_URL must use http(s) (got ${JSON.stringify(text)})`)
   if (url.username || url.password || url.search || url.hash) throw new BuildError("INTAKE_URL must not carry credentials, a query string or a fragment")

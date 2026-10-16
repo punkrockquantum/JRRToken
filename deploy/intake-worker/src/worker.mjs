@@ -1,23 +1,34 @@
 /**
- * Token Quest intake: a Cloudflare Worker that receives finished games from the public static demo
- * and keeps the player sheet in a separate PRIVATE GitHub repo (players.json + PLAYERS.md).
+ * Token Quest on one URL: a Cloudflare Worker that serves the whole game (Workers Static Assets
+ * from dist/, binding ASSETS) and, on the same origin, the small JSON API that keeps the player
+ * sheet in a separate PRIVATE GitHub repo (players.json + PLAYERS.md).
  *
- * Routes (same contract as the kiosk server, see js/sync.js in the game repo):
+ * Routing (wrangler.toml): `run_worker_first = ["/api/*"]`, so only /api/* reaches this script;
+ * every other path is answered straight from the uploaded assets (dist/404.html for unknown paths,
+ * dist/_headers for cache rules). The ASSETS fallback below only matters when the script is run
+ * first for other paths (or under `wrangler dev`): it just hands the request to the asset server.
+ *
+ * API (same contract as the kiosk server, see js/sync.js in the game repo):
  *   POST /api/attempt   JSON body -> { ok, attempts, best, latest, rank, players, newBest }
  *                       400 invalid_attempt · 413 too_large · 415 unsupported_media_type · 429 rate_limited
  *                       503 store_unavailable (the sheet could not be written: the client queues and retries)
+ *                       503 not_configured    (no GITHUB_TOKEN yet: same client behaviour, nothing is lost)
  *   GET  /api/league    { ok, players: [{ rank, name, attempts, best, latest, bestUseCase, fteEquivalent,
  *                         firstPlayedAt, lastPlayedAt }], attempts }      (never includes emails)
- *   GET  /api/health    { ok, service, repo, branch, attempts, players }  (503 when GitHub is unreachable)
+ *   GET  /api/health    { ok, service, configured, repo, branch, sheet, attempts, players }
+ *                       200 with configured:false while the secret is missing; 503 when GitHub is unreachable
  *
  * Every accepted attempt is committed to players.json AND PLAYERS.md before the 200 goes out:
  * nothing is deferred to ctx.waitUntil, so "ok" means "it is on the sheet".
+ *
+ * Origins: the game itself is same-origin, so it needs no CORS. Other browser origins (the GitHub
+ * Pages copy, a local preview) are allowed only when listed in ALLOWED_ORIGINS.
  *
  * Environment (wrangler.toml [vars] + `wrangler secret put GITHUB_TOKEN`):
  *   GITHUB_TOKEN                      secret; fine-grained PAT, Contents read/write on PLAYERS_REPO only
  *   PLAYERS_REPO                      "owner/repo" of the private players repo
  *   PLAYERS_BRANCH                    default "main"
- *   ALLOWED_ORIGINS                   comma-separated browser origins allowed to call the API
+ *   ALLOWED_ORIGINS                   comma-separated extra browser origins allowed to call the API
  *   RATE_LIMIT_ATTEMPTS_PER_MINUTE    per IP, default 20     RATE_LIMIT_READS_PER_MINUTE  per IP, default 60
  *
  * Plain ESM on Web APIs only, so Node can import it for tests (tests/intake.test.js) and
@@ -33,7 +44,7 @@ export const BODY_LIMIT = 16 * 1024
 export const DEFAULT_ALLOWED_ORIGINS = "https://punkrockquantum.github.io"
 export const DEFAULT_ATTEMPTS_PER_MINUTE = 20
 export const DEFAULT_READS_PER_MINUTE = 60
-const SERVICE = "token-quest-intake"
+export const SERVICE = "tokenquest"
 
 class HttpError extends Error {
   constructor(status, code, message, headers = {}) {
@@ -142,11 +153,17 @@ export function createHandler(deps = {}) {
   const stores = new Map()
   let limiters = null
 
+  function storeConfig(env) {
+    return {
+      repo: String(env.PLAYERS_REPO || "").trim(),
+      branch: String(env.PLAYERS_BRANCH || "").trim() || "main",
+      token: typeof env.GITHUB_TOKEN === "string" ? env.GITHUB_TOKEN.trim() : "",
+    }
+  }
+
   function storeFor(env) {
-    const repo = String(env.PLAYERS_REPO || "").trim()
-    const branch = String(env.PLAYERS_BRANCH || "").trim() || "main"
-    const token = typeof env.GITHUB_TOKEN === "string" ? env.GITHUB_TOKEN.trim() : ""
-    if (!repo || !token) throw new HttpError(503, "not_configured", "The intake service is missing PLAYERS_REPO or GITHUB_TOKEN.", { "Retry-After": "60" })
+    const { repo, branch, token } = storeConfig(env)
+    if (!repo || !token) throw new HttpError(503, "not_configured", "The player sheet is not configured yet (PLAYERS_REPO or the GITHUB_TOKEN secret is missing).", { "Retry-After": "60" })
     const key = `${repo}@${branch}`
     let store = stores.get(key)
     if (!store) {
@@ -216,24 +233,18 @@ export function createHandler(deps = {}) {
     if (pathname === "/api/health") {
       if (method !== "GET") throw new HttpError(405, "method_not_allowed", "Use GET here.", { Allow: "GET, OPTIONS" })
       rateLimit(env, "read", request)
+      const { repo, branch, token } = storeConfig(env)
+      const base = { ok: true, service: SERVICE, configured: Boolean(repo && token), repo: repo || null, branch, sheet: PLAYERS_MD }
+      if (!base.configured) return json(200, { ...base, attempts: null, players: null, message: "The player sheet is not configured yet: set PLAYERS_REPO and the GITHUB_TOKEN secret." }, cors)
       const store = storeFor(env)
       await store.ping()
       const attempts = await store.all()
-      return json(
-        200,
-        {
-          ok: true,
-          service: SERVICE,
-          repo: String(env.PLAYERS_REPO).trim(),
-          branch: String(env.PLAYERS_BRANCH || "").trim() || "main",
-          sheet: PLAYERS_MD,
-          attempts: attempts.length,
-          players: aggregatePlayers(attempts).length,
-        },
-        cors,
-      )
+      return json(200, { ...base, attempts: attempts.length, players: aggregatePlayers(attempts).length }, cors)
     }
 
+    if (pathname === "/api/export.xlsx" || pathname === "/api/reset") {
+      throw new HttpError(404, "not_found", `There is no ${pathname === "/api/reset" ? "reset" : "export"} here: the sheet is PLAYERS.md in the private players repo.`)
+    }
     if (pathname.startsWith("/api/")) throw new HttpError(404, "not_found", "No such API route.")
     if (pathname === "/" && method === "GET") {
       return new Response(`${SERVICE}: POST /api/attempt, GET /api/league, GET /api/health\n`, {
@@ -244,17 +255,27 @@ export function createHandler(deps = {}) {
     throw new HttpError(404, "not_found", "Nothing here but the API.")
   }
 
+  /** True when the request is for the game files rather than the API (the same split as run_worker_first = ["/api/*"]) and an assets binding exists. */
+  function isAssetRequest(url, env) {
+    return !url.pathname.startsWith("/api/") && typeof env?.ASSETS?.fetch === "function"
+  }
+
   return {
     async fetch(request, env = {}, _ctx) {
-      const started = Date.now()
       const url = new URL(request.url)
+      // The game itself: static assets (index.html, js/, css/, assets/, 404.html) served as uploaded.
+      if (isAssetRequest(url, env)) return env.ASSETS.fetch(request)
+
+      const started = Date.now()
       const origin = request.headers.get("Origin")
+      const requestOrigin = normaliseOrigin(origin)
+      const sameOrigin = requestOrigin !== null && requestOrigin === url.origin.toLowerCase()
       const allowed = parseOrigins(env.ALLOWED_ORIGINS ?? DEFAULT_ALLOWED_ORIGINS)
-      const originOk = origin !== null && allowed.has(normaliseOrigin(origin))
-      const cors = originOk ? corsHeaders(origin) : {}
+      const crossOriginOk = origin !== null && !sameOrigin && allowed.has(requestOrigin)
+      const cors = crossOriginOk ? corsHeaders(origin) : {}
       let response
       try {
-        if (origin !== null && !originOk) throw new HttpError(403, "cross_origin", "This origin may not use the intake service.")
+        if (origin !== null && !sameOrigin && !crossOriginOk) throw new HttpError(403, "cross_origin", "This origin may not use the Token Quest API.")
         response = await route(request, env, url, cors)
       } catch (error) {
         if (error instanceof HttpError) {

@@ -14,7 +14,7 @@ import { aggregatePlayers as workerAggregate, publicLeague as workerPublic } fro
 import { createRateLimiter } from "../deploy/intake-worker/src/ratelimit.mjs"
 import { MAX_TRIES, PLAYERS_JSON, PLAYERS_MD, StoreUnavailableError, createPlayersStore, sameAttempt } from "../deploy/intake-worker/src/store.mjs"
 import { validateAttempt as workerValidate } from "../deploy/intake-worker/src/validate.mjs"
-import worker, { BODY_LIMIT, createHandler, parseOrigins } from "../deploy/intake-worker/src/worker.mjs"
+import worker, { BODY_LIMIT, SERVICE, createHandler, parseOrigins } from "../deploy/intake-worker/src/worker.mjs"
 import { aggregatePlayers, publicLeague } from "../server/players.mjs"
 import { validateAttempt } from "../server/validate.mjs"
 
@@ -23,7 +23,7 @@ const WORKER = path.join(ROOT, "deploy", "intake-worker", "src")
 const REPO = "punkrockquantum/token-quest-players"
 const TOKEN = "github_pat_TEST_ONLY_not_a_real_token"
 const ORIGIN = "https://punkrockquantum.github.io"
-const INTAKE = "https://token-quest-intake.example.workers.dev"
+const INTAKE = "https://tokenquest.example.workers.dev"
 const T0 = Date.parse("2026-10-16T15:00:00.000Z")
 
 const env = (overrides = {}) => ({ GITHUB_TOKEN: TOKEN, PLAYERS_REPO: REPO, PLAYERS_BRANCH: "main", ALLOWED_ORIGINS: ORIGIN, ...overrides })
@@ -341,7 +341,7 @@ test("every accepted POST commits players.json and PLAYERS.md before answering o
   assert.ok(!JSON.stringify(league).includes("@"), "the league never carries emails")
 
   const health = await (await get(handler, "/api/health")).json()
-  assert.deepEqual(health, { ok: true, service: "token-quest-intake", repo: REPO, branch: "main", sheet: PLAYERS_MD, attempts: 5, players: 3 })
+  assert.deepEqual(health, { ok: true, service: SERVICE, configured: true, repo: REPO, branch: "main", sheet: PLAYERS_MD, attempts: 5, players: 3 })
 })
 
 test("a 409 from the Contents API (someone else wrote first) re-reads, re-applies and succeeds", async () => {
@@ -544,8 +544,60 @@ test("limits: 16 KB body cap, JSON only, consent must be true, methods and unkno
   assert.equal((await get(handler, "/export.xlsx")).status, 404, "no export endpoint: the private repo is the sheet")
   const root = await get(handler, "/")
   assert.equal(root.status, 200)
-  assert.match(await root.text(), /token-quest-intake/)
+  assert.match(await root.text(), /tokenquest: POST \/api\/attempt/, "without an assets binding the root is a plain-text index of the API")
   assert.equal(typeof worker.fetch, "function", "the module's default export is what wrangler deploys")
+})
+
+test("one origin: the game is served from env.ASSETS, /api/* by the handler, and same-origin posts need no CORS", async () => {
+  const gh = fakeGitHub()
+  const { handler } = makeHandler(gh)
+  const served = []
+  const ASSETS = {
+    fetch: async (request) => {
+      const { pathname } = new URL(request.url)
+      served.push(pathname)
+      return new Response(`asset ${pathname}`, { status: pathname === "/missing" ? 404 : 200, headers: { "Content-Type": "text/plain" } })
+    },
+  }
+  const environment = env({ ASSETS })
+
+  for (const route of ["/", "/index.html", "/js/main.js", "/css/game.css", "/assets/fonts/x.woff2", "/missing", "/api"]) {
+    const response = await handler.fetch(new Request(`${INTAKE}${route}`, { headers: { Origin: "https://evil.example" } }), environment)
+    assert.equal(await response.text(), `asset ${route}`, `${route} comes straight from the assets binding, whatever the Origin header says`)
+  }
+  assert.deepEqual(served, ["/", "/index.html", "/js/main.js", "/css/game.css", "/assets/fonts/x.woff2", "/missing", "/api"])
+
+  const health = await handler.fetch(new Request(`${INTAKE}/api/health`), environment)
+  assert.equal(health.status, 200)
+  assert.equal(health.headers.get("Content-Type"), "application/json; charset=utf-8")
+  assert.deepEqual(await health.json(), { ok: true, service: SERVICE, configured: true, repo: REPO, branch: "main", sheet: PLAYERS_MD, attempts: 0, players: 0 })
+  assert.equal((await handler.fetch(new Request(`${INTAKE}/api/nothing`), environment)).status, 404)
+  assert.equal((await (await handler.fetch(new Request(`${INTAKE}/api/nothing`), environment)).json()).error, "not_found")
+  const noExport = await handler.fetch(new Request(`${INTAKE}/api/export.xlsx`), environment)
+  assert.equal(noExport.status, 404)
+  assert.match((await noExport.json()).message, /PLAYERS\.md/)
+  assert.equal(served.length, 7, "no /api request ever touched the assets binding")
+
+  // The game on the Worker posts with its own origin (browsers send Origin on every POST): allowed, no CORS headers needed.
+  const sameOrigin = await post(handler, attempt(), { origin: new URL(INTAKE).origin, environment })
+  assert.equal(sameOrigin.status, 200)
+  assert.equal(sameOrigin.headers.get("Access-Control-Allow-Origin"), null)
+  assert.equal(gh.attempts().length, 1)
+  const pagesCopy = await post(handler, attempt({ playedAt: "2026-10-16T14:06:00.000Z" }), { origin: ORIGIN, environment })
+  assert.equal(pagesCopy.status, 200, "the GitHub Pages copy stays on the allowlist")
+  assert.equal(pagesCopy.headers.get("Access-Control-Allow-Origin"), ORIGIN)
+  assert.equal((await post(handler, attempt(), { origin: "https://evil.example", environment })).status, 403)
+
+  // Before the GITHUB_TOKEN secret exists the game still loads; health says so and attempts are queued by the client.
+  const unconfigured = env({ ASSETS, GITHUB_TOKEN: "" })
+  const pending = await (await handler.fetch(new Request(`${INTAKE}/api/health`), unconfigured)).json()
+  assert.equal(pending.ok, true)
+  assert.equal(pending.configured, false)
+  assert.equal(pending.attempts, null)
+  assert.match(pending.message, /GITHUB_TOKEN/)
+  const queued = await post(handler, attempt(), { origin: new URL(INTAKE).origin, environment: unconfigured })
+  assert.equal(queued.status, 503)
+  assert.equal((await queued.json()).error, "not_configured")
 })
 
 test("rate limit: a token bucket per IP, 429 with Retry-After, refills with time, other IPs unaffected", async () => {

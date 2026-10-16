@@ -7,7 +7,7 @@
 
 const API = "https://api.github.com"
 const API_VERSION = "2022-11-28"
-const USER_AGENT = "token-quest-intake"
+const USER_AGENT = "tokenquest-worker"
 
 export class GitHubError extends Error {
   constructor(status, operation, path) {

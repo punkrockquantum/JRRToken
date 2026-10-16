@@ -197,33 +197,108 @@ free tier shows an interstitial page on the first visit.
 - Treat `/data` on a host like the Desktop workbook: pick an EU/UK region, keep the PIN private, export, then
   delete the disk or volume after the event.
 
-## Hosted player sheet
+## One URL on workers.dev
 
-The public GitHub Pages demo can record finished games too, without a server of ours and without a
-single email address touching this (public) repo or the kiosk laptop:
+One Cloudflare Worker, `tokenquest` (`deploy/intake-worker/`), serves the whole game **and** its `/api`
+on the same origin, with the player sheet kept in a separate **private** GitHub repo:
 
 ```
-browser on punkrockquantum.github.io/JRRToken  --POST /api/attempt-->  Cloudflare Worker (deploy/intake-worker)
-                                                                            |  GitHub Contents API, fine-grained PAT
-                                                                            v
-                                                   private repo punkrockquantum/token-quest-players
-                                                     players.json  (source of truth: every attempt)
-                                                     PLAYERS.md    (the sheet: rewritten after EVERY game)
+https://tokenquest.<account-subdomain>.workers.dev
+  /, /js/*, /css/*, /assets/*, /404.html   Workers Static Assets, uploaded from dist/ (npm run build:worker)
+  /api/attempt  /api/league  /api/health    the Worker script (run_worker_first = ["/api/*"])
+        |  GitHub Contents API, fine-grained PAT (Worker secret GITHUB_TOKEN)
+        v
+  private repo punkrockquantum/token-quest-players
+    players.json   source of truth: every attempt
+    PLAYERS.md     the sheet, rewritten after EVERY game
 ```
 
-- **Every game is a commit.** `POST /api/attempt` validates (same rules as the kiosk server), appends
-  the attempt to `players.json` and regenerates `PLAYERS.md`, and only then answers
-  `{ ok: true, attempts, best, latest, rank, players, newBest }`, so the results screen's
-  `ATTEMPT n · BEST · RANK` line works exactly as at the booth. A first-time player adds a Players
-  row; a returning player (same email, any letter case) has Attempts, Latest score, Best score and
-  Last played updated in place; the Attempts table always gains one row. There is no batching or
-  "write later": if GitHub cannot be written (three compare-and-swap tries with backoff) the Worker
-  answers `503 { ok: false, error: "store_unavailable" }`, `js/sync.js` keeps the attempt in the
-  browser's queue and re-sends it on the next game, page load or reconnect.
-- **The private repo is the sheet.** Staff open `PLAYERS.md` in `punkrockquantum/token-quest-players`
-  on GitHub (it renders as two tables; the first line reads `Updated <time> · <n> players · <m> games`
-  so you can see it moving). The Worker has no export endpoint. `players.json` is the raw list if you
-  want to load it into Excel. Sample:
+**About the name.** workers.dev hostnames are always `<worker>.<account-subdomain>.workers.dev`, so the
+URL is `https://tokenquest.<account-subdomain>.workers.dev`; a bare `https://tokenquest.workers.dev` is not
+something Cloudflare hands out. `npx wrangler deploy` prints the exact URL and `npx wrangler whoami` the
+account. To serve the game on a domain you own later, put the zone on Cloudflare and add to
+`deploy/intake-worker/wrangler.toml`:
+
+```toml
+routes = [{ pattern = "tokenquest.example.com", custom_domain = true }]
+```
+
+Because the game and the API share an origin, `js/sync.js` uses its same-origin default (no
+`INTAKE_URL`, no CORS) and the results screen's `ATTEMPT n · BEST · RANK` line comes from the Worker,
+exactly as at the booth. The GitHub Pages copy at https://punkrockquantum.github.io/JRRToken/ keeps
+working as the local-league demo; it can also post to the Worker's API if its build gets
+`INTAKE_URL` (see "Pages too" below).
+
+### Finish it (two logins: Cloudflare and GitHub)
+
+```sh
+# 1. Cloudflare login + the one Worker secret: the fine-grained PAT for the private players repo
+#    (https://github.com/settings/personal-access-tokens/new -> Only select repositories ->
+#     token-quest-players -> Repository permissions -> Contents: Read and write; expire it after the event)
+cd deploy/intake-worker && npx wrangler login && npx wrangler secret put GITHUB_TOKEN && cd ../..
+
+# 2. Build dist/ (same-origin, no base path) and deploy the game + API as one Worker
+npm run deploy:worker                     # prints https://tokenquest.<account-subdomain>.workers.dev
+
+# 3. Check it
+npx wrangler whoami                       # account name, id and the account subdomain
+curl -s https://tokenquest.<account-subdomain>.workers.dev/api/health
+#    -> {"ok":true,"service":"tokenquest","configured":true,"repo":"punkrockquantum/token-quest-players",...}
+#       "configured":false means step 1's secret is missing; a 503 means the token or repo name is wrong
+```
+
+Play one game at the URL and watch `PLAYERS.md` in the private repo update (the first line reads
+`Updated <time> · <n> players · <m> games`). Staff read the sheet there; the Worker has no export or
+reset endpoint, so the staff panel's **DOWNLOAD EXCEL** / **RESET SERVER LEAGUE** buttons light up
+(health is 200) but answer "EXPORT FAILED" / "RESET FAILED" on this host. JSON/CSV downloads of the
+browser's own league still work.
+
+### Auto-deploy on every push (GitHub Actions)
+
+`.github/workflows/deploy-worker.yml` rebuilds `dist/` and runs `wrangler deploy` on every push to the game
+branch (and from the Actions tab), so the workers.dev site tracks the branch like GitHub Pages does. It
+needs two repository secrets; until they exist it skips with a notice instead of failing:
+
+```sh
+# API token: https://dash.cloudflare.com/profile/api-tokens -> Create Token -> template "Edit Cloudflare Workers"
+#            (Account Resources: the one account; Zone Resources are not needed for workers.dev)
+gh secret set CLOUDFLARE_API_TOKEN --repo punkrockquantum/JRRToken        # paste the token
+gh secret set CLOUDFLARE_ACCOUNT_ID --repo punkrockquantum/JRRToken --body <32-hex id from `npx wrangler whoami`>
+gh workflow run deploy-worker.yml --repo punkrockquantum/JRRToken --ref cursor/token-quest-datacenter-game
+```
+
+The Worker's own secret (`GITHUB_TOKEN`) is set once with `wrangler secret put` and survives every deploy;
+`wrangler.toml` carries only plain variables (`PLAYERS_REPO`, `PLAYERS_BRANCH`, `ALLOWED_ORIGINS`, rate
+limits). The workflow pins `wranglerVersion: "4.151.1"`; bump it together with the local `npx wrangler@4`.
+
+### How dist/ is served
+
+- `npm run build:worker` = `node scripts/build-static.mjs --base= --intake=`: the normal static build with
+  no base path and no intake injection, into `dist/` (git-ignored). `wrangler.toml` points `[assets]
+  directory` at `../../dist`, `binding = "ASSETS"`, `not_found_handling = "404-page"` (unknown paths get
+  `dist/404.html` with a real 404, so the staff panel's probes stay honest) and
+  `run_worker_first = ["/api/*"]` (only the API reaches the script; the script's own fallback for other
+  paths is `env.ASSETS.fetch(request)`).
+- `dist/_headers` (from `deploy/static/_headers`) is parsed by Workers Static Assets, not uploaded: HTML,
+  JS and CSS are `no-store` (a redeploy shows on the next load) and the fonts are cached for a year.
+  Workers add `ETag` and `Cache-Control: public, max-age=0, must-revalidate` where `_headers` says
+  nothing. These rules apply to asset responses only; the API sets its own `no-store`.
+- Validate the config without deploying: `npm run build:worker && npx wrangler@4 deploy --dry-run
+  --outdir /tmp/tq-wrangler-dry -c deploy/intake-worker/wrangler.toml` (no login needed).
+
+### The player sheet
+
+- **Every game is a commit.** `POST /api/attempt` validates (same rules as the kiosk server), appends the
+  attempt to `players.json` and regenerates `PLAYERS.md`, and only then answers
+  `{ ok: true, attempts, best, latest, rank, players, newBest }`. A first-time player adds a Players row; a
+  returning player (same email, any letter case) has Attempts, Latest score, Best score and Last played
+  updated in place; the Attempts table always gains one row. There is no batching or "write later": if
+  GitHub cannot be written (three compare-and-swap tries with backoff) the Worker answers
+  `503 { ok: false, error: "store_unavailable" }`, `js/sync.js` keeps the attempt in the browser's queue and
+  re-sends it on the next game, page load or reconnect. The same applies while the `GITHUB_TOKEN` secret
+  is missing (`503 not_configured`): the game plays, nothing is lost, the sheet fills once the secret is set.
+- **The private repo is the sheet.** Open `PLAYERS.md` in `punkrockquantum/token-quest-players` on GitHub;
+  `players.json` is the raw list if you want to load it into Excel. Sample:
 
 ```md
 # Token Quest players
@@ -246,84 +321,54 @@ Updated 2026-10-16T14:12:03.000Z · 2 players · 3 games
 | 2026-10-16 14:05 | Ada Lovelace | ada@example.com | Chat + RAG | 900 |
 ```
 
-- **Nothing changes until you opt in.** Without the `INTAKE_URL` repository variable the Pages build is
-  the local-league demo described above (`/api/*` is 404, nothing is collected). The kiosk laptop is
-  untouched either way: `js/sync.js` only leaves its own origin when `window.TOKEN_QUEST_INTAKE` is
-  defined, and only `scripts/build-static.mjs` ever defines it (in `dist/index.html`, never in the
-  source).
+- **Pages too (optional).** The GitHub Pages copy collects nothing unless its build gets the Worker's
+  URL: `gh variable set INTAKE_URL --repo punkrockquantum/JRRToken --body https://tokenquest.<account-subdomain>.workers.dev`
+  then re-run `pages.yml`. `scripts/build-static.mjs` then injects
+  `<script>window.TOKEN_QUEST_INTAKE = "..."</script>` into `dist/index.html` and `js/sync.js` posts
+  cross-origin to the Worker, whose `ALLOWED_ORIGINS` already lists `https://punkrockquantum.github.io`.
+  `gh variable delete INTAKE_URL` + re-run switches it off again. The kiosk laptop is untouched either way:
+  `js/sync.js` only leaves its own origin when `window.TOKEN_QUEST_INTAKE` is defined, and only the
+  static build ever defines it.
 
-### Set it up (two logins: GitHub and Cloudflare)
-
-Everything below is prepared in the repo; nothing has been deployed yet.
-
-```sh
-# (a) the private repo that will hold the sheet (GitHub login #1)
-gh auth login
-gh repo create punkrockquantum/token-quest-players --private --add-readme
-
-# (b) a fine-grained token for that ONE repo: https://github.com/settings/personal-access-tokens/new
-#     Resource owner: punkrockquantum · Repository access: Only select repositories -> token-quest-players
-#     Repository permissions -> Contents: Read and write (Metadata: Read-only is added automatically)
-#     Expiration: a few days after the event. Copy it once; it is only ever pasted into the Worker secret.
-
-# (c) deploy the Worker (Cloudflare login #2; free plan is enough). Check PLAYERS_REPO and
-#     ALLOWED_ORIGINS in deploy/intake-worker/wrangler.toml first (defaults match this project).
-cd deploy/intake-worker
-npx wrangler login
-npx wrangler secret put GITHUB_TOKEN          # paste the PAT from (b)
-npx wrangler deploy                           # prints https://token-quest-intake.<account>.workers.dev
-curl -s https://token-quest-intake.<account>.workers.dev/api/health
-#     -> {"ok":true,"service":"token-quest-intake","repo":"punkrockquantum/token-quest-players",...}
-#        a 503 here means the token or repo name is wrong; nothing else needs fixing
-cd ../..
-
-# (d) tell the Pages build where the Worker is (repository variable, not a secret: the URL is public)
-gh variable set INTAKE_URL --repo punkrockquantum/JRRToken --body https://token-quest-intake.<account>.workers.dev
-
-# (e) rebuild and redeploy the site, then play one game and watch PLAYERS.md in the private repo
-gh workflow run pages.yml --repo punkrockquantum/JRRToken --ref cursor/token-quest-datacenter-game
-gh run watch --repo punkrockquantum/JRRToken
-```
-
-Optional smoke test straight at the Worker (then delete the row from `players.json` in the private
-repo; the next real game rewrites `PLAYERS.md`):
+Optional smoke test straight at the API (then delete the row from `players.json` in the private repo; the
+next real game rewrites `PLAYERS.md`):
 
 ```sh
-curl -s -X POST https://token-quest-intake.<account>.workers.dev/api/attempt \
+curl -s -X POST https://tokenquest.<account-subdomain>.workers.dev/api/attempt \
   -H 'Content-Type: application/json' \
   -d '{"name":"Test Player","email":"test@example.com","score":1,"consent":true,"consentAt":"2026-10-16T12:00:00Z"}'
 ```
 
-To switch collection off again: `gh variable delete INTAKE_URL --repo punkrockquantum/JRRToken` and
-re-run the workflow (the site goes back to the local-league demo), then `npx wrangler delete` in
-`deploy/intake-worker` and delete or archive the private repo.
+To take it all down: `npx wrangler delete -c deploy/intake-worker/wrangler.toml`, delete or archive the
+private repo, revoke the PAT (GitHub → Settings → Developer settings → Fine-grained tokens) and the
+Cloudflare API token.
 
 ### Privacy and limits
 
-- Emails live only in the private repo (and transiently in the Worker while it writes). The public
-  game repo, the Pages site, the Worker's logs and its commit messages never contain them; `GET
-  /api/league` returns names and scores only. Delete the private repo after the event, and revoke
-  the PAT (GitHub → Settings → Developer settings → Fine-grained tokens).
+- Emails live only in the private repo (and transiently in the Worker while it writes). This public game
+  repo, the workers.dev and Pages sites, the Worker's logs and its commit messages never contain them;
+  `GET /api/league` returns names and scores only. Delete the private repo after the event and revoke
+  the PAT.
 - The kiosk laptop's `data/` and Desktop workbook stay completely separate from this sheet: the booth
   posts to its own server, the hosted game posts to the Worker, and nothing merges them.
-- The Worker URL is public, so the limits matter: JSON only, 16 KB body cap, `consent` must be
-  literally `true`, the browser `Origin` must be on `ALLOWED_ORIGINS` (default
-  `https://punkrockquantum.github.io`), and each IP gets a token bucket (20 attempts and 60 reads per
-  minute by default). That bucket lives in the Worker's memory, so it is per IP *per isolate*: good
-  enough against a careless script, not a hard cap. For a hard cap add a WAF rate-limiting rule for
-  the Worker route in the Cloudflare dashboard. Remember a venue's Wi-Fi shares one public IP.
-- Anyone who finds the URL can still post a valid-looking row; junk is deleted by editing
-  `players.json` in the private repo. The same attempt re-posted by the browser's retry queue
-  (same email, `playedAt` and score) is recognised and not duplicated.
+- The URL is public, so the limits matter: JSON only, 16 KB body cap, `consent` must be literally `true`,
+  a browser `Origin` other than the site's own must be on `ALLOWED_ORIGINS`, and each IP gets a token
+  bucket (20 attempts and 60 reads per minute by default). That bucket lives in the Worker's memory, so
+  it is per IP *per isolate*: good enough against a careless script, not a hard cap. For a hard cap add a
+  WAF rate-limiting rule for the Worker in the Cloudflare dashboard. Remember a venue's Wi-Fi shares one
+  public IP.
+- Anyone who finds the URL can still post a valid-looking row; junk is deleted by editing `players.json`
+  in the private repo. The same attempt re-posted by the browser's retry queue (same email, `playedAt`
+  and score) is recognised and not duplicated.
 - GitHub's Contents API gives 5,000 requests an hour to the token; a game costs two to four. The free
-  Workers plan allows 100,000 requests a day and 10 ms of CPU per request, comfortable for thousands
-  of games; `players.json` grows about 400 bytes per game.
+  Workers plan allows 100,000 requests a day and 10 ms of CPU per request, comfortable for thousands of
+  games; `players.json` grows about 400 bytes per game.
 
 ### Verify locally
 
 ```sh
 npm run test:intake                                   # tests/intake.test.js + tests/sync.test.js
 for f in deploy/intake-worker/src/*.mjs; do node --check "$f"; done
-INTAKE_URL=https://token-quest-intake.example.workers.dev npm run build:static && grep TOKEN_QUEST_INTAKE dist/index.html
-npm run build:static && ! grep -q TOKEN_QUEST_INTAKE dist/index.html   # without INTAKE_URL nothing is injected
+npm run build:worker && ! grep -q TOKEN_QUEST_INTAKE dist/index.html   # same-origin build, nothing injected
+npx wrangler@4 deploy --dry-run --outdir /tmp/tq-wrangler-dry -c deploy/intake-worker/wrangler.toml
 ```
