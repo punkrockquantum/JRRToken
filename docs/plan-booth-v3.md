@@ -81,10 +81,16 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
       ~1,400; balance checks, results copy, star thresholds, plan and tests updated
       (commit 55cd45c: `tileGuard`/`budgetOf`/`affordableChoices` in js/steps.js, floor via `shapeScore` with a
       square-root knee at 450 so no ranking changes; naive/maxed now 100–126, typical 149–418, best 1,400)
-- [ ] C3 Accuracy sweep: ServiceFabric facts (10G/100G ports, 50 Mbps–100 Gbps, 15-day port SLA, minutes to
+- [x] C3 Accuracy sweep: ServiceFabric facts (10G/100G ports, 50 Mbps–100 Gbps, 15-day port SLA, minutes to
       live), cross connect, dark fibre physics, internet/peering assumptions, GPU specs, model bytes at FP8/FP4,
       users → demand, cloud IaaS rates, 4.9 µs/km, haversine, PUE; every unpublished number says "estimate" or
       "game" (learn text or a sourced code comment); a test scans player-facing price strings for the label
+      (commit 04a3f5a: tests/labels.test.js; cloud IaaS rates land with P4)
+- [ ] POWER (user: "always enough power providing the user gets the configuration right ... rack level power
+      draw is accurate"): per-metro power floor (70B on the least powerful rack at the smallest crowd fits every
+      metro offer; the middle crowd has a fitting GPU per metro with the right cooling), rack kW = nodes × node
+      max + ToR switching from the datasheets, cooling changes facility power via PUE only, nerd breakdown
+      "6 racks × 30 kW IT × PUE 1.38 = 248 kW facility", hall caps per cooling type, tests, balance re-run
 - [ ] Standing rule: after every commit `git push origin cursor/token-quest-datacenter-game` (Pages deploys
       from the branch, the kiosk serves the tree); only that branch, never force
 
