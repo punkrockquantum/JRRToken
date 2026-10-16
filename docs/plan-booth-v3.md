@@ -43,21 +43,46 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
       smoke walks the new step (650B-on-8-GPU fit tests land with the new GPUs in P5)
 - [x] Rebalance where the default model changed (code, drug, robot): `parCost`, `savingsPar`, BRAINS rack counts
 
-## P2 — More NVIDIA GPUs (both modes)
+## P2 — More NVIDIA GPUs (both modes) (commit `12552f1`)
 
-- [ ] Add to `PLATFORMS` with public specs (source URLs in comments): RTX PRO 6000 Blackwell Server Edition
+- [x] Add to `PLATFORMS` with public specs (source URLs in comments): RTX PRO 6000 Blackwell Server Edition
       (96 GB GDDR7, ~1.6 TB/s, 600 W; MGX 8-GPU air server, cost-effective inference tier), L40S (48 GB GDDR6,
       864 GB/s, 350 W; budget tier), HGX B300 ×8 single node (smaller rack option); GB200 / GB300 / Vera Rubin
       NVL72 already exist; every entry carries HBM/GDDR capacity, bandwidth, dense FP8/FP4 PFLOPS, power, cooling,
       estimated rack price and lead time (labelled)
-- [ ] Simple GPU step: six tiles, every NVIDIA platform the story can use (RTX PRO 6000 Blackwell Server ×8,
+- [x] Simple GPU step: six tiles, every NVIDIA platform the story can use (RTX PRO 6000 Blackwell Server ×8,
       HGX H100 ×2, HGX H200 ×2, HGX B300 ×6, GB200 NVL72 ×2, Vera Rubin NVL72 ×1; L40S / GB300 where sensible),
       each with the real name, a plain hint and the "included" / "needs liquid" tags; a 3×2 grid with the smaller
       tile style at desktop and iPad widths, no scroll at the four viewports, taps reachable, nothing clipped;
       nerd mode keeps the full list with specs and reference designs
-- [ ] Memory-bound decode makes the GDDR parts slower per GPU; RTX PRO 6000 wins only for small models with
+- [x] Memory-bound decode makes the GDDR parts slower per GPU; RTX PRO 6000 wins only for small models with
       modest users; the SMALL users tier makes the budget GPUs (RTX PRO 6000 / L40S / H100 ×2) the right answer
-- [ ] `scripts/balance.mjs` re-run: naive 0 / best ~1,400 / optima differ
+- [x] `scripts/balance.mjs` re-run: naive 0 / best ~1,400 / optima differ
+- [ ] P2b — NVIDIA DGX Spark (user request "Add in an option for an NVIDIA SPARK as the GPU"): a "DGX Spark
+      shelf" platform (16 desktop GB10 boxes on a shelf, 128 GB unified LPDDR5x at 273 GB/s each, ~1 PFLOP FP4
+      sparse / ~0.5 dense, ~170 W, $3,999 published a unit, ConnectX-7 pairs two so the NVLink domain is one) in
+      both the simple six-tile step and the nerd list; fits 70B/100B at FP4, never 650B; decode ~30× below an
+      H100 a unit, so it only wins the smallest crowd; coach says "a dev box, not for a crowd"; balance + tests
+
+## Corrections (user: "Some of the game logic is incorrect ... Service fabric is not worse latency than peering
+## and it is much better than public internet. It should be impossible to go completely over budget or get a
+## score of Zero. Ensure all the maths, numbers and info are very accurate.") — each its own commit, pushed
+
+- [ ] C1 Connectivity ordering end-to-end: for every story × metro set × leg, RTT(cross) ≤ RTT(fiber) ≤
+      RTT(fabric) ≤ RTT(peer) < RTT(internet), internet ≥ 2× fabric and ≥ +20 ms at ≥ 100 km; the ServiceFabric
+      tile's first-token time, stream label, GPU-idle and score are never worse than Peering for the same
+      story/location; tile and learn copy say it plainly; a test iterates stories × metros × simple wire tiles
+- [ ] C2 Budget guard: a tile whose pick would exceed the scenario budget is disabled with an "OVER BUDGET by $X"
+      tag and a learn line saying what to drop; defaults always affordable; nerd rack stepper / site designer clamp
+      at the budget; power and deadline stay soft consequences; the "can't afford" results path is unreachable.
+      Score floor 100: score = max(100, ...) so weak-but-legal builds land ~200–450, near-misses 700–1,100, best
+      ~1,400; balance checks, results copy, star thresholds, plan and tests updated
+- [ ] C3 Accuracy sweep: ServiceFabric facts (10G/100G ports, 50 Mbps–100 Gbps, 15-day port SLA, minutes to
+      live), cross connect, dark fibre physics, internet/peering assumptions, GPU specs, model bytes at FP8/FP4,
+      users → demand, cloud IaaS rates, 4.9 µs/km, haversine, PUE; every unpublished number says "estimate" or
+      "game" (learn text or a sourced code comment); a test scans player-facing price strings for the label
+- [ ] Standing rule: after every commit `git push origin cursor/token-quest-datacenter-game` (Pages deploys
+      from the branch, the kiosk serves the tree); only that branch, never force
 
 ## P3 — More Digital Realty connectivity, realistic calculations
 
