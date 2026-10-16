@@ -17,7 +17,7 @@ import { fetchLeague, recordAttempt } from "./sync.js"
 import { isMuted, loadMute, play, setMuted, unlock } from "./sound.js"
 import { spriteImg } from "./sprites.js"
 import { STORIES, brainPick, choicesToBuild, maxMetros, nerdChoices, simpleChoices } from "./presets.js"
-import { BUILD_STEP_IDS, STEPS, STEP_IDS, applyTile, audienceSummary, jobBrief, modelLabel, nextStep, prevStep, qpuRelevant, simpleDefaults, stepIndex, stepTiles, stepValue, tileOn, untouchedSteps } from "./steps.js"
+import { BUILD_STEP_IDS, STEPS, STEP_IDS, applyTile, audienceSummary, jobBrief, modelLabel, nextStep, prevStep, qpuRelevant, simpleDefaults, stepIndex, stepTiles, stepValue, tileGuard, tileOn, untouchedSteps } from "./steps.js"
 import { canImprove, roundEntry, roundHint, roundLine } from "./rounds.js"
 
 const LEAGUE_KEY = "token-quest-league-v1"
@@ -538,10 +538,25 @@ function flashWhy(text) {
 }
 
 function pickTile(stepId, tile) {
+  /* The budget guard: a pick the scenario budget cannot pay for is refused, and the tile says what to drop. */
+  const guard = tileGuard(state.plan.useCase, stepId, tile, state.plan.choices, state.nerd)
+  if (guard.blocked) {
+    play("error")
+    flashWhy(guard.line)
+    render()
+    return
+  }
   play("select")
-  state.plan.choices = applyTile(state.plan.useCase, stepId, tile.id, state.plan.choices)
+  state.plan.choices = applyTile(state.plan.useCase, stepId, tile.id, state.plan.choices, state.nerd)
   syncBuild()
   flashWhy(tile.why)
+  render()
+}
+
+/** A nerd-only patch (reference design, site plan) that the budget cannot pay for is refused the same way. */
+function refusePick(overBy) {
+  play("error")
+  flashWhy(`Over the budget by ${formatMoney(overBy)}: pick a cheaper design, or fewer racks, first.`)
   render()
 }
 
@@ -691,18 +706,20 @@ function bindTile(tile, onPick, learn) {
   })
 }
 
-function picture({ key, art, tag = "", label, hint = "", rows = null, on, lines, nerd = "", onPick, scale = 2, locked = false, extra = null }) {
+function picture({ key, art, tag = "", label, hint = "", rows = null, on, lines, nerd = "", onPick, scale = 2, locked = false, blocked = false, extra = null }) {
   const learn = { title: label, lines, nerd }
+  /* A blocked tile keeps its tap (it explains itself) and its hold-to-learn, but reads as not selectable. */
   const tile = el("button", {
     type: "button",
-    class: `tile${on ? " on" : ""}${locked ? " locked" : ""}`,
+    class: `tile${on ? " on" : ""}${locked ? " locked" : ""}${blocked ? " over" : ""}`,
     "data-key": key,
     "data-nerd": nerd || null,
     "aria-pressed": on ? "true" : "false",
+    "aria-disabled": blocked ? "true" : null,
   }, [
     el("span", { class: "tile-art" }, [spriteImg(art, scale)]),
     el("span", { class: "tile-copy" }, [
-      tag ? el("span", { class: "tile-tag", text: tag }) : null,
+      tag ? el("span", { class: `tile-tag${blocked ? " over" : ""}`, text: tag }) : null,
       el("span", { class: "tile-title", text: label }),
       hint ? el("span", { class: "tile-hint", text: hint }) : null,
       rows?.length
@@ -852,19 +869,22 @@ function stepPanel(stepId, result) {
   const isOn = (tile) => tileOn(id, stepId, tile, choices)
   const wraps = tiles.map((tile) => {
     const impact = stepId === "wires" ? wireImpact(id, choices, tile.id, state.nerd) : null
+    /* The budget guard: a tile the budget cannot pay for stays on the board, greyed, tagged with the shortfall. */
+    const guard = tileGuard(id, stepId, tile, choices, state.nerd)
     const wrap = picture({
       key: `${tile.row || stepId}-${tile.id}`,
       art: tile.art,
-      tag: tile.tag || "",
+      tag: guard.blocked ? guard.tag : tile.tag || "",
       label: tile.label,
       hint: tile.hint,
       rows: tile.rows || null,
       on: isOn(tile),
-      lines: tile.lines,
+      lines: guard.blocked ? [guard.line, ...tile.lines] : tile.lines,
       nerd: impact ? detailLine(impact.detail) : tile.nerd || "",
       onPick: () => (tile.locked ? gotoStep(nextStep(stepId)) : pickTile(stepId, tile)),
       scale: state.nerd ? 2 : 3,
       locked: Boolean(tile.locked),
+      blocked: guard.blocked,
       extra: impact ? impactStrip(impact, tile.id) : null,
     })
     if (stepId === "wires" && tile.id === "fast" && state.nerd && isOn(tile)) {
@@ -943,22 +963,27 @@ function refarchPanel(result, selected) {
     const card = designCard(design, platform.id, hallId, gpus)
     /* A hotter or later box can tip a build over its power room or past the deadline: say so before the pick. */
     const alt = on ? result : evaluateBuild(id, { ...state.plan.build, refarch: design.id })
-    if (alt.overPower && !(on || result.overPower)) card.warn = "over the power room"
-    else if (alt.overBudget && !(on || result.overBudget)) card.warn = "over the budget"
+    /* The budget guard: a design the budget cannot pay for is shown, tagged with the shortfall, and refused. */
+    const blocked = !on && alt.overBudget
+    if (blocked) card.warn = `OVER BUDGET by ${formatMoney(alt.finance)}`
+    else if (alt.overPower && !(on || result.overPower)) card.warn = "over the power room"
     else if (alt.lateWeeks > (result.lateWeeks || 0) && !on) card.warn = "past the deadline"
-    const learn = { title: `${card.title} · NVIDIA ${platform.name}`, lines: designLines(design, platform.id, hallId, gpus), nerd: "" }
+    const lines = designLines(design, platform.id, hallId, gpus)
+    if (blocked) lines.unshift(`Over the ${formatMoney(alt.budget)} budget by ${formatMoney(alt.finance)}: a cheaper design, or a smaller GPU tile, first.`)
+    const learn = { title: `${card.title} · NVIDIA ${platform.name}`, lines, nerd: "" }
     const button = el("button", {
       type: "button",
-      class: `ra-card${on ? " on" : ""}${card.warn ? " warn" : ""}`,
+      class: `ra-card${on ? " on" : ""}${card.warn ? " warn" : ""}${blocked ? " over" : ""}`,
       "data-key": `refarch-${design.id}`,
       "aria-pressed": on ? "true" : "false",
+      "aria-disabled": blocked ? "true" : null,
     }, [
       el("span", { class: "ra-head" }, [el("b", { text: design.letter }), el("span", { class: "ra-form", text: design.form })]),
       el("span", { class: "ra-line", text: card.spec }),
       el("span", { class: "ra-line", text: card.density }),
       el("span", { class: `ra-line ${card.warn ? "warn" : "dim"}`, text: card.warn ? `${card.lead} · ${card.warn}` : card.lead }),
     ])
-    bindTile(button, () => pick({ refarch: design.id }), learn)
+    bindTile(button, () => (blocked ? refusePick(alt.finance) : pick({ refarch: design.id })), learn)
     const ask = el("button", { type: "button", class: "learn-btn", "data-learn": `refarch-${design.id}`, "aria-label": `Learn about design ${design.letter}`, text: "?" })
     ask.addEventListener("pointerdown", (event) => event.stopPropagation())
     ask.addEventListener("click", (event) => {
@@ -1154,27 +1179,38 @@ function siteDesigner(result) {
   const sites = result.sites || []
   if (sites.length < 2 || !result.platform) return null
   const plans = currentPlans(result)
-  const commit = (next) => pick({
-    sitePlans: next.map((item) => ({ id: item.id, role: item.role, powerMW: Math.round(item.powerMW * 100) / 100 })),
-  })
+  const rounded = (next) => next.map((item) => ({ id: item.id, role: item.role, powerMW: Math.round(item.powerMW * 100) / 100 }))
+  const commit = (next) => pick({ sitePlans: rounded(next) })
+  /* The budget guard clamps the designer: more power means more racks, so a step the budget cannot pay for is disabled. */
+  const overBy = (next) => {
+    const alt = evaluateBuild(state.plan.useCase, { ...state.plan.build, sitePlans: rounded(next) })
+    return alt.overBudget && !result.overBudget ? alt.finance : 0
+  }
+  const stepButton = (text, label, next, extra = {}) => {
+    const shortfall = overBy(next)
+    return el("button", {
+      type: "button",
+      class: `step${extra.on ? " on" : ""}${shortfall ? " over" : ""}`,
+      text,
+      title: shortfall ? `OVER BUDGET by ${formatMoney(shortfall)}` : extra.title || null,
+      "aria-label": label,
+      "aria-pressed": extra.on == null ? null : extra.on ? "true" : "false",
+      disabled: Boolean(shortfall),
+      onclick: () => commit(next),
+    })
+  }
   return el("div", { class: "site-designer", "data-key": "site-designer" }, [
     el("h4", { text: "EACH SITE" }),
     el("p", { class: "fine", text: "Inference serves people. Training does not answer anyone. An edge site is a small cache, then one hop to an inference site." }),
     ...sites.map((site) => {
       const plan = plans.find((item) => item.id === site.id) || { role: "inference", powerMW: 0 }
+      const withSite = (patch) => plans.map((item) => (item.id === site.id ? { ...item, ...patch } : item))
       return el("div", { class: "site-plan" }, [
         el("b", { text: site.metro }),
         el("span", { class: "fine", text: `${plan.powerMW.toFixed(2)} MW` }),
-        el("button", { type: "button", class: "step", text: "−", "aria-label": `Less power in ${site.metro}`, onclick: () => commit(plans.map((item) => item.id === site.id ? { ...item, powerMW: Math.max(0, item.powerMW - 0.05) } : item)) }),
-        el("button", { type: "button", class: "step", text: "+", "aria-label": `More power in ${site.metro}`, onclick: () => commit(plans.map((item) => item.id === site.id ? { ...item, powerMW: item.powerMW + 0.05 } : item)) }),
-        ...SITE_ROLES.map(([role, label, hint]) => el("button", {
-          type: "button",
-          class: `step${plan.role === role ? " on" : ""}`,
-          text: label,
-          title: hint,
-          "aria-pressed": plan.role === role ? "true" : "false",
-          onclick: () => commit(plans.map((item) => item.id === site.id ? { ...item, role } : item)),
-        })),
+        stepButton("−", `Less power in ${site.metro}`, withSite({ powerMW: Math.max(0, plan.powerMW - 0.05) })),
+        stepButton("+", `More power in ${site.metro}`, withSite({ powerMW: plan.powerMW + 0.05 })),
+        ...SITE_ROLES.map(([role, label, hint]) => stepButton(label, `${label} in ${site.metro}`, withSite({ role }), { on: plan.role === role, title: hint })),
       ])
     }),
     result.powerThrottle < 1 ? el("p", { class: "fine", text: "Too much power for this hall, so the racks slow down." }) : null,

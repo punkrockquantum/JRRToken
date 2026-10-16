@@ -7,6 +7,8 @@ import {
   LATE_FLOOR,
   LATE_PER_WEEK,
   POWER_PRICE,
+  SCORE_FLOOR,
+  SCORE_KNEE,
   STAR_POINTS,
   blendScore,
   evaluateBuild,
@@ -113,7 +115,7 @@ test("a liquid rack in the air hall still runs, throttled, with a warning", () =
   assert.equal(air.ok, true)
   assert.ok(air.warnings.some((line) => /overheat|liquid cooling/i.test(line)))
   assert.ok(air.throughput < liquid.throughput * 0.25)
-  assert.ok(air.score < liquid.score / 3)
+  assert.ok(air.rawScore < liquid.rawScore / 3, "before the floor, the throttled rack scores under a third")
   const tip = coach(air)
   assert.equal(tip.title, "THIS WILL HURT")
   assert.match(tip.text, /overheat|liquid cooling/i)
@@ -140,7 +142,7 @@ test("a giant model spills off one NVLink domain on HGX H100", () => {
   assert.equal(h100.fits, false)
   assert.equal(h100.bottleneck, "fit")
   assert.equal(nvl.fits, true)
-  assert.ok(nvl.score > h100.score * 3)
+  assert.ok(nvl.rawScore > h100.rawScore * 3)
 })
 
 test("RAG without a vector index or file store is slow and poorly grounded", () => {
@@ -151,7 +153,7 @@ test("RAG without a vector index or file store is slow and poorly grounded", () 
   assert.equal(local.quality, 0.55)
   assert.equal(vector.slaMet, true)
   assert.ok(vector.ttft < local.ttft)
-  assert.ok(vector.score > local.score * 3)
+  assert.ok(vector.rawScore > local.rawScore * 3)
   assert.equal(local.leak, "store")
 })
 
@@ -212,14 +214,14 @@ test("only a missing use case or GPU is an error", () => {
   assert.equal(bare.score, 0)
 })
 
-test("max-everything overshoots the budget for every use case, scores zero, and shows a dollar loss", async () => {
+test("max-everything overshoots the budget for every use case, sits on the score floor, and shows a dollar loss", async () => {
   const { maxedBuild } = await import("../js/balance.js")
   for (const useCase of USE_CASES) {
     const r = evaluateBuild(useCase.id, maxedBuild(useCase.id))
     assert.equal(r.ok, true, useCase.id)
     assert.ok(r.budgetSpend > r.budget, useCase.id)
     assert.ok(r.overBudget, useCase.id)
-    assert.equal(r.score, 0, useCase.id)
+    assert.ok(r.score >= SCORE_FLOOR && r.score <= 450, `${useCase.id} over-budget score ${r.score} sits in the floor band`)
     assert.ok(r.annualSavings > -5e9 && r.annualSavings < 5e9, `${useCase.id} saving ${r.annualSavings}`)
     const year = 365 * 24
     const peopleYear = (r.hourlyCost - r.amort - r.finance) * year + r.finance * 1.25
@@ -551,7 +553,7 @@ test("all-internet is worst for chat and agents, and still viable for drug disco
   const drugPub = evaluateBuild("drug", { ...routedHw, hall: "R", platform: "b300", racks: 4, data: "file", kv: false, orca: true, routes: routed("drug", { lab: "public", orca: "cross", control: "off" }, { vc: 1 }) })
   const drugFat = evaluateBuild("drug", { ...routedHw, hall: "R", platform: "b300", racks: 4, data: "file", kv: false, orca: true, routes: routed("drug", { lab: "fabric", orca: "cross", control: "off" }, { vc: 100 }) })
   assert.ok(drugPub.score > 0)
-  assert.ok(drugPub.score > pub.score * 5, "all-internet still works for bulk, latency-insensitive drug data")
+  assert.ok(drugPub.rawScore > pub.rawScore * 5, "all-internet still works for bulk, latency-insensitive drug data")
   assert.equal(drugPub.bandwidthCapped, true)
   assert.equal(drugPub.publicTrips, 0)
   assert.ok(drugPub.score < drugFat.score)

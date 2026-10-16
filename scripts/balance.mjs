@@ -12,7 +12,7 @@ const metros = (choices) => (choices.metros || []).map(metroName).join("+")
 
 /* ---------- The simple board: every metro set × 3 GPUs × 3 halls × 3 memory × 3 connections × 3 storage × QPU ---------- */
 
-console.log("Simple board (nerd off): naive = Vera Rubin + air + public internet on the home metro, maxed = widest metro set + the last tile of every step, typical = opening picture, best = top of the whole simple space")
+console.log("Simple board (nerd off): naive = Vera Rubin + air + public internet on the home metro, maxed = widest metro set + the last tile of every step, typical = opening picture, best = top of the whole simple space. Scores are floored at 100 (the board's budget guard never offers naive or maxed; they are scored here with the guard off).")
 console.log("\n| Story | Combos | Naive | Maxed | Typical | Best | Best tiles | Within 2% | Location near-misses (best per metro set) |")
 console.log("|---|---:|---:|---:|---:|---:|---|---:|---|")
 const bests = {}
@@ -38,7 +38,7 @@ for (const useCase of USE_CASES) {
   console.log(`| ${useCase.name} | ${scored.length} | ${naive} | ${maxed} | ${typical} | ${best.result.score} | ${describeChoices(id, best.choices)} | ${near.length} | ${locationMisses} |`)
 }
 
-console.log("\nChecks: best 1,400 and 1-2 within 2%; maxed ≤ 300; naive 0; a near-miss in 700–1,100; optima differ in ≥ 2 of 5 decisions between any two stories")
+console.log("\nChecks: best 1,400 and 1-2 within 2%; maxed and naive in the 100–450 floor band (no build scores 0); a near-miss in 700–1,100; optima differ in ≥ 2 of 5 decisions between any two stories")
 for (const useCase of USE_CASES) {
   const id = useCase.id
   const simple = (choices) => evaluateBuild(id, choicesToBuild(id, choices, false))

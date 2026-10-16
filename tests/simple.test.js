@@ -5,7 +5,7 @@ import test from "node:test"
 import { fileURLToPath } from "node:url"
 import { PLATFORMS, SITES, USE_CASES, byId } from "../js/data.js"
 import { DR_FOOTER, bestChange, explainResult, headline } from "../js/explain.js"
-import { FIBER_MAX_KM, evaluateBuild, kmBetween } from "../js/model.js"
+import { FIBER_MAX_KM, SCORE_FLOOR, evaluateBuild, kmBetween } from "../js/model.js"
 import {
   COMBO,
   PRESET_IDS,
@@ -86,8 +86,9 @@ test("connection tiles follow real-world order: public < peering < ServiceFabric
       assert.equal(built[0].slaMet, true)
       assert.ok(built[0].pMiss < 0.05, `batch work is not SLA-killed (${built[0].pMiss})`)
     } else assert.ok(cheap < peer, `${id} public ${cheap} vs peering ${peer}`)
-    if (id === "chat" || id === "code" || id === "robot") assert.ok(cheap < 50, `${id} public ${cheap} should be near zero for live users`)
-    if (id === "rag" || id === "research") assert.ok(cheap < 50, `${id} public ${cheap} should stay low`)
+    /* No build scores zero: the public internet for live users lands in the weak-but-legal band. */
+    if (id === "chat" || id === "code" || id === "robot") assert.ok(cheap >= SCORE_FLOOR && cheap <= 250, `${id} public ${cheap} should sit on the floor band for live users`)
+    if (id === "rag" || id === "research") assert.ok(cheap >= SCORE_FLOOR && cheap <= 250, `${id} public ${cheap} should stay low`)
     assert.ok(cheap < peer, `${id} public ${cheap} vs peering ${peer}`)
     assert.ok(peer < fast, `${id} peering ${peer} vs ServiceFabric ${fast}`)
     if (id === "drug") {
@@ -250,8 +251,8 @@ test("simple-space balance: story-specific optima, one winner, max-everything an
     const naive = simpleScore(id, combo(id, { brains: "rubin", home: "cool", wires: "cheap", library: "none", ...memoryChoices("off") })).score
     const maxed = simpleScore(id, combo(id, { metros: widest, brains: "rubin", home: "super", wires: "fast", library: "smart", helper: true, ...memoryChoices("plus") })).score
     const typical = simpleScore(id, simpleDefaults(id)).score
-    assert.equal(naive, 0, `${id} naive ${naive}`)
-    assert.ok(maxed <= 300, `${id} max everything ${maxed}`)
+    assert.ok(naive >= SCORE_FLOOR && naive <= 450, `${id} naive ${naive}`)
+    assert.ok(maxed >= SCORE_FLOOR && maxed <= 450, `${id} max everything ${maxed}`)
     const [lo, hi] = expected[id].typical
     assert.ok(typical >= lo && typical <= hi, `${id} typical ${typical} outside ${lo}-${hi}`)
     const near = scored.filter((item) => item.score >= best.score * 0.98)

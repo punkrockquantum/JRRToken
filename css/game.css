@@ -363,6 +363,15 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .tile:hover:not(:disabled) { background: var(--panel-2); }
 .tile.on { border-color: var(--yellow); background: #34345e; }
 .tile:disabled { opacity: 0.6; }
+/* The budget guard: a tile the budget cannot pay for stays readable but reads as not selectable. */
+.tile.over { border-style: dashed; border-color: #7a3f55; background: #24202e; cursor: not-allowed; }
+.tile.over:hover { background: #24202e; }
+.tile.over .tile-art, .tile.over .tile-rows, .tile.over .impact { opacity: 0.45; filter: saturate(0.3); }
+.tile.over .tile-title, .tile.over .tile-hint { color: var(--muted); }
+.tile-tag.over { color: #ff8da1; font-weight: bold; }
+.ra-card.over { border-style: dashed; border-color: #7a3f55; opacity: 0.75; cursor: not-allowed; }
+.ra-card.over .ra-line.warn { color: #ff8da1; }
+.site-plan .step.over, .site-plan .step:disabled { opacity: 0.45; cursor: not-allowed; border-style: dashed; }
 .tile-art { display: flex; align-items: center; min-height: 30px; }
 .tile-title { font-size: var(--fs-s); color: var(--yellow); line-height: 1.4; }
 .tile-product { font-size: 10px; color: var(--cyan); line-height: 1.35; overflow-wrap: anywhere; }

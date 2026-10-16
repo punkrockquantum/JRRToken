@@ -1,5 +1,5 @@
 /** Plain words for the people-power card and gauge. No DOM here, so the tests can read them. */
-import { formatMoney, lossPhrase } from "./model.js"
+import { SCORE_FLOOR, formatMoney, lossPhrase } from "./model.js"
 
 export function peopleCount(fte) {
   const n = Math.max(0, Math.round(Number(fte) || 0))
@@ -20,8 +20,9 @@ export function moneyWords(value) {
  */
 export function blockedReason(result) {
   if (!result?.ok) return null
+  // Defensive: the board's budget guard never lets a player reach an over-budget build.
   if (result.overBudget) return { kind: "budget", text: `You can't afford this: about ${formatMoney(result.finance)} over budget` }
-  if (result.score > 0) return null
+  if (result.score > SCORE_FLOOR) return null
   if (result.overPower) return { kind: "power", text: "Too much power for this hall" }
   if (result.lateWeeks > 0) {
     const weeks = Math.ceil(result.lateWeeks)

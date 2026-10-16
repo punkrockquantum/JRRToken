@@ -1,6 +1,6 @@
 /** Plain account of one finished build, plus the single tile change that would score higher. */
 import { NETWORKS, SITES, byId } from "./data.js"
-import { STAR_POINTS, evaluateBuild, formatMoney, formatScore } from "./model.js"
+import { SCORE_FLOOR, STAR_POINTS, evaluateBuild, formatMoney, formatScore } from "./model.js"
 import { choicesToBuild } from "./presets.js"
 import { peopleLead, savingsLine } from "./results.js"
 import { BUILD_STEP_IDS, allSimple, applyTile, describeChoices, qpuRelevant, stepTiles, stepValue } from "./steps.js"
@@ -309,7 +309,7 @@ export function headline(result, choices = {}, change = null) {
   if (result.platform?.cooling === "liquid" && result.hall?.cooling !== "liquid") {
     return `Your ${racks} overheated in the air-cooled hall${place}: these racks need liquid cooling to run at full speed.`
   }
-  if (result.overPower && result.score === 0) {
+  if (result.overPower && result.score <= SCORE_FLOOR) {
     return `Your ${racks} drew more power than the ${hall}${place} could feed, so the racks browned out.`
   }
   if (result.lateWeeks > 0) {

@@ -92,11 +92,31 @@ export function savingsFactorFor(annualSavings = 0, savingsPar = 0) {
   return Math.max(0.6, Math.min(1.5, raw))
 }
 
-/** Efficiency score, then a bounded bump or dip from money saved versus paying people. */
-export function blendScore({ par = 0, coverage = 0, slaFactor = 0, launchFactor = 1, costPerM = Infinity, savingsFactor = 1 } = {}) {
+/**
+ * No runnable build scores zero. Below the knee the raw efficiency score is compressed toward
+ * the floor (square root, continuous at the knee, strictly increasing, so every ranking holds):
+ * a weak-but-legal build reads as a few hundred points, the near-miss band and the 1,400 best
+ * are untouched. Game scoring, not a physical quantity.
+ */
+export const SCORE_FLOOR = 100
+export const SCORE_KNEE = 450
+
+/** Floor and compress a raw score. */
+export function shapeScore(raw) {
+  const value = Number.isFinite(raw) ? Math.max(0, raw) : 0
+  if (value >= SCORE_KNEE) return Math.round(value)
+  return Math.round(SCORE_FLOOR + (SCORE_KNEE - SCORE_FLOOR) * Math.sqrt(value / SCORE_KNEE))
+}
+
+/** The raw efficiency score before the floor: par over cost, times coverage, SLA, launch and the people-power factor. */
+export function rawScore({ par = 0, coverage = 0, slaFactor = 0, launchFactor = 1, costPerM = Infinity, savingsFactor = 1 } = {}) {
   if (!(Number.isFinite(costPerM) && costPerM > 0 && par > 0)) return 0
-  const base = (1000 * par * coverage * slaFactor * launchFactor) / costPerM
-  return Math.max(0, Math.round(base * savingsFactor))
+  return ((1000 * par * coverage * slaFactor * launchFactor) / costPerM) * savingsFactor
+}
+
+/** Efficiency score, then a bounded bump or dip from money saved versus paying people, then the floor. */
+export function blendScore(parts = {}) {
+  return shapeScore(rawScore(parts))
 }
 
 const HBM_HEADROOM = 0.7
@@ -1012,6 +1032,7 @@ function settle(out) {
   } else out.overPower = false
   out.budgetSpend = out.capex - (out.orcaCapex || 0)
   out.finance = Math.max(0, out.budgetSpend - (out.budget ?? BUDGET))
+  // Defensive: the board's budget guard never offers a pick that lands here (js/steps.js tileGuard).
   out.overBudget = out.finance > 0
   if (out.overBudget) add(`Over the budget by ${formatMoney(out.finance)}, so the overspend is financed at a punishing rate.`)
 
@@ -1055,7 +1076,7 @@ function settle(out) {
   out.humanMinutes = work?.humanMinutes || 0
   out.loadedCost = work?.loadedCost || 0
   out.tokensPerTask = work?.tokensPerTask || 0
-  out.score = blendScore({
+  out.rawScore = rawScore({
     par,
     coverage: out.coverage,
     slaFactor: out.slaFactor,
@@ -1063,6 +1084,7 @@ function settle(out) {
     costPerM: out.costPerM,
     savingsFactor: out.savingsFactor,
   })
+  out.score = shapeScore(out.rawScore)
   out.points = out.score
   if (out.throughput > out.demand * 1.6 && out.bottleneck === "met") out.bottleneck = "oversized"
   out.leak = efficiencyLeak(out)

@@ -6,8 +6,8 @@
  */
 import { AUDIENCES, DATA_HOMES, DOES, HALLS, JOBS, KV_TIER, MODELS, ORCA, PLATFORMS, SITES, USER_BASES, USER_TIER_IDS, USE_CASES, byId, dataHomeFor, resolveUseCase, usersTier } from "./data.js"
 import { dataTrips } from "./latency.js"
-import { formatMoney, formatTokens, metroOffers, scenarioFor } from "./model.js"
-import { COMBO, NERD_IDS, SIMPLE_IDS, brainPick, brainsId, cleanMetros, defaultChoices, maxMetros, memoryChoices, memoryTile, metroSets, modelPicks, nerdBrainIds, simpleBrainIds, wireIds } from "./presets.js"
+import { evaluateBuild, formatMoney, formatTokens, metroOffers, scenarioFor } from "./model.js"
+import { COMBO, NERD_IDS, SIMPLE_IDS, brainPick, brainsId, choicesToBuild, cleanMetros, defaultChoices, maxMetros, memoryChoices, memoryTile, metroSets, modelPicks, nerdBrainIds, simpleBrainIds, wireIds } from "./presets.js"
 import { designFor } from "./refarch.js"
 
 export const STEPS = [
@@ -588,8 +588,13 @@ export function stepValue(useCaseId, stepId, choices = {}) {
   return null
 }
 
-/** The choice set after picking one tile on one step. A metro toggles; the last metro stays. */
-export function applyTile(useCaseId, stepId, tileId, choices = {}) {
+/**
+ * The choice set after picking one tile on one step. A metro toggles; the last metro stays.
+ * The first step sets the budget: a smaller crowd that leaves the build over budget snaps the
+ * GPU (then the rest of the board) back to something the new budget affords, so the hidden
+ * defaults are always affordable. `nerd` says which board's tiles count.
+ */
+export function applyTile(useCaseId, stepId, tileId, choices = {}, nerd = false) {
   const base = { ...defaultChoices(useCaseId), ...choices }
   if (stepId === "location") {
     const current = cleanMetros(useCaseId, base.metros)
@@ -603,8 +608,75 @@ export function applyTile(useCaseId, stepId, tileId, choices = {}) {
   const tile = stepTiles(useCaseId, stepId, true, base).find((item) => item.id === tileId) || stepTiles(useCaseId, stepId, false, base).find((item) => item.id === tileId)
   const next = tile ? { ...base, ...tile.patch } : base
   /* A reference architecture belongs to one platform: a new GPU tile drops a design built for another. */
-  if (stepId === "gpu" && next.refarch && !designFor(brainPick(useCaseId, next.brains).platform, next.refarch)) delete next.refarch
-  return next
+  if (stepId === "gpu") dropForeignDesign(useCaseId, next)
+  return stepId === "model" ? affordableChoices(useCaseId, next, nerd) : next
+}
+
+function dropForeignDesign(useCaseId, choices) {
+  if (choices.refarch && !designFor(brainPick(useCaseId, choices.brains).platform, choices.refarch)) delete choices.refarch
+  return choices
+}
+
+/** The spend one choice set makes against its scenario budget, on the simple or the nerd board. */
+export function budgetOf(useCaseId, choices = {}, nerd = false) {
+  const result = evaluateBuild(useCaseId, choicesToBuild(useCaseId, choices, nerd))
+  return { spend: result.budgetSpend || 0, budget: result.budget || 0, over: Boolean(result.overBudget), overBy: result.finance || 0 }
+}
+
+/**
+ * A choice set the budget affords: the set itself when it already does, else the cheapest GPU
+ * tile (the lists run cheapest first) that fits with the rest of the board as it is, else the
+ * opening picture at this model and crowd with the cheapest GPU that fits.
+ */
+export function affordableChoices(useCaseId, choices = {}, nerd = false) {
+  if (!budgetOf(useCaseId, choices, nerd).over) return choices
+  const brains = nerd ? nerdBrainIds(useCaseId) : simpleBrainIds(useCaseId)
+  for (const id of brains) {
+    const next = dropForeignDesign(useCaseId, { ...choices, brains: id })
+    if (!budgetOf(useCaseId, next, nerd).over) return next
+  }
+  const opening = { ...defaultChoices(useCaseId), ...modelPicks(useCaseId, choices) }
+  for (const id of brains) {
+    const next = { ...opening, brains: id }
+    if (!budgetOf(useCaseId, next, nerd).over) return next
+  }
+  return choices
+}
+
+/* The steps a blocked tile's advice looks at for something to drop, biggest ticket first. */
+const DROP_ORDER = ["gpu", "memory", "storage", "qpu", "cooling", "wires", "location"]
+
+/**
+ * The budget guard on one tile: what picking it now would spend. A tile whose pick would go
+ * over the scenario budget is blocked: the board still shows it, tagged OVER BUDGET by the
+ * shortfall, with a line saying what to drop, and refuses the tap. The first step sets the
+ * budget and is never blocked; a tile that is already on is the build itself and is never blocked.
+ */
+export function tileGuard(useCaseId, stepId, tile, choices = {}, nerd = false) {
+  if (stepId === "model" || !tile || tile.locked || tileOn(useCaseId, stepId, tile, choices)) return { blocked: false }
+  const next = applyTile(useCaseId, stepId, tile.id, choices, nerd)
+  const money = budgetOf(useCaseId, next, nerd)
+  if (!money.over) return { blocked: false, ...money }
+  return { blocked: true, ...money, tag: `OVER BUDGET by ${formatMoney(money.overBy)}`, line: dropLine(useCaseId, stepId, next, money, nerd) }
+}
+
+/** One plain line for a blocked tile: the shortfall, and the first other-step change that would pay for it. */
+function dropLine(useCaseId, stepId, next, money, nerd) {
+  const lead = `Over the ${formatMoney(money.budget)} budget by ${formatMoney(money.overBy)}.`
+  for (const other of DROP_ORDER) {
+    if (other === stepId || (other === "qpu" && !qpuRelevant(useCaseId))) continue
+    const current = stepValue(useCaseId, other, next)
+    for (const alt of stepTiles(useCaseId, other, nerd, next)) {
+      if (alt.locked || alt.id === current || (other === "location" && !current.includes(alt.id))) continue
+      if (other === "location" && current.length <= 1) break
+      if (!budgetOf(useCaseId, applyTile(useCaseId, other, alt.id, next, nerd), nerd).over) {
+        const step = STEPS[stepIndex(other)]
+        const verb = other === "location" ? `drop ${alt.label}` : `pick ${alt.label}`
+        return `${lead} To afford it, ${verb} on the ${step.short} step.`
+      }
+    }
+  }
+  return `${lead} Nothing else on the board frees enough: this crowd's budget needs a cheaper GPU.`
 }
 
 /** True when a tile is the one a choice set is on: metros toggle, the first step has two rows. */

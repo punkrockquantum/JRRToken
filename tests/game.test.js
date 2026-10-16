@@ -5,7 +5,7 @@ import test from "node:test"
 import { fileURLToPath } from "node:url"
 import { maxedBuild, searchBuilds, typicalBuild } from "../js/balance.js"
 import { DOES, ORCA, USE_CASES } from "../js/data.js"
-import { evaluateBuild } from "../js/model.js"
+import { SCORE_FLOOR, evaluateBuild } from "../js/model.js"
 import { allPresets, choicesToBuild, defaultChoices, expertChoices } from "../js/presets.js"
 import { blockedReason, peopleLead, savingsLine } from "../js/results.js"
 import { plainCoach } from "../js/coach.js"
@@ -13,13 +13,13 @@ import { plainCoach } from "../js/coach.js"
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const main = readFileSync(join(root, "js/main.js"), "utf8")
 
-test("balance: naive scores zero, a typical first try is mid-table, and a thoughtful build wins", () => {
+test("balance: naive sits on the score floor, a typical first try is mid-table, and a thoughtful build wins", () => {
   for (const useCase of USE_CASES) {
     const list = searchBuilds(useCase.id)
     const best = list[0].result
     const naive = evaluateBuild(useCase.id, maxedBuild(useCase.id))
     const typical = evaluateBuild(useCase.id, typicalBuild(useCase.id))
-    assert.equal(naive.score, 0, `${useCase.id}: max racks of the newest GPU busts the budget`)
+    assert.ok(naive.score >= SCORE_FLOOR && naive.score <= 450, `${useCase.id}: max racks of the newest GPU busts the budget (${naive.score})`)
     assert.ok(naive.overBudget && (naive.overPower || naive.lateWeeks > 0), `${useCase.id}: naive also busts power or the deadline`)
     assert.ok(naive.profit < 0, useCase.id)
     assert.ok(typical.score > 0 && typical.score < best.score, useCase.id)
@@ -98,7 +98,7 @@ test("picture presets map onto builds, and the preset board stays in the scoring
     const expert = evaluateBuild(useCase.id, nerd(useCase.id, expertChoices(useCase.id)))
     const typical = evaluateBuild(useCase.id, nerd(useCase.id, defaultChoices(useCase.id)))
     const huge = evaluateBuild(useCase.id, nerd(useCase.id, { ...expertChoices(useCase.id), brains: "huge" }))
-    assert.equal(huge.score, 0, `${useCase.id} huge`)
+    assert.ok(huge.score >= SCORE_FLOOR && huge.score <= 450, `${useCase.id} huge ${huge.score}`)
     assert.ok(huge.overBudget, useCase.id)
     assert.ok(typical.score >= 0 && typical.score <= 1200 && typical.score < best.score * 0.8, `${useCase.id} typical ${typical.score}`)
     assert.ok(best.score >= 1390 && best.score <= 1430, `${useCase.id} preset best ${best.score}`)
@@ -187,7 +187,7 @@ test("an unaffordable build says why and does not claim the saving; an affordabl
   for (const useCase of USE_CASES) {
     const huge = evaluateBuild(useCase.id, choicesToBuild(useCase.id, { ...expertChoices(useCase.id), brains: "huge" }, true))
     const blocked = blockedReason(huge)
-    assert.equal(huge.score, 0, useCase.id)
+    assert.ok(huge.score >= SCORE_FLOOR && huge.score <= 450, useCase.id)
     assert.equal(blocked.kind, "budget", useCase.id)
     assert.match(blocked.text, /^You can't afford this: about \$[\d.]+M over budget$/, useCase.id)
     const saving = savingsLine(huge)
