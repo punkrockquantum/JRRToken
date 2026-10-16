@@ -1,7 +1,7 @@
 # Token Quest Worker (`tokenquest`)
 
 One Cloudflare Worker (free tier, no servers) that serves the whole game **and** its `/api` on one
-origin, `https://tokenquest.<account-subdomain>.workers.dev`, behind one team password:
+origin, `https://tokenquest.tokenquest.workers.dev`, behind one team password:
 
 - the gate: `src/gate.mjs` + the top of `src/worker.mjs`. Every request runs through the script
   (`run_worker_first = true`); without a valid `tq_session` cookie a visitor gets the 8-bit login page

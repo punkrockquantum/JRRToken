@@ -204,7 +204,7 @@ on the same origin, behind one team password (see "Team access"), with the playe
 separate **private** GitHub repo:
 
 ```
-https://tokenquest.<account-subdomain>.workers.dev
+https://tokenquest.tokenquest.workers.dev
   every request first passes the team-access gate (session cookie, else the login page)
   /, /js/*, /css/*, /assets/*, /404.html   Workers Static Assets, uploaded from dist/ (npm run build:worker)
   /login  /logout                          the gate (Worker secrets ACCESS_PASSWORD, SESSION_SECRET)
@@ -216,9 +216,14 @@ https://tokenquest.<account-subdomain>.workers.dev
     PLAYERS.md     the sheet, rewritten after EVERY game
 ```
 
+**Live now:** https://tokenquest.tokenquest.workers.dev is deployed with the team password and session
+secret set (open it, type the team password, play). Only the player sheet is still waiting for the
+`GITHUB_TOKEN` secret (step 1 below): until then `/api/health` says `"configured":false`, games play
+and the browser queues each result for the sheet.
+
 **About the name.** workers.dev hostnames are always `<worker>.<account-subdomain>.workers.dev`, so the
-URL is `https://tokenquest.<account-subdomain>.workers.dev`; a bare `https://tokenquest.workers.dev` is not
-something Cloudflare hands out. `npx wrangler deploy` prints the exact URL and `npx wrangler whoami` the
+URL is `https://tokenquest.tokenquest.workers.dev` (the account subdomain happens to be `tokenquest`
+too); a bare `https://tokenquest.workers.dev` is not something Cloudflare hands out. `npx wrangler deploy` prints the exact URL and `npx wrangler whoami` the
 account. To serve the game on a domain you own later, put the zone on Cloudflare and add to
 `deploy/intake-worker/wrangler.toml`:
 
@@ -245,15 +250,15 @@ npx wrangler secret put GITHUB_TOKEN                         # fine-grained PAT 
 cd ../..
 
 # 2. Build dist/ (same-origin, no base path) and deploy the game + API as one Worker
-npm run deploy:worker                     # prints https://tokenquest.<account-subdomain>.workers.dev
+npm run deploy:worker                     # prints https://tokenquest.tokenquest.workers.dev
 
 # 3. Check it
 npx wrangler whoami                       # account name, id and the account subdomain
-curl -s https://tokenquest.<account-subdomain>.workers.dev/api/health
+curl -s https://tokenquest.tokenquest.workers.dev/api/health
 #    -> {"ok":true,"service":"tokenquest","gate":true,"configured":true}
 #       "gate":false means ACCESS_PASSWORD is missing (the game is open);
 #       "configured":false means GITHUB_TOKEN is missing (games play, the sheet waits)
-curl -sI https://tokenquest.<account-subdomain>.workers.dev/ | head -1     # HTTP/2 200, the login page
+curl -sI https://tokenquest.tokenquest.workers.dev/ | head -1     # HTTP/2 200, the login page
 ```
 
 Play one game at the URL and watch `PLAYERS.md` in the private repo update (the first line reads
@@ -316,7 +321,7 @@ Colleagues go to the URL, type the team password once, and play. The password is
   same game: no server, so no password, and the gate's `SameSite=Lax` cookie never travels there, so its
   posts to the Worker's API are refused (`401`) even with `INTAKE_URL` set. Once the Worker is live either
   disable Pages (repo → Settings → Pages → Source: None) or make `pages.yml` publish a one-line
-  `index.html` with `<meta http-equiv="refresh" content="0; url=https://tokenquest.<account-subdomain>.workers.dev/">`
+  `index.html` with `<meta http-equiv="refresh" content="0; url=https://tokenquest.tokenquest.workers.dev/">`
   and nothing else, so old links land on the gated game.
 - **The kiosk laptop is unchanged.** `server/**` has no gate: the booth server serves the game to the
   venue's local network exactly as before.
@@ -373,7 +378,7 @@ Updated 2026-10-16T14:12:03.000Z · 2 players · 3 games
 ```
 
 - **Pages too (only while the gate is off).** The GitHub Pages copy collects nothing unless its build gets
-  the Worker's URL: `gh variable set INTAKE_URL --repo punkrockquantum/JRRToken --body https://tokenquest.<account-subdomain>.workers.dev`
+  the Worker's URL: `gh variable set INTAKE_URL --repo punkrockquantum/JRRToken --body https://tokenquest.tokenquest.workers.dev`
   then re-run `pages.yml`. `scripts/build-static.mjs` then injects
   `<script>window.TOKEN_QUEST_INTAKE = "..."</script>` into `dist/index.html` and `js/sync.js` posts
   cross-origin to the Worker, whose `ALLOWED_ORIGINS` already lists `https://punkrockquantum.github.io`.
@@ -387,7 +392,7 @@ Optional smoke test straight at the API (log in first so curl has the cookie; th
 `players.json` in the private repo; the next real game rewrites `PLAYERS.md`):
 
 ```sh
-URL=https://tokenquest.<account-subdomain>.workers.dev
+URL=https://tokenquest.tokenquest.workers.dev
 curl -s -o /dev/null -c /tmp/tq.jar -X POST "$URL/login" -H "Origin: $URL" --data-urlencode "password=$(cat)"   # type it, then Ctrl-D
 curl -s -b /tmp/tq.jar -X POST "$URL/api/attempt" -H 'Content-Type: application/json' \
   -d '{"name":"Test Player","email":"test@example.com","score":1,"consent":true,"consentAt":"2026-10-16T12:00:00Z"}'
