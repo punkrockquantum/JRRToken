@@ -31,13 +31,21 @@ jobs:
         uses: actions/configure-pages@v6
         with:
           enablement: true
-      - name: Build dist/
-        run: npm run build:static
-        env:
-          BASE_PATH: ${{ steps.pages.outputs.base_path }}
-          # Repository variable (Settings -> Secrets and variables -> Actions -> Variables), e.g.
-          # https://tokenquest.<account-subdomain>.workers.dev. Unset = nothing is collected.
-          INTAKE_URL: ${{ vars.INTAKE_URL }}
+      # The game itself is served, password-protected, from the Cloudflare Worker. GitHub Pages is
+      # static and cannot be gated, so this site only forwards visitors to the team URL.
+      - name: Build a redirect page
+        run: |
+          mkdir -p dist
+          cat > dist/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en"><head><meta charset="utf-8">
+          <meta http-equiv="refresh" content="0; url=https://tokenquest.tokenquest.workers.dev/">
+          <meta name="robots" content="noindex">
+          <title>Token Quest has moved</title>
+          <style>body{background:#0b0b1e;color:#f4f4ff;font-family:monospace;display:grid;place-items:center;height:100vh;margin:0}a{color:#ffd23f}</style>
+          </head><body><p>Token Quest now lives at <a href="https://tokenquest.tokenquest.workers.dev/">tokenquest.tokenquest.workers.dev</a>.</p></body></html>
+          HTML
+          cp dist/index.html dist/404.html
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
