@@ -179,7 +179,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 }
 .game-logo span:last-child { color: var(--lime); }
 /* The Digital Realty mark sits to the right of the two-line logo at the logo's own height, so it never moves anything else. */
-.logo-row { display: flex; align-items: center; gap: clamp(40px, 3.6vw, 58px); min-width: 0; }
+.logo-row { display: flex; align-items: center; gap: clamp(120px, 10.8vw, 174px); min-width: 0; }
 .brand-mark { flex: none; height: clamp(66px, 7.1vw, 116px); width: auto; aspect-ratio: 297 / 288; image-rendering: auto; }
 .subtitle { font-size: var(--fs); color: var(--cyan); margin: 4px 0 0; }
 .pitch { color: #f4f4ff; margin: 0; }
@@ -842,7 +842,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .eco-bar.detail .eco-part { min-height: 0; padding: 4px 8px; }
 .eco-bar.detail .eco-part b { min-width: 118px; }
 .eco-why { font-size: 9px; line-height: 1.35; color: var(--line); min-width: 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.rail { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
+.rail { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
 .rail-step { min-width: 0; }
 .rail-btn {
   width: 100%;
@@ -927,6 +927,14 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .imp-nerd { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; font-size: 9px; line-height: 1.35; color: var(--cyan); overflow-wrap: anywhere; }
 .screen.game .step-panel .tiles.count-4 .tile { padding-right: 36px; }
 .screen.game .step-panel .row-nerd { white-space: normal; -webkit-line-clamp: 3; display: -webkit-box; -webkit-box-orient: vertical; }
+/* MODEL & USERS: two rows of three tiles, each row under its own small heading, both fitting without a scroll. */
+.tile-row-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 0 0 auto; }
+.tile-row-group .row-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; margin: 0; font-size: 10px; color: var(--cyan); line-height: 1.3; min-width: 0; }
+.tile-row-group .row-title .row-nerd { flex: 1 1 240px; font-size: 9px; color: var(--muted); -webkit-line-clamp: 2; }
+.screen.game .step-panel.step-model .tile-row-group .tiles { flex: 0 0 auto; }
+.screen.game .step-panel.step-model .tile, .screen.game.nerd .step-panel.step-model .tile { min-height: 96px; }
+.screen.game .step-panel.step-model .tile-hint { -webkit-line-clamp: 2; }
+.screen.game .step-panel.step-model .tile-title { -webkit-line-clamp: 2; }
 /* Nerd GPU step: REFERENCE ARCHITECTURES, one small card per anonymised design, the platform's own first. */
 .refarch { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 0 0 auto; }
 .ra-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; min-width: 0; }
@@ -1078,6 +1086,14 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
   .screen.game.nerd .step-panel .tiles.count-5, .screen.game.nerd .step-panel .tiles.count-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* Tiles lie down: art on the left, words on the right, so two rows of tiles fit under the map. */
   .screen.game .step-panel .tile, .screen.game.nerd .step-panel .tile { min-height: 80px; flex-direction: row; align-items: center; gap: 10px; padding: 6px 44px 6px 10px; }
+  /* MODEL & USERS: two rows of three short tiles; the "?" carries the derivation, the hint the headline number. */
+  .screen.game .step-panel.step-model .tile, .screen.game.nerd .step-panel.step-model .tile { min-height: 64px; padding-top: 4px; padding-bottom: 4px; }
+  .screen.game .step-panel.step-model .tile-art { display: none; }
+  .screen.game .step-panel.step-model .tile-title { -webkit-line-clamp: 1; }
+  .screen.game .step-panel.step-model .tile-hint, .screen.game.nerd .step-panel.step-model .tile-hint { -webkit-line-clamp: 1; }
+  .screen.game .step-panel.step-model .tile-row-group .tiles { gap: 6px; }
+  .screen.game.nerd .step-panel.step-model .tile-tag { display: block; }
+  .screen.game.nerd .step-panel.step-model .row-title .row-nerd { -webkit-line-clamp: 1; }
   .screen.game .step-panel .tile-title { -webkit-line-clamp: 2; }
   .screen.game .step-panel .tile-hint, .screen.game.nerd .step-panel .tile-hint { -webkit-line-clamp: 3; } /* "Users: N km · Data: M km" needs three short lines here */
   .screen.game.nerd .step-panel .tile-tag { display: none; } /* the nerd line under the tiles carries the detail */
