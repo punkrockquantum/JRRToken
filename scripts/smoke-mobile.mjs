@@ -31,7 +31,7 @@ const VIEWPORTS = (process.env.VIEWPORTS || "390x844,430x932,820x1180").split(",
   const device = DEVICES[tag] || { dpr: width >= 700 ? 2 : 3, ua: width >= 700 ? IPAD_UA : IPHONE_UA, platform: width >= 700 ? "iPad" : "iPhone" }
   return { tag, width, height, ...device }
 })
-const browser = spawn(chrome, ["--headless=new", "--disable-gpu", "--no-sandbox", "--autoplay-policy=no-user-gesture-required", `--remote-debugging-port=${port}`, "--window-size=430,932", "about:blank"], { stdio: "ignore" })
+const browser = spawn(chrome, ["--headless=new", "--disable-gpu", "--no-sandbox", "--autoplay-policy=no-user-gesture-required", `--remote-debugging-port=${port}`, "--window-size=1000,1400", "about:blank"], { stdio: "ignore" })
 
 const BUILD_STEPS = ["model", "location", "gpu", "cooling", "memory", "wires", "storage", "qpu"]
 /** The sentences a phone shows at 14px; everything else that carries text is a label and may be 12px. */
@@ -45,10 +45,11 @@ const BODY = ".caption p, .pitch, .tagline, .consent-copy, .tile-title, .story-c
  * (5) nothing spills more than 2px out of its parent (positioned elements and the contents of a
  * scrolling strip excepted); (6) nothing sits beyond the left or right edge of the screen; (7) label
  * text never overflows without an ellipsis; (8) a tile or button fully on screen is not covered by
- * anything other than the pinned action bar or the open popover.
+ * anything other than a pinned action bar (the step's, the review's, the sheet's) or the open popover.
  */
 const AUDIT = `(() => {
   const out = []
+  const BODY = ${JSON.stringify(BODY)}
   const vw = innerWidth
   const vh = innerHeight
   const root = document.scrollingElement
@@ -118,7 +119,7 @@ const AUDIT = `(() => {
     if (r.t < 0 || r.b > vh || r.l < 0 || r.r > vw) continue
     const hit = document.elementFromPoint(r.l + r.w / 2, r.t + r.h / 2)
     if (!hit || hit === el || el.contains(hit)) continue
-    if (hit.closest('.step-nav, .review-go, .learn-pop')) continue
+    if (hit.closest('.step-nav, .review-go, .row.end, .learn-pop')) continue
     out.push('(8) ' + name(el) + ' ' + fmt(r) + ' covered by ' + name(hit))
   }
   return [...new Set(out)].join(' | ')
@@ -178,8 +179,8 @@ try {
   await send("Page.enable")
   await send("Runtime.enable")
 
-  let audited = 0
   for (const { tag, width, height, dpr, ua, platform } of VIEWPORTS) {
+    let audited = 0
     const shot = async (name, { full = false } = {}) => {
       if (!shots) return
       await sleep(250)
@@ -352,6 +353,9 @@ try {
 
     /* ---------- Results: a full-screen sheet that scrolls as one ---------- */
     const sheet = async (label, lastButton) => {
+      /* The sheet opens on the score (the focused button is pinned, so focusing it scrolls nothing). */
+      const scoreWhere = await evaluate(inView(".big-score"))
+      if (scoreWhere) throw new Error(`${tag} ${label}: the sheet should open on the score: .big-score ${scoreWhere}`)
       await bothModes(label)
       const sheetWidth = await evaluate(`document.getElementById('result').scrollWidth <= innerWidth + 1`)
       if (!sheetWidth) throw new Error(`${tag} ${label}: the results sheet is wider than the screen`)
