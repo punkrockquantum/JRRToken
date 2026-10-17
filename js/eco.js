@@ -6,7 +6,7 @@
  * amber means it works but a data-center decision is costing points. The first red part,
  * else the first amber part, is the one hint a player gets between rounds.
  */
-import { SITES, byId } from "./data.js"
+import { HALLS, SITES, byId } from "./data.js"
 import { formatMoney } from "./model.js"
 
 /** The build step a part's hint points at when the message does not name one. */
@@ -62,18 +62,21 @@ function coolingPart(r) {
     }
   }
   if (platform && hall && platform.rackKW > hall.maxRackKW) {
+    const contained = byId(HALLS, "C")
     return {
       state: "red",
       why: `${platform.name} runs at ${platform.rackKW} kW a rack, more than this hall's ${hall.maxRackKW} kW, so it throttles.`,
-      ask: `Would a hall rated for hotter racks keep them at full speed?`,
-      detail: `Throttled to 35%.`,
+      ask: contained && platform.rackKW <= contained.maxRackKW
+        ? `Would cold aisle containment keep these racks at full speed?`
+        : `Would a hall rated for hotter racks keep them at full speed?`,
+      detail: `Throttled to 35%. Containment takes up to ${contained?.maxRackKW ?? 30} kW a rack, a rear door ${byId(HALLS, "R")?.maxRackKW ?? 70} kW.`,
     }
   }
   if (platform?.cooling !== "liquid" && hall?.cooling === "liquid") {
     return {
       state: "amber",
       why: `Fan-cooled racks in the liquid hall still breathe air, so you pay the liquid fit-out and waste as much power as fans do.`,
-      ask: `Would an air or rear-door hall cool these racks for less, and sooner?`,
+      ask: `Would cold aisle containment or a rear-door hall cool these racks for less, and sooner?`,
       detail: `Effective PUE ${r.pue} on a ${hall.fitOutWeeks}-week fit-out.`,
     }
   }
@@ -91,8 +94,8 @@ function coolingPart(r) {
     return {
       state: "amber",
       why: `Fans spend ${Math.round((hall.pue - 1) * 100)}% of the power on cooling, and the room is nearly full.`,
-      ask: `Would a rear-door hall waste less on cooling and feed more of this power room to the GPUs?`,
-      detail: `PUE ${hall.pue} against 1.28 behind a rear door.`,
+      ask: `Would cold aisle containment waste less on cooling and feed more of this power room to the GPUs?`,
+      detail: `PUE ${hall.pue} against ${byId(HALLS, "C")?.pue ?? 1.29} with containment, ${byId(HALLS, "R")?.pue ?? 1.28} behind a rear door.`,
     }
   }
   return { state: "green", why: `${platform?.name || "The racks"} fit the ${hall?.name?.toLowerCase() || "hall"} at PUE ${r.pue}.`, ask: "", detail: `${platform?.rackKW || 0} kW a rack under a ${hall?.maxRackKW || 0} kW limit.` }

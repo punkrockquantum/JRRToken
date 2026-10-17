@@ -85,9 +85,9 @@ test("the roster runs from the L40S to Vera Rubin and the halls differ in coolin
   assert.equal(ORCA.kw, 6)
   assert.equal(ORCA.space, 2)
   assert.ok(PLATFORMS.filter((p) => p.domain === 72).every((p) => p.cooling === "liquid"))
-  assert.deepEqual(HALLS.map((h) => h.cooling), ["air", "air", "air", "liquid"])
-  assert.deepEqual(HALLS.map((h) => h.rackSpace), [24, 18, 20, 12])
-  assert.deepEqual(HALLS.map((h) => h.fitOutWeeks), [0, 6, 4, 10])
+  assert.deepEqual(HALLS.map((h) => h.cooling), ["air", "air", "air", "air", "liquid"])
+  assert.deepEqual(HALLS.map((h) => h.rackSpace), [24, 22, 18, 20, 12])
+  assert.deepEqual(HALLS.map((h) => h.fitOutWeeks), [0, 2, 6, 4, 10])
   assert.ok(!USE_CASES.some((u) => /train/i.test(u.name)))
 })
 
@@ -173,7 +173,7 @@ test("Vera Rubin's HBM4 bandwidth beats GB300 per megawatt on chat", () => {
 })
 
 test("idle capacity lowers efficiency: a rack past demand costs more per token", () => {
-  const right = evaluateBuild("robot", build({ hall: "A", platform: "h200", racks: 2, data: "local", kv: true, fabric: fabric({ dest: "partner", vc: 5 }) }))
+  const right = evaluateBuild("robot", build({ hall: "C", platform: "h200", racks: 2, data: "local", kv: true, fabric: fabric({ dest: "partner", vc: 5 }) }))
   const idle = evaluateBuild("robot", build({ platform: "gb200", racks: 2, data: "local", kv: true, fabric: fabric({ dest: "partner", vc: 5 }) }))
   assert.ok(idle.throughput > idle.demand * 1.3)
   assert.ok(right.throughput < right.demand * 1.3)

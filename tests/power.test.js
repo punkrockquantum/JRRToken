@@ -61,14 +61,17 @@ test("rack power is nodes × node kW + top-of-rack, from the datasheets, with a 
   assert.ok(byId(PLATFORMS, "l40s").rackKW >= 8 && byId(PLATFORMS, "l40s").rackKW <= 11, "two 8-GPU L40S nodes at 350 W a card")
   /* Hall caps per cooling type stay in the published bands and cover the air racks. */
   const cap = (id) => byId(HALLS, id).maxRackKW
-  assert.ok(cap("A") >= 10 && cap("A") <= 40 && cap("I") >= 30 && cap("I") <= 60 && cap("R") >= 40 && cap("R") <= 70 && cap("B") >= 100 && cap("B") <= 240)
-  for (const platform of PLATFORMS.filter((item) => item.cooling === "air")) assert.ok(platform.rackKW <= cap("A"), `${platform.id} fits the air hall's rack cap`)
+  assert.ok(cap("A") >= 10 && cap("A") <= 15 && cap("C") >= 15 && cap("C") <= 30 && cap("I") >= 30 && cap("I") <= 60 && cap("R") >= 40 && cap("R") <= 70 && cap("B") >= 100 && cap("B") <= 240)
+  /* Open air takes the small racks; cold aisle containment takes every air-cooled NVIDIA rack. */
+  for (const platform of PLATFORMS.filter((item) => item.cooling === "air")) assert.ok(platform.rackKW <= cap("C"), `${platform.id} fits the contained hall's rack cap`)
+  assert.ok(PLATFORMS.some((item) => item.cooling === "air" && item.rackKW <= cap("A")), "small racks fit open air")
+  assert.ok(PLATFORMS.some((item) => item.cooling === "air" && item.rackKW > cap("A")), "an HGX rack runs too hot for open air")
   for (const platform of PLATFORMS.filter((item) => item.cooling === "liquid")) assert.ok(platform.rackKW > cap("R") && platform.rackKW <= cap("B"), `${platform.id} needs the liquid hall`)
 })
 
 test("facility power is IT × PUE: cooling changes the PUE and nothing else, and the nerd line shows the sum", () => {
   const build = (home) => choicesToBuild("chat", { ...defaultChoices("chat"), home }, true)
-  const results = ["cool", "row", "rear", "super"].map((home) => evaluateBuild("chat", build(home)))
+  const results = ["cool", "aisle", "row", "rear", "super"].map((home) => evaluateBuild("chat", build(home)))
   for (const result of results) {
     assert.ok(Math.abs(result.facilityKW - result.itKW * result.pue) < 1e-6, `facility = IT × PUE at PUE ${result.pue}`)
     assert.equal(result.rackItKW, result.racks * result.platform.rackKW)
@@ -127,7 +130,7 @@ test("at every story × crowd × model × metro some GPU tile fits the power and
           const base = { ...opening, users, model, metros: [offer.id] }
           const fits = []
           for (const gpu of simpleBrainIds(useCase.id)) {
-            for (const home of ["cool", "rear", "super"]) {
+            for (const home of ["cool", "aisle", "super"]) {
               if (fitsChoices(useCase.id, { ...base, brains: gpu, home }, false)) fits.push(`${gpu}/${home}`)
             }
           }

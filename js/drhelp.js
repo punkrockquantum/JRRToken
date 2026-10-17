@@ -123,7 +123,10 @@ function capacityLine(result, id) {
     if (best && best.powerMult > minMult) text += ` Digital Realty would have advised ${metroName(best.id)}, where ${pct(best.powerMult)} of the scenario's power was on offer against ${pct(minMult)} in ${where}, or fewer racks.`
     else text += ` No metro on your short list offered more than ${pct(best?.powerMult || 1)} of the scenario's power: Digital Realty would have advised fewer racks for this ${room} room.`
   } else if (platform.cooling !== "liquid" && hall.cooling === "liquid") {
-    text = `Your ${rackWords} ${one ? "is" : "are"} air-cooled at ${each}: the ${air.name.toLowerCase()} at ${air.maxRackKW} kW a rack was ready now in ${where}, instead of the ${hallName}'s fit-out of ${weeks(hallPart?.weeks ?? hall.fitOutWeeks)}.`
+    /* The quickest air-family hall that takes this rack: open air for small racks, containment for HGX racks. */
+    const airFit = HALLS.filter((item) => item.cooling === "air" && item.maxRackKW >= platform.rackKW).sort((a, b) => a.fitOutWeeks - b.fitOutWeeks)[0] || air
+    const airReady = airFit.fitOutWeeks ? `ready in ${weeks(airFit.fitOutWeeks)}` : "ready now"
+    text = `Your ${rackWords} ${one ? "is" : "are"} air-cooled at ${each}: the ${airFit.name.toLowerCase()} at ${airFit.maxRackKW} kW a rack was ${airReady} in ${where}, instead of the ${hallName}'s fit-out of ${weeks(hallPart?.weeks ?? hall.fitOutWeeks)}.`
   } else {
     const fit = hall.fitOutWeeks ? `fitted out in ${weeks(hallPart?.weeks ?? hall.fitOutWeeks)}` : "built, powered and cooled before you arrived"
     text = `Your ${rackWords} at ${each} ${one ? "fits" : "fit"} the ${hallName} in ${where} at ${hall.maxRackKW} kW a rack, ${fit}.`

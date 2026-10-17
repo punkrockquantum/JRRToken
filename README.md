@@ -26,7 +26,8 @@ for a booth (see [HOSTING.md](HOSTING.md)).
    model and data live, and the three numbers the maths runs on, marked as the story's defaults until
    the next step is set) → Model size and number of users → GPU (NVIDIA only: DGX Spark, L40S,
    RTX PRO 6000 Blackwell Server, HGX H100/H200/B200/B300, GB200 NVL72, GB300 NVL72, Vera Rubin
-   NVL72) → Cooling (air, rear-door heat exchanger, in-row, direct liquid) → Memory (KV cache,
+   NVL72) → Cooling (open air, cold aisle containment, and in nerd mode in-row and rear-door heat
+   exchangers, then direct liquid; each tile shows the kW a rack it cools and its cooling overhead) → Memory (KV cache,
    CPU host memory) → Connectivity (Cross Connect, Metro Connect, ServiceFabric Link/Connection,
    ServiceFabric MCP, Digital Internet, cloud on-ramps, dark fiber, IX peering, public internet)
    → Storage → QPU (ORCA PT-3 for drug discovery) → Review → GO.
@@ -64,8 +65,12 @@ goes on a tap.
   132 kW, GB300 NVL72 142 kW, Vera Rubin NVL72 ~210 kW estimate; the 8-GPU RTX PRO 6000 and
   L40S nodes ~6.5 and ~4 kW estimates; a DGX Spark shelf 16 × ~170 W plus a small switch ≈ 3 kW).
   Cooling changes facility power only through the PUE
-  (air 1.38, Digital Realty's published portfolio figure; rear door, in-row and liquid are game
-  values). Every scenario, crowd and metro offers at least the **power floor**: one rack of the
+  (open air 1.38, Digital Realty's published portfolio figure; cold aisle containment 1.29, rear
+  door 1.28, in-row 1.32 and liquid 1.20 are game values). Rack caps follow the industry bands:
+  open air about 15 kW a rack, containment 15–30 kW (doors and panels keep the cold aisle apart
+  from the hot exhaust, a fit-out of about two weeks), in-row 55 kW, rear door 70 kW, direct
+  liquid 240 kW; an HGX rack runs too hot for open air and throttles there, and NVL72 and Vera
+  Rubin still need the liquid hall. Every story opens on containment. Every scenario, crowd and metro offers at least the **power floor**: one rack of the
   least powerful platform through the air PUE, rounded up to a 100 kW suite on a
   0.1 / 0.25 / 0.5 / 1 / 2 MW ladder. A smaller crowd scales the offer down to that floor and
   never below it, and a board the player has not touched always fits its offer. Going over is a

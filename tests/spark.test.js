@@ -98,7 +98,7 @@ test("it is the first of the six simple GPU tiles on every story, counted in box
     assert.ok(tile.lines.some((line) => /nvidia\.com\/dgx-spark/.test(line)), "cites nvidia.com/dgx-spark")
     assert.match(tile.why, /[Dd]ev boxes/)
     const nerdTile = stepTiles(useCase.id, "gpu", true, defaultChoices(useCase.id)).find((item) => item.id === "spark")
-    assert.match(nerdTile.nerd, /^128 GB LPDDR5x, 0\.273 TB\/s, 0\.5 PFLOPS FP4 dense, 3 kW a rack; \$64k a rack and a 6-week lead \(estimates\)\. \d+ racks? = \d+ kW IT, \d+ kW at PUE 1\.38 in the air hall$/, nerdTile.nerd)
+    assert.match(nerdTile.nerd, /^128 GB LPDDR5x, 0\.273 TB\/s, 0\.5 PFLOPS FP4 dense, 3 kW a rack; \$64k a rack and a 6-week lead \(estimates\)\. \d+ racks? = \d+ kW IT, \d+ kW at PUE 1\.29 in the contained hall$/, nerdTile.nerd)
     /* The shelf is always affordable, at every crowd. */
     for (const users of USER_TIER_IDS) assert.equal(build(useCase.id, { users, brains: "spark" }).overBudget, false, `${useCase.id} ${users}`)
   }

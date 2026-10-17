@@ -303,7 +303,7 @@ test("every step offers three tiles on the simple board, a short list of metros,
       assert.ok(comboTile.why.length > 0, `${id} COMBO why`)
     }
     assert.deepEqual(hasCombo(id), ["rag", "code", "research", "robot"].includes(id), `${id}: COMBO only where mixing pays`)
-    assert.deepEqual(stepTiles(id, "cooling").map((tile) => tile.label), ["Air-cooled hall", "Rear-door hall", "Liquid-cooled hall"], id)
+    assert.deepEqual(stepTiles(id, "cooling").map((tile) => tile.label), ["Air-cooled hall", "Cold aisle containment", "Liquid-cooled hall"], id)
     assert.deepEqual(stepTiles(id, "memory").map((tile) => tile.label), ["KV cache OFF", "KV cache ON", "KV cache ON + CPU host memory"], id)
     assert.deepEqual(stepTiles(id, "storage").map((tile) => tile.label), ["Local only", "File & object", "Vector index"], id)
     const gpus = stepTiles(id, "gpu")
@@ -343,7 +343,7 @@ test("every step offers three tiles on the simple board, a short list of metros,
 test("picking a tile patches the choice set; metros toggle up to the story's maximum and the last one stays", () => {
   for (const { id } of USE_CASES) {
     const defaults = simpleDefaults(id)
-    assert.deepEqual([defaults.brains, defaults.home, defaults.wires, defaults.library, defaults.memory, defaults.helper, defaults.hosts, defaults.mcp], [id === "robot" ? "b200" : "b300", "cool", "peer", "none", false, false, "standard", false], id)
+    assert.deepEqual([defaults.brains, defaults.home, defaults.wires, defaults.library, defaults.memory, defaults.helper, defaults.hosts, defaults.mcp], [id === "robot" ? "b200" : "b300", "aisle", "peer", "none", false, false, "standard", false], id)
     assert.equal(defaults.metros.length, 1, `${id} opens on one metro`)
     assert.deepEqual(untouchedSteps(id, defaults), BUILD_STEP_IDS.filter((stepId) => stepId !== "qpu" || qpuRelevant(id)), id)
     for (const stepId of ["gpu", "cooling", "memory", "wires", "storage"]) {
@@ -368,7 +368,7 @@ test("picking a tile patches the choice set; metros toggle up to the story's max
   assert.deepEqual([memoryOn.memory, memoryOn.hosts], [true, "grace"])
   assert.deepEqual(untouchedSteps("chat", memoryOn), ["location", "model", "gpu", "cooling", "wires", "storage"])
   assert.deepEqual(untouchedSteps("chat", applyTile("chat", "model", "medium", chat)), ["location", "gpu", "cooling", "memory", "wires", "storage"], "a smaller crowd counts as a touched first step")
-  assert.equal(describeChoices("chat", chat), "NVIDIA HGX B300 ×6, air cooling in London, with the KV cache off, on Peering + eyeballs, local only storage")
+  assert.equal(describeChoices("chat", chat), "NVIDIA HGX B300 ×6, cold aisle containment in London, with the KV cache off, on Peering + eyeballs, local only storage")
   assert.match(describeChoices("drug", applyTile("drug", "qpu", "orca", simpleDefaults("drug"))), /, with ORCA PT-3$/)
 })
 

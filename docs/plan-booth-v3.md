@@ -156,6 +156,11 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
       the scenario, workload they need to manage and geographic dependencies."): LOCATION (with WHO & WHERE) is
       step 1, MODEL & USERS step 2; the brief reads "default" numbers until step 2 is set; rail, review, smoke,
       tests and this plan follow
+- [x] COLD AISLE CONTAINMENT (user: "Under cooling, there should be an option for cold aisle containment."): a
+      fourth air hall (id C) between open air and the rear door: 15–30 kW a rack, PUE 1.29, 2-week fit-out (game
+      estimates; US DOE FEMP and Schneider WP 135 cited in data.js); open air drops to its real ~15 kW so an HGX rack
+      throttles there; simple board = air / containment / liquid, nerd adds in-row and rear door; every story opens on
+      containment; tests/cooling.test.js
 - [ ] C. MULTI-SELECT CONNECTIVITY with best-path routing (user: "Ensure that there is always an option to turn the
       connections green ... the user can select many different types of connection ... public internet, cross
       connect, ServiceFabric, ServiceFabricMCP (which allows agentic routing), Dark Fiber."): the NET step is a

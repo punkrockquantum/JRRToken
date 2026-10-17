@@ -1185,6 +1185,19 @@ export const DOES = {
   racks: "More racks serve more users, but every rack costs budget and power.",
 }
 
+/**
+ * The halls a build can sit in, coolest-to-run last. Rack caps per cooling family follow the
+ * industry bands: open air with no containment about 5 to 15 kW a rack; hot/cold aisle
+ * containment about 15 to 30 kW; in-row close-coupled coolers 30 to 60 kW; rear-door heat
+ * exchangers 40 to 70 kW; direct-to-chip liquid 100 kW and up. Containment separates the cold
+ * aisle in front of the racks from the hot exhaust behind them so supply air never mixes with
+ * return air; it is a fit-out of doors and panels, not new plant, so it costs little and takes
+ * days to a few weeks, and it typically takes 0.1 to 0.2 off the PUE of an open-air hall. Digital
+ * Realty's halls use containment widely. Sources: US DOE FEMP, Best Practices Guide for
+ * Energy-Efficient Data Center Design (https://www.energy.gov/eere/femp/best-practices-guide-energy-efficient-data-center-design),
+ * and Schneider Electric White Paper 135, Impact of Hot and Cold Aisle Containment on Data Center
+ * Temperature and Efficiency. The caps, fit-outs and all PUEs but the air hall's are game estimates.
+ */
 export const HALLS = [
   {
     id: "A",
@@ -1194,10 +1207,23 @@ export const HALLS = [
     itMW: 0.25,
     rackSpace: 24,
     fitOutWeeks: 0,
-    maxRackKW: 40,
+    maxRackKW: 15,
     pue: 1.38,
     learn:
-      "Your space in an air-cooled PlatformDIGITAL hall: 24 rack positions and ready now. This game cools a rack at 40 kW. A liquid rack still runs here, but it overheats. PUE 1.38 is Digital Realty's published portfolio figure, used here as this hall's overhead.",
+      "Your space in an air-cooled PlatformDIGITAL hall: 24 rack positions and ready now. Open air with no containment cools about 15 kW per rack (estimate). A hotter air rack throttles here, and a liquid rack overheats. PUE 1.38 is Digital Realty's published portfolio figure, used here as this hall's overhead.",
+  },
+  {
+    id: "C",
+    name: "Contained hall",
+    kind: "Cold aisle containment",
+    cooling: "air",
+    itMW: 0.3,
+    rackSpace: 22,
+    fitOutWeeks: 2,
+    maxRackKW: 30,
+    pue: 1.29,
+    learn:
+      "Doors and panels keep cold air in front of the racks and hot air behind them, so the fans work less. The servers stay air-cooled. This game allows about 15 to 30 kW per rack with a 2 week fit-out (estimates). PUE 1.29 is a game assumption: containment typically takes about 0.1 to 0.2 off an open-air hall. NVL72 and Vera Rubin still need direct liquid cooling.",
   },
   {
     id: "R",
@@ -1210,7 +1236,7 @@ export const HALLS = [
     maxRackKW: 70,
     pue: 1.28,
     learn:
-      "A water-cooled door on the rack captures the hot exhaust. The servers stay air-cooled. This game allows about 40 to 70 kW per rack, with a 6 week fit-out. PUE 1.28 is a game assumption. NVL72 and Vera Rubin still need direct liquid cooling.",
+      "A water-cooled door on the rack captures the hot exhaust at the rack. The servers stay air-cooled. This game allows about 40 to 70 kW per rack, with a 6 week fit-out. PUE 1.28 is a game assumption. NVL72 and Vera Rubin still need direct liquid cooling.",
   },
   {
     id: "I",

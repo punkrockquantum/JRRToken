@@ -39,10 +39,10 @@ test("the simple view offers three tiles a step, six NVIDIA platforms for the GP
   assert.deepEqual(PRESET_IDS.brains, ["spark", "rtx6000", "h200", "b300", "gb200", "vr"])
   assert.deepEqual(PRESET_IDS.legacyBrains, ["small", "medium", "big", "rubin"], "the old tile words are still understood")
   assert.deepEqual(PRESET_IDS.wires, ["cheap", "peer", "fast", "private", "combo"])
-  assert.deepEqual(PRESET_IDS.homes, ["cool", "rear", "super"])
+  assert.deepEqual(PRESET_IDS.homes, ["cool", "aisle", "super"])
   assert.ok(PRESET_IDS.nerdBrains.includes("huge"), "the HUGE trap stays a nerd-mode option")
   assert.deepEqual(PRESET_IDS.nerdBrains, [...PLATFORMS.map((platform) => platform.id), "huge"], "nerd mode lists the whole roster")
-  assert.deepEqual(SIMPLE_IDS, { home: ["cool", "rear", "super"], memory: ["off", "on", "plus"], wires: ["cheap", "peer", "fast"], library: ["none", "basic", "smart"] })
+  assert.deepEqual(SIMPLE_IDS, { home: ["cool", "aisle", "super"], memory: ["off", "on", "plus"], wires: ["cheap", "peer", "fast"], library: ["none", "basic", "smart"] })
   for (const { id } of USE_CASES) {
     assert.deepEqual(brainPick(id, "rubin"), { platform: "vr", racks: 1 }, id)
     assert.deepEqual(brainPick(id, "vr"), { platform: "vr", racks: 1 }, id)
@@ -144,7 +144,7 @@ test("nerd mode docks its panel as a column instead of covering the tiles", () =
 test("the memory step maps onto the KV tier and the hosts beside it, and the simple board snaps anything else onto its tiles", () => {
   for (const { id, orca } of USE_CASES) {
     const defaults = simpleDefaults(id)
-    assert.deepEqual([defaults.brains, defaults.home, defaults.wires, defaults.library, defaults.metros.length], [id === "robot" ? "b200" : "b300", "cool", "peer", "none", 1], id)
+    assert.deepEqual([defaults.brains, defaults.home, defaults.wires, defaults.library, defaults.metros.length], [id === "robot" ? "b200" : "b300", "aisle", "peer", "none", 1], id)
     assert.equal(defaults.memory, false, `${id} the opening picture has no memory tier`)
     assert.equal(defaults.helper, false, `${id} ORCA is a choice, not a default`)
     const build = choicesToBuild(id, defaults, false)
@@ -155,7 +155,7 @@ test("the memory step maps onto the KV tier and the hosts beside it, and the sim
     assert.equal(meddled.hosts, "standard", `${id} hosts snap onto the tile`)
     assert.equal(meddled.orca, false, `${id} ORCA snaps onto the tile`)
     assert.equal(meddled.platform, brainPick(id, "big").platform, `${id} HUGE snaps onto the big tile`)
-    assert.equal(meddled.hall, "R", `${id} in-row cooling snaps onto the rear-door hall`)
+    assert.equal(meddled.hall, "C", `${id} in-row cooling snaps onto cold aisle containment`)
     if (hasCombo(id)) {
       /* Own fibre snaps onto the COMBO tile, whose legs (and its MCP control leg where it has one) are the tile's own. */
       assert.equal(meddled.choices.wires, "combo", `${id} own fibre snaps onto COMBO`)
@@ -230,11 +230,11 @@ const STEP_KEYS = ["location", "gpu", "cooling", "memory", "wires", "storage", "
 test("simple-space balance: story-specific optima, one winner, max-everything and naive fail, near-misses feel close", () => {
   const expected = {
     chat: { best: { metros: ["lon", "fra"], brains: "gb200", home: "super", memory: "on", wires: "fast", library: "none" }, typical: [250, 450] },
-    rag: { best: { metros: ["fra"], brains: "b300", home: "rear", memory: "on", wires: "combo", library: "smart" }, typical: [5, 300] }, // no index on the home metro: DATA and POWER are red
+    rag: { best: { metros: ["fra"], brains: "b300", home: "aisle", memory: "on", wires: "combo", library: "smart" }, typical: [5, 300] }, // no index on the home metro: DATA and POWER are red
     code: { best: { metros: ["iad", "sjc"], brains: "gb200", home: "super", memory: "plus", wires: "combo", library: "basic" }, typical: [20, 400] },
     research: { best: { metros: ["par"], brains: "gb200", home: "super", memory: "on", wires: "combo", library: "smart" }, typical: [100, 500] },
-    drug: { best: { metros: ["lon"], brains: "b300", home: "rear", memory: "off", wires: "fast", library: "basic", helper: true }, typical: [150, 700] }, // the opening picture's 10 Gbps peering cannot carry the 14 Gbps lab feed
-    robot: { best: { metros: ["fra", "ams"], brains: "b200", home: "rear", memory: "on", wires: "combo", library: "none" }, typical: [300, 700] }, // two Blackwell air racks; three B300 racks are more than 5,000 robots need
+    drug: { best: { metros: ["lon"], brains: "b300", home: "aisle", memory: "off", wires: "fast", library: "basic", helper: true }, typical: [150, 700] }, // the opening picture's 10 Gbps peering cannot carry the 14 Gbps lab feed
+    robot: { best: { metros: ["fra", "ams"], brains: "b200", home: "aisle", memory: "on", wires: "combo", library: "none" }, typical: [300, 700] }, // two Blackwell air racks; three B300 racks are more than 5,000 robots need
   }
   /* Robots: ServiceFabric everywhere is within 3% of the COMBO, so that one near-miss also keeps three stars. */
   const threeStarAllowance = { robot: 2 }
@@ -306,7 +306,7 @@ test("the results headline ties the outcome to a data-center decision in plain w
   const lab = combo("drug", { brains: "medium", home: "rear", wires: "fast", library: "basic", helper: true })
   assert.match(headline(evaluateBuild("drug", choicesToBuild("drug", lab, false)), lab), /screened (9\d|100)% of the lab's candidates over ServiceFabric, with ORCA PT-3/)
   const stuck = combo("robot", { metros: ["fra", "ams"], brains: "rubin", home: "rear", wires: "cheap" })
-  assert.match(bestChange("robot", stuck).text, /^No single change rescues this\. NVIDIA HGX B200 ×2, rear door heat exchanger in Frankfurt \+ Amsterdam, with the KV cache on, on COMBO, local only storage would score about 1,[34]\d\d\.$/)
+  assert.match(bestChange("robot", stuck).text, /^No single change rescues this\. NVIDIA HGX B200 ×2, cold aisle containment in Frankfurt \+ Amsterdam, with the KV cache on, on COMBO, local only storage would score about 1,[34]\d\d\.$/)
   assert.equal(DR_FOOTER, "Built in a Digital Realty data center: power, cooling and connections ready.")
 })
 

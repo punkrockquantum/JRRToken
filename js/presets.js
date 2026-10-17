@@ -143,15 +143,16 @@ export function hasCombo(useCaseId) {
 
 const LIBRARY_IDS = ["none", "basic", "smart"]
 const WIRE_IDS = ["cheap", "peer", "fast", "private", "combo"]
-const HOME_IDS = ["cool", "rear", "super"]
-const NERD_HOME_IDS = ["cool", "row", "rear", "super"]
+/* User: "Under cooling, there should be an option for cold aisle containment." Simple: air, containment, liquid. */
+const HOME_IDS = ["cool", "aisle", "super"]
+const NERD_HOME_IDS = ["cool", "aisle", "row", "rear", "super"]
 
 /**
  * The tiles each step offers on the simple board (three, six for the GPUs) and in nerd mode
  * (the full set). The GPU lists differ by story: `simpleBrainIds` / `nerdBrainIds`.
  */
 export const SIMPLE_IDS = {
-  home: ["cool", "rear", "super"],
+  home: HOME_IDS,
   memory: ["off", "on", "plus"],
   wires: ["cheap", "peer", "fast"],
   library: ["none", "basic", "smart"],
@@ -201,7 +202,8 @@ export function defaultChoices(useCaseId) {
     brains: DEFAULT_BRAINS[useCaseId] || DEFAULT_BRAINS.chat,
     memory: false,
     library: "none",
-    home: "cool",
+    /* Every story opens on an HGX rack (22 to 30 kW), which open air at 15 kW cannot cool: containment is the opening hall. */
+    home: "aisle",
     wires: "peer",
     mcp: false,
     helper: false,
@@ -240,7 +242,8 @@ function simpleBrains(useCaseId, brains) {
 export function simpleChoices(useCaseId, choices = {}) {
   const picked = { ...defaultChoices(useCaseId), ...choices }
   const brains = simpleBrains(useCaseId, picked.brains)
-  const home = picked.home === "row" ? "rear" : SIMPLE_IDS.home.includes(picked.home) ? picked.home : "cool"
+  /* In-row and rear-door halls are nerd tiles; on the simple board the nearest air hall that takes every air rack is containment. */
+  const home = picked.home === "row" || picked.home === "rear" ? "aisle" : SIMPLE_IDS.home.includes(picked.home) ? picked.home : "aisle"
   const wires = wireIds(useCaseId).includes(picked.wires)
     ? picked.wires
     : picked.wires === "private" || picked.wires === "mix" || picked.wires === "combo" ? (hasCombo(useCaseId) ? "combo" : "fast") : "peer"
@@ -367,7 +370,7 @@ export function choicesToBuild(useCaseId, choices, nerd = false) {
   const build = {
     model: picked.model,
     users: picked.users,
-    hall: { cool: "A", rear: "R", row: "I", super: "B" }[picked.home] || "A",
+    hall: { cool: "A", aisle: "C", rear: "R", row: "I", super: "B" }[picked.home] || "C",
     hosts: picked.hosts || "standard",
     platform,
     racks,
