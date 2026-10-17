@@ -161,6 +161,15 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
       estimates; US DOE FEMP and Schneider WP 135 cited in data.js); open air drops to its real ~15 kW so an HGX rack
       throttles there; simple board = air / containment / liquid, nerd adds in-row and rear door; every story opens on
       containment; tests/cooling.test.js
+- [x] REAR DOOR HEAT EXCHANGER IN BOTH MODES (user: "In cooling add Rear Door Heat Exchanger as an option to allow
+      realistic power densities."): simple cooling tiles = air / cold aisle containment / rear door heat exchanger /
+      direct liquid (nerd keeps in-row); hall R 40–70 kW a rack, PUE 1.28, 6-week fit-out for chilled water, $35k a
+      rack `rackNrc` added to capex (`coolingCapex`; Motivair/Vertiv/nVent cited in data.js); tiles show kW band,
+      overhead (PUE in nerd) and lead, "needs direct liquid for <rack>" when an NVL72 is on the board; caps carry a
+      5% nominal slack (`hallRackCap`) so a 30.4 kW air pair cools in a 30 kW containment rack; nerd designs pack
+      four B300 nodes behind a door against two under containment; the rag/drug/robot experts sit on containment
+      (right-sized), the door is a 3-star near-miss; tests/cooling.test.js, refarch and simple pins; smoke checks
+      four tiles with band · overhead · lead
 - [x] TITLE BOARD = TOP 3 FROM THE SHARED SHEET (user: "I don't see the league table on the first page updating
       properly. This should just display the first name & last name top 3"): `titleBoard()` in js/league.js picks the
       top three by best score from /api/league (re-fetched on every title show), names as entered, score; local league

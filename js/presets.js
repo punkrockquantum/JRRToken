@@ -143,8 +143,9 @@ export function hasCombo(useCaseId) {
 
 const LIBRARY_IDS = ["none", "basic", "smart"]
 const WIRE_IDS = ["cheap", "peer", "fast", "private", "combo"]
-/* User: "Under cooling, there should be an option for cold aisle containment." Simple: air, containment, liquid. */
-const HOME_IDS = ["cool", "aisle", "super"]
+/* Users: "Under cooling, there should be an option for cold aisle containment." and "In cooling add Rear Door Heat
+   Exchanger as an option to allow realistic power densities." Simple: air, containment, rear door, liquid. */
+const HOME_IDS = ["cool", "aisle", "rear", "super"]
 const NERD_HOME_IDS = ["cool", "aisle", "row", "rear", "super"]
 
 /**
@@ -242,8 +243,8 @@ function simpleBrains(useCaseId, brains) {
 export function simpleChoices(useCaseId, choices = {}) {
   const picked = { ...defaultChoices(useCaseId), ...choices }
   const brains = simpleBrains(useCaseId, picked.brains)
-  /* In-row and rear-door halls are nerd tiles; on the simple board the nearest air hall that takes every air rack is containment. */
-  const home = picked.home === "row" || picked.home === "rear" ? "aisle" : SIMPLE_IDS.home.includes(picked.home) ? picked.home : "aisle"
+  /* In-row cooling is a nerd tile; on the simple board it snaps onto the rear door, the other dense air hall. */
+  const home = picked.home === "row" ? "rear" : SIMPLE_IDS.home.includes(picked.home) ? picked.home : "aisle"
   const wires = wireIds(useCaseId).includes(picked.wires)
     ? picked.wires
     : picked.wires === "private" || picked.wires === "mix" || picked.wires === "combo" ? (hasCombo(useCaseId) ? "combo" : "fast") : "peer"
@@ -280,11 +281,12 @@ export function nerdChoices(useCaseId, choices) {
  */
 const EXPERTS = {
   chat: { metros: ["lon", "fra"], brains: "gb200", memory: true, hosts: "standard", home: "super", wires: "fast", library: "none" },
-  rag: { metros: ["fra"], brains: "b300", memory: true, hosts: "standard", home: "rear", wires: "combo", library: "smart" },
+  /* HGX racks at 30 kW are right-sized for cold aisle containment; a rear door costs $35k a rack more and four weeks. */
+  rag: { metros: ["fra"], brains: "b300", memory: true, hosts: "standard", home: "aisle", wires: "combo", library: "smart" },
   code: { metros: ["iad", "sjc"], brains: "gb200", memory: true, hosts: "grace", home: "super", wires: "combo", library: "basic" },
   research: { metros: ["par"], brains: "gb200", memory: true, hosts: "standard", home: "super", wires: "combo", library: "smart" },
-  drug: { metros: ["lon"], brains: "b300", memory: false, hosts: "standard", home: "rear", wires: "private", library: "basic", helper: true },
-  robot: { metros: ["fra", "ams"], brains: "b200", memory: true, hosts: "standard", home: "rear", wires: "combo", library: "none" },
+  drug: { metros: ["lon"], brains: "b300", memory: false, hosts: "standard", home: "aisle", wires: "private", library: "basic", helper: true },
+  robot: { metros: ["fra", "ams"], brains: "b200", memory: true, hosts: "standard", home: "aisle", wires: "combo", library: "none" },
 }
 
 export function expertChoices(useCaseId) {

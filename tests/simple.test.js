@@ -39,10 +39,10 @@ test("the simple view offers three tiles a step, six NVIDIA platforms for the GP
   assert.deepEqual(PRESET_IDS.brains, ["spark", "rtx6000", "h200", "b300", "gb200", "vr"])
   assert.deepEqual(PRESET_IDS.legacyBrains, ["small", "medium", "big", "rubin"], "the old tile words are still understood")
   assert.deepEqual(PRESET_IDS.wires, ["cheap", "peer", "fast", "private", "combo"])
-  assert.deepEqual(PRESET_IDS.homes, ["cool", "aisle", "super"])
+  assert.deepEqual(PRESET_IDS.homes, ["cool", "aisle", "rear", "super"])
   assert.ok(PRESET_IDS.nerdBrains.includes("huge"), "the HUGE trap stays a nerd-mode option")
   assert.deepEqual(PRESET_IDS.nerdBrains, [...PLATFORMS.map((platform) => platform.id), "huge"], "nerd mode lists the whole roster")
-  assert.deepEqual(SIMPLE_IDS, { home: ["cool", "aisle", "super"], memory: ["off", "on", "plus"], wires: ["cheap", "peer", "fast"], library: ["none", "basic", "smart"] })
+  assert.deepEqual(SIMPLE_IDS, { home: ["cool", "aisle", "rear", "super"], memory: ["off", "on", "plus"], wires: ["cheap", "peer", "fast"], library: ["none", "basic", "smart"] })
   for (const { id } of USE_CASES) {
     assert.deepEqual(brainPick(id, "rubin"), { platform: "vr", racks: 1 }, id)
     assert.deepEqual(brainPick(id, "vr"), { platform: "vr", racks: 1 }, id)
@@ -155,7 +155,7 @@ test("the memory step maps onto the KV tier and the hosts beside it, and the sim
     assert.equal(meddled.hosts, "standard", `${id} hosts snap onto the tile`)
     assert.equal(meddled.orca, false, `${id} ORCA snaps onto the tile`)
     assert.equal(meddled.platform, brainPick(id, "big").platform, `${id} HUGE snaps onto the big tile`)
-    assert.equal(meddled.hall, "C", `${id} in-row cooling snaps onto cold aisle containment`)
+    assert.equal(meddled.hall, "R", `${id} in-row cooling snaps onto the rear door, the other dense air hall`)
     if (hasCombo(id)) {
       /* Own fibre snaps onto the COMBO tile, whose legs (and its MCP control leg where it has one) are the tile's own. */
       assert.equal(meddled.choices.wires, "combo", `${id} own fibre snaps onto COMBO`)

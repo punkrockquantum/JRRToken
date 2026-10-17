@@ -1,4 +1,4 @@
-import { DATA_HOMES, DATA_TIERS, EDGE_LATE, EGRESS_PER_GB, FTE_HOURS, HALLS, HORIZON_WEEKS, HUMAN_WORK, IN_METRO_KM, KV_TIER, METRO_OFFERS, MISSION_SITES, NETWORKS, ORCA, PLATFORMS, POWER_FLOOR_MW, SCENARIOS, SITES, TRAIN_BONUS_CAP, USER_BASES, USE_CASES, byId, dataHomeFor, resolveUseCase } from "./data.js"
+import { DATA_HOMES, DATA_TIERS, EDGE_LATE, EGRESS_PER_GB, FTE_HOURS, HALLS, HORIZON_WEEKS, HUMAN_WORK, IN_METRO_KM, KV_TIER, METRO_OFFERS, MISSION_SITES, NETWORKS, ORCA, PLATFORMS, POWER_FLOOR_MW, SCENARIOS, SITES, TRAIN_BONUS_CAP, USER_BASES, USE_CASES, byId, dataHomeFor, hallRackCap, resolveUseCase } from "./data.js"
 import { HOURS_PER_MONTH, blankFabric, destinationsNeeded, liveShare, networkBill } from "./network.js"
 import { ROUTE, oneWayS, roundTripS } from "./physics.js"
 import { designFor, racksNeeded, withDesign } from "./refarch.js"
@@ -809,7 +809,9 @@ export function evaluateBuild(useCaseId, build = {}) {
   // A bulk copy over the open internet rarely sustains more than about 1 Gbps per flow (game value).
   const copyKind = dataLeg?.kind || wire?.id
   out.transfer = modelTransfer(useCase, reach, { gbps: copyKind === "public" ? Math.min(copyGbps, 1) : copyGbps, leadDays: bill.leadDays || 0 })
-  out.capex = out.hardwareCapex + bill.nrc + out.transfer.cost
+  /* The cooling fit-out per rack position (containment panels, in-row coolers, rear doors, liquid CDUs): estimates in HALLS. */
+  out.coolingCapex = (hall.rackNrc || 0) * racks
+  out.capex = out.hardwareCapex + out.coolingCapex + bill.nrc + out.transfer.cost
   out.netCost = bill.mrc / HOURS_PER_MONTH
 
   let thermal = 1
@@ -817,7 +819,7 @@ export function evaluateBuild(useCaseId, build = {}) {
     thermal = THERMAL_FACTOR
     out.failure = (platform.capex * racks * THERMAL_BILL) / HOURS_PER_MONTH
     warnings.push("These racks need liquid cooling, so in the air hall they overheat and run much slower.")
-  } else if (platform.rackKW > hall.maxRackKW) {
+  } else if (platform.rackKW > hallRackCap(hall)) {
     thermal = 0.35
     out.failure = (platform.capex * racks * 0.25) / HOURS_PER_MONTH
     warnings.push(`${platform.name} runs too hot for the ${hall.name}, so it overheats and throttles.`)

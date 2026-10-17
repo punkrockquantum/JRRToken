@@ -937,6 +937,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-hint, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile-hint { -webkit-line-clamp: 3; }
 .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-tag, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile-tag { white-space: normal; overflow: visible; }
 .screen.game .step-panel .tile-tag { display: block; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.screen.game .step-panel.step-cooling .tile-tag { white-space: normal; overflow: visible; } /* four big tiles: the kW band, overhead and lead wrap rather than clip */
 .screen.game .step-panel .tile-copy { max-width: 100%; }
 /* TOKEN IMPACT strip on connectivity tiles: three coloured chips, one plain sentence, nerd detail. */
 .impact { display: flex; flex-direction: column; gap: 4px; min-width: 0; width: 100%; flex: 0 0 auto; margin-top: 2px; }

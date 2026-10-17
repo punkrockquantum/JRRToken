@@ -10,7 +10,7 @@
  * platform's tokens per GPU, HBM and NVLink domain are the platform's, whoever sells the box.
  * Lead deltas and price multipliers are game values: OEM delivery and pricing are not published.
  */
-import { HALLS, PLATFORMS, byId } from "./data.js"
+import { HALLS, PLATFORMS, byId, hallRackCap } from "./data.js"
 
 /** Usable rack height for node designs (game value; rack-scale designs bring their own rack). */
 export const RACK_U = 42
@@ -333,7 +333,7 @@ export function nodesPerRack(design, hall) {
   if (!design) return 0
   if (design.kind === "rack") return design.traysPerRack
   const bySpace = Math.floor(RACK_U / design.u)
-  const byPower = Math.floor((hall?.maxRackKW || 0) / design.nodeKW)
+  const byPower = Math.floor(hallRackCap(hall) / design.nodeKW)
   return Math.max(1, Math.min(bySpace, byPower))
 }
 
@@ -359,7 +359,7 @@ export function leadBand(design, platform) {
 export function fitsHall(design, hall) {
   if (!design || !hall) return true
   if (design.kind === "rack") return hall.cooling === "liquid"
-  return nodesPerRack(design, hall) >= 1 && design.nodeKW <= (hall.maxRackKW || 0)
+  return nodesPerRack(design, hall) >= 1 && design.nodeKW <= hallRackCap(hall)
 }
 
 /**

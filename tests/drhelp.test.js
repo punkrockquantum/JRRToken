@@ -148,12 +148,12 @@ test("the capacity line says what the hall did to the racks: liquid racks on air
   const waited = helped("research", WEAK.research, false).lines[1].text
   assert.match(waited, /^Your 6× HGX B300 racks are air-cooled at 30 kW each: the contained hall at 30 kW a rack was ready in 2 weeks in Frankfurt, instead of the liquid hall's fit-out of 10 weeks\.$/)
   const fit = helped("rag", expertChoices("rag"), false).lines[1].text
-  /* The simple board has no rear-door tile: the expert's hall snaps onto cold aisle containment. */
+  /* The expert's 30 kW HGX racks are right-sized for cold aisle containment. */
   assert.match(fit, /^Your 6× HGX B300 racks at 30 kW each fit the contained hall in Frankfurt at 30 kW a rack, fitted out in 2 weeks\.$/)
   const tight = helped("rag", { ...expertChoices("rag"), metros: ["lon"], brains: "big", home: "super" }, true).lines[1].text
   assert.match(tight, /drew [\d,]+ kW against the [\d,]+ kW power room in London\. Digital Realty would have advised Frankfurt, where 100% of the scenario's power was on offer against 95% in London, or fewer racks\.$/)
   const nerd = helped("rag", expertChoices("rag"), true).lines[1].show
-  assert.match(nerd, /IT \d+ kW × PUE 1\.28 = \d+ kW facility against 0\.27 MW; [\d.]+ of 18 rack positions\.$/)
+  assert.match(nerd, /IT \d+ kW × PUE 1\.29 = \d+ kW facility against 0\.27 MW; [\d.]+ of 22 rack positions\.$/)
 })
 
 test("the wires line names the products: the public internet gets advice, ServiceFabric is private, the COMBO lists one product a leg", () => {

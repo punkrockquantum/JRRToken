@@ -153,7 +153,7 @@ test("picture presets map onto builds, and the preset board stays in the scoring
     "File & object",
     "Vector index",
     "Air-cooled hall",
-    "Rear-door hall",
+    "Cold aisle containment",
     "Liquid-cooled hall",
     "Direct liquid cooling",
     "Rear door heat exchanger",

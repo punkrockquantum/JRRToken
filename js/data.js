@@ -1196,8 +1196,26 @@ export const DOES = {
  * Realty's halls use containment widely. Sources: US DOE FEMP, Best Practices Guide for
  * Energy-Efficient Data Center Design (https://www.energy.gov/eere/femp/best-practices-guide-energy-efficient-data-center-design),
  * and Schneider Electric White Paper 135, Impact of Hot and Cold Aisle Containment on Data Center
- * Temperature and Efficiency. The caps, fit-outs and all PUEs but the air hall's are game estimates.
+ * Temperature and Efficiency. Rear door heat exchangers (RDHx) put a water-cooled coil on the
+ * rack's back door so the exhaust of ordinary air-cooled servers is cooled as it leaves: passive
+ * and active doors are quoted at roughly 40 to 70 kW a rack, high-capacity doors up to about
+ * 100 kW (vendor datasheets: Motivair ChilledDoor https://www.motivaircorp.com, Vertiv Liebert DCD
+ * https://www.vertiv.com, nVent RackChiller https://www.nvent.com; ASHRAE TC 9.9 treats them as
+ * liquid-to-the-rack cooling for air-cooled IT). They need facility chilled water, so a fit-out of
+ * weeks. `rackNrc` is the cooling kit bought per rack position and added to the capex (estimates): an
+ * active rear door with its hoses and controls, or a share of an in-row cooler. Containment panels sit inside the hall's fit-out,
+ * and the NVL72 and Vera Rubin racks carry their manifolds and CDU share in the platform price, so
+ * those halls charge nothing per rack. Caps, fit-outs, door costs and all PUEs but the air hall's are
+ * game estimates.
  */
+/** Hall caps are nominal: a rack a few percent over the band still cools (a 30.4 kW pair of 6U air nodes in a 30 kW containment rack). */
+export const RACK_CAP_SLACK = 1.05
+
+/** The rack kW a hall cools, with the nominal slack. */
+export function hallRackCap(hall) {
+  return (hall?.maxRackKW || 0) * RACK_CAP_SLACK
+}
+
 export const HALLS = [
   {
     id: "A",
@@ -1208,6 +1226,7 @@ export const HALLS = [
     rackSpace: 24,
     fitOutWeeks: 0,
     maxRackKW: 15,
+    rackNrc: 0,
     pue: 1.38,
     learn:
       "Your space in an air-cooled PlatformDIGITAL hall: 24 rack positions and ready now. Open air with no containment cools about 15 kW per rack (estimate). A hotter air rack throttles here, and a liquid rack overheats. PUE 1.38 is Digital Realty's published portfolio figure, used here as this hall's overhead.",
@@ -1221,6 +1240,7 @@ export const HALLS = [
     rackSpace: 22,
     fitOutWeeks: 2,
     maxRackKW: 30,
+    rackNrc: 0,
     pue: 1.29,
     learn:
       "Doors and panels keep cold air in front of the racks and hot air behind them, so the fans work less. The servers stay air-cooled. This game allows about 15 to 30 kW per rack with a 2 week fit-out (estimates). PUE 1.29 is a game assumption: containment typically takes about 0.1 to 0.2 off an open-air hall. NVL72 and Vera Rubin still need direct liquid cooling.",
@@ -1234,9 +1254,10 @@ export const HALLS = [
     rackSpace: 18,
     fitOutWeeks: 6,
     maxRackKW: 70,
+    rackNrc: 35_000,
     pue: 1.28,
     learn:
-      "A water-cooled door on the rack captures the hot exhaust at the rack. The servers stay air-cooled. This game allows about 40 to 70 kW per rack, with a 6 week fit-out. PUE 1.28 is a game assumption. NVL72 and Vera Rubin still need direct liquid cooling.",
+      "A radiator on the back door of the rack cools the hot air as it leaves, so ordinary air-cooled servers can be packed far denser. The servers stay air-cooled. This game allows about 40 to 70 kW per rack (high-capacity doors reach about 100 kW), needs the building's chilled water, so a 6 week fit-out, and an active door with its hoses and controls costs about $35k a rack (estimates). PUE 1.28 is a game assumption. NVL72 and Vera Rubin are direct-liquid designs and still need the liquid hall.",
   },
   {
     id: "I",
@@ -1247,6 +1268,7 @@ export const HALLS = [
     rackSpace: 20,
     fitOutWeeks: 4,
     maxRackKW: 55,
+    rackNrc: 12_000,
     pue: 1.32,
     learn:
       "Close-coupled coolers sit between the racks, so the heat does not cross the whole room. This game allows about 55 kW per rack, ready in 4 weeks. PUE 1.32 is a game assumption. Liquid GPUs still throttle here.",
@@ -1260,6 +1282,7 @@ export const HALLS = [
     rackSpace: 12,
     fitOutWeeks: 10,
     maxRackKW: 240,
+    rackNrc: 0,
     pue: 1.2,
     learn:
       "Your space in a direct-to-chip liquid PlatformDIGITAL hall: 12 rack positions, with an 8 to 12 week fit-out (game: 10). Digital Realty's London lab supports 150 kW per rack or more. This game allows up to 240 kW so a next-gen rack still fits (estimate). PUE 1.20 is a game assumption, not a published site figure.",

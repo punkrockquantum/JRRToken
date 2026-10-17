@@ -386,6 +386,11 @@ try {
           return { rows: rows.size, perRow: boxes.filter((b) => Math.round(b.top) === Math.round(boxes[0].top)).length }
         })()`)
         if (grid.rows !== 2 || grid.perRow !== 3) throw new Error(`The GPU tiles should sit on two rows of three, saw ${grid.rows} rows of ${grid.perRow}`)
+      } else if (step === "cooling") {
+        /* Air, cold aisle containment, rear door heat exchanger, direct liquid: four tiles, each with a kW band, overhead and lead. */
+        if (tiles !== 4) throw new Error(`cooling: the simple board shows 4 tiles, saw ${tiles}`)
+        const coolTags = await evaluate(`[...document.querySelectorAll('.step-cooling .tile .tile-tag')].map((t) => t.textContent.trim())`)
+        if (coolTags.length !== 4 || coolTags.some((tag) => !/^(UP TO |15–|40–)\d+ KW · \d+% ON COOLING · (\d+ WK|READY NOW)$/i.test(tag))) throw new Error(`Every cooling tile should carry its kW band, overhead and lead: ${coolTags.join(" | ")}`)
       } else if (step !== "qpu" && tiles !== 3 && step !== "location" && step !== "model") throw new Error(`${step}: the simple board shows 3 tiles, saw ${tiles}`)
       const simpleText = await text(".screen.game")
       const jargon = ["TB/s", "PFLOPS", "PUE"].filter((word) => simpleText.includes(word))

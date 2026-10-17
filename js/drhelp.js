@@ -7,7 +7,7 @@
  * build. Where the player chose poorly the line says what Digital Realty would have advised;
  * the closing line quotes only published facts. Pure: no DOM, no state.
  */
-import { AUDIENCES, DATA_HOMES, HALLS, IN_METRO_KM, METRO_OFFERS, NETWORKS, SITES, USER_BASES, byId } from "./data.js"
+import { AUDIENCES, DATA_HOMES, HALLS, IN_METRO_KM, METRO_OFFERS, NETWORKS, SITES, USER_BASES, byId, hallRackCap } from "./data.js"
 import { dataTrips, fibreRttS } from "./latency.js"
 import { kmBetween, siteReach } from "./model.js"
 import { COMBO, expertChoices, maxMetros, nerdChoices, simpleChoices } from "./presets.js"
@@ -124,7 +124,7 @@ function capacityLine(result, id) {
     else text += ` No metro on your short list offered more than ${pct(best?.powerMult || 1)} of the scenario's power: Digital Realty would have advised fewer racks for this ${room} room.`
   } else if (platform.cooling !== "liquid" && hall.cooling === "liquid") {
     /* The quickest air-family hall that takes this rack: open air for small racks, containment for HGX racks. */
-    const airFit = HALLS.filter((item) => item.cooling === "air" && item.maxRackKW >= platform.rackKW).sort((a, b) => a.fitOutWeeks - b.fitOutWeeks)[0] || air
+    const airFit = HALLS.filter((item) => item.cooling === "air" && hallRackCap(item) >= platform.rackKW).sort((a, b) => a.fitOutWeeks - b.fitOutWeeks)[0] || air
     const airReady = airFit.fitOutWeeks ? `ready in ${weeks(airFit.fitOutWeeks)}` : "ready now"
     text = `Your ${rackWords} ${one ? "is" : "are"} air-cooled at ${each}: the ${airFit.name.toLowerCase()} at ${airFit.maxRackKW} kW a rack was ${airReady} in ${where}, instead of the ${hallName}'s fit-out of ${weeks(hallPart?.weeks ?? hall.fitOutWeeks)}.`
   } else {

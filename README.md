@@ -30,8 +30,9 @@ for a booth (see [HOSTING.md](HOSTING.md)).
    model and data live, and the three numbers the maths runs on, marked as the story's defaults until
    the next step is set) → Model size and number of users → GPU (NVIDIA only: DGX Spark, L40S,
    RTX PRO 6000 Blackwell Server, HGX H100/H200/B200/B300, GB200 NVL72, GB300 NVL72, Vera Rubin
-   NVL72) → Cooling (open air, cold aisle containment, and in nerd mode in-row and rear-door heat
-   exchangers, then direct liquid; each tile shows the kW a rack it cools and its cooling overhead) → Memory (KV cache,
+   NVL72) → Cooling (open air, cold aisle containment, rear door heat exchanger and direct liquid in
+   both modes, in-row coolers in nerd mode; each tile shows the kW band a rack it cools, its cooling
+   overhead and its lead time, and says "needs direct liquid" when the chosen rack is an NVL72) → Memory (KV cache,
    CPU host memory) → Connectivity (Cross Connect, Metro Connect, ServiceFabric Link/Connection,
    ServiceFabric MCP, Digital Internet, cloud on-ramps, dark fiber, IX peering, public internet)
    → Storage → QPU (ORCA PT-3 for drug discovery) → Review → GO.
@@ -72,9 +73,16 @@ goes on a tap.
   (open air 1.38, Digital Realty's published portfolio figure; cold aisle containment 1.29, rear
   door 1.28, in-row 1.32 and liquid 1.20 are game values). Rack caps follow the industry bands:
   open air about 15 kW a rack, containment 15–30 kW (doors and panels keep the cold aisle apart
-  from the hot exhaust, a fit-out of about two weeks), in-row 55 kW, rear door 70 kW, direct
-  liquid 240 kW; an HGX rack runs too hot for open air and throttles there, and NVL72 and Vera
-  Rubin still need the liquid hall. Every story opens on containment. Every scenario, crowd and metro offers at least the **power floor**: one rack of the
+  from the hot exhaust, a fit-out of about two weeks), in-row 55 kW, rear door heat exchanger
+  40–70 kW (a water-cooled coil on the rack's back door cools the exhaust of ordinary air-cooled
+  servers, so HGX racks pack two to four nodes deep; it needs the building's chilled water, so a
+  six-week fit-out and about $35k a rack added to the capex; vendor figures from Motivair, Vertiv
+  and nVent cited in data.js), direct liquid 240 kW. Caps carry a 5% nominal slack, so a 30.4 kW
+  pair of air nodes still cools in a 30 kW containment rack. An HGX rack runs too hot for open
+  air and throttles there; NVL72 and Vera Rubin still need the liquid hall, and every air tile
+  says so when one is on the board. Every story opens on containment, which is right-sized for a
+  30 kW HGX rack; the rear door is the honest near-miss (a few percent lower) for those stories.
+  Every scenario, crowd and metro offers at least the **power floor**: one rack of the
   least powerful platform through the air PUE, rounded up to a 100 kW suite on a
   0.1 / 0.25 / 0.5 / 1 / 2 MW ladder. A smaller crowd scales the offer down to that floor and
   never below it, and a board the player has not touched always fits its offer. Going over is a

@@ -278,7 +278,8 @@ function limitWords(change, useCaseId, batch) {
   if (change?.kind === "cooling") {
     if (change.to === "super") return "liquid cooling would have let the racks run harder"
     if (change.to === "aisle") return "cold aisle containment would have kept the hot racks cool for a little money"
-    if (change.to === "rear" || change.to === "row") return "a better-cooled hall would have fed more of the power room to the GPUs"
+    if (change.to === "rear") return "a rear door heat exchanger would have cooled the dense racks for less than liquid"
+    if (change.to === "row") return "a better-cooled hall would have fed more of the power room to the GPUs"
     return "the air-cooled hall would have been ready sooner and cheaper"
   }
   if (change?.kind === "memory") return change.to === "off" ? "memory the job never reuses was cost and power for nothing" : "KV memory would have spared the GPUs re-reading every prompt"

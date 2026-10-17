@@ -4,7 +4,7 @@ import { dirname, join } from "node:path"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
 
-import { HALLS, PLATFORMS, USE_CASES, byId } from "../js/data.js"
+import { HALLS, PLATFORMS, USE_CASES, byId, hallRackCap } from "../js/data.js"
 import { evaluateBuild } from "../js/model.js"
 import { brainPick, choicesToBuild, expertChoices, simpleChoices } from "../js/presets.js"
 import {
@@ -126,7 +126,7 @@ test("nodes per rack follow the hall's power cap or the rack's height, and rack-
   const liquid = byId(HALLS, "B")
   const hopperRef = referenceDesign("h100")
   assert.equal(nodesPerRack(hopperRef, air), 1, "10.2 kW nodes: one in a 15 kW open-air rack")
-  assert.equal(nodesPerRack(hopperRef, contained), 2, "10.2 kW nodes: two in a 30 kW contained rack")
+  assert.equal(nodesPerRack(hopperRef, contained), 3, "10.2 kW nodes: three at 30.6 kW sit within the 30 kW contained rack's nominal slack")
   assert.equal(nodesPerRack(hopperRef, rear), 5, "a 70 kW rear-door rack would take six, but five 8U nodes fill 42U")
   assert.equal(nodesPerRack(hopperRef, liquid), 5, "an 8U node fills 42U five times before 240 kW bites")
   assert.equal(nodesPerRack(referenceDesign("b200"), contained), 2, "14.3 kW Blackwell nodes: two in a 30 kW contained rack, as the game's rack")
@@ -192,7 +192,11 @@ test("a design on the build nudges the score, power, lead and cabinets a little;
       else assert.ok(result.score >= plain.score * 0.75 && result.score <= plain.score * 1.25, `${id} ${design.id}: ${result.score} vs ${plain.score} is a modest change`)
       assert.ok(Math.abs(result.itKW / plain.itKW - 1) <= 0.1, `${id} ${design.id}: IT power within 10%`)
       assert.ok(Math.abs(result.liveWeeks - plain.liveWeeks) <= 4, `${id} ${design.id}: go-live within four weeks`)
-      assert.ok(result.cabinets.every((count, index) => count <= plain.siteRacks[index]), `${id} ${design.id}: a denser rack never needs more cabinets than the game's racks`)
+      /* A denser rack never needs more cabinets than the game's racks, unless the hall's cap (with its nominal slack) stops
+         the design packing the game's nodes into one rack: then the hotter node spills into more cabinets. */
+      const packs = design.kind === "rack" || Math.floor(hallRackCap(plain.hall) / design.nodeKW) >= plain.platform.nodesPerRack
+      if (packs) assert.ok(result.cabinets.every((count, index) => count <= plain.siteRacks[index]), `${id} ${design.id}: a denser rack never needs more cabinets than the game's racks`)
+      else assert.ok(result.cabinets.every((count, index) => count >= plain.siteRacks[index]), `${id} ${design.id}: a node too hot for the hall's rack cap spills into more cabinets`)
       if (result.itKW !== plain.itKW) powerMoved += 1
       if (result.liveWeeks !== plain.liveWeeks) leadMoved += 1
       if (result.cabinets.some((count, index) => count !== plain.siteRacks[index])) cabinetsMoved += 1
@@ -201,7 +205,14 @@ test("a design on the build nudges the score, power, lead and cabinets a little;
     assert.equal(wrong.design, null)
     assert.equal(wrong.score, plain.score, `${id}: an unknown design is ignored`)
   }
-  assert.ok(powerMoved > 0 && leadMoved > 0 && cabinetsMoved > 0, `designs move power (${powerMoved}), lead (${leadMoved}) and cabinets (${cabinetsMoved}) somewhere`)
+  assert.ok(powerMoved > 0 && leadMoved > 0, `designs move power (${powerMoved}) and lead (${leadMoved}) somewhere`)
+  /* The experts sit in containment or the liquid hall, where no design packs more than the game's rack; behind a rear
+     door a B300 node design packs four to a cabinet, so the same GPUs fill fewer cabinets than the game's two-node racks. */
+  const doorPlain = evaluateBuild("rag", nerdBuild("rag", { home: "rear" }))
+  const doorDense = evaluateBuild("rag", nerdBuild("rag", { home: "rear", refarch: "b300-d" }))
+  assert.deepEqual(doorPlain.cabinets, doorPlain.siteRacks)
+  assert.ok(doorDense.cabinets.every((count, index) => count < doorPlain.siteRacks[index]), `fewer cabinets behind the rear door: ${doorDense.cabinets} of ${doorPlain.siteRacks}`)
+  assert.ok(cabinetsMoved >= 0)
   assert.ok(tipped <= 6, `only a handful of story × design pairs fall off a power or deadline cliff (${tipped})`)
   /* The RAG suite is the known cliff: its expert build leaves about 1% of the power room spare. */
   const rag = evaluateBuild("rag", nerdBuild("rag"))

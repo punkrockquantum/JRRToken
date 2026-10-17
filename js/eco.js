@@ -6,7 +6,7 @@
  * amber means it works but a data-center decision is costing points. The first red part,
  * else the first amber part, is the one hint a player gets between rounds.
  */
-import { HALLS, SITES, byId } from "./data.js"
+import { HALLS, SITES, byId, hallRackCap } from "./data.js"
 import { formatMoney } from "./model.js"
 
 /** The build step a part's hint points at when the message does not name one. */
@@ -61,12 +61,12 @@ function coolingPart(r) {
       detail: `Thermal throttle to 15% and a failure bill on every rack.`,
     }
   }
-  if (platform && hall && platform.rackKW > hall.maxRackKW) {
+  if (platform && hall && platform.rackKW > hallRackCap(hall)) {
     const contained = byId(HALLS, "C")
     return {
       state: "red",
       why: `${platform.name} runs at ${platform.rackKW} kW a rack, more than this hall's ${hall.maxRackKW} kW, so it throttles.`,
-      ask: contained && platform.rackKW <= contained.maxRackKW
+      ask: contained && platform.rackKW <= hallRackCap(contained)
         ? `Would cold aisle containment keep these racks at full speed?`
         : `Would a hall rated for hotter racks keep them at full speed?`,
       detail: `Throttled to 35%. Containment takes up to ${contained?.maxRackKW ?? 30} kW a rack, a rear door ${byId(HALLS, "R")?.maxRackKW ?? 70} kW.`,

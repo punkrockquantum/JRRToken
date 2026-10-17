@@ -130,7 +130,7 @@ test("at every story × crowd × model × metro some GPU tile fits the power and
           const base = { ...opening, users, model, metros: [offer.id] }
           const fits = []
           for (const gpu of simpleBrainIds(useCase.id)) {
-            for (const home of ["cool", "aisle", "super"]) {
+            for (const home of ["cool", "aisle", "rear", "super"]) {
               if (fitsChoices(useCase.id, { ...base, brains: gpu, home }, false)) fits.push(`${gpu}/${home}`)
             }
           }

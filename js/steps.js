@@ -188,7 +188,7 @@ const HALL_META = {
   cool: { hallId: "A", label: "Air-cooled hall", nerdLabel: "Air cooling", art: "fan" },
   aisle: { hallId: "C", label: "Cold aisle containment", nerdLabel: "Cold aisle containment", art: "vault" },
   row: { hallId: "I", label: "In-row cooling", nerdLabel: "In-row cooling", art: "rackAir" },
-  rear: { hallId: "R", label: "Rear-door hall", nerdLabel: "Rear door heat exchanger", art: "chest" },
+  rear: { hallId: "R", label: "Rear door heat exchanger", nerdLabel: "Rear door heat exchanger", art: "chest" },
   super: { hallId: "B", label: "Liquid-cooled hall", nerdLabel: "Direct liquid cooling", art: "pipe" },
 }
 
@@ -209,9 +209,9 @@ const HALL_LEARN = {
     "Air-cooled GPUs fit. NVL72 and Vera Rubin still need direct liquid cooling.",
   ],
   rear: (hall) => [
-    "A water-cooled door on each rack takes the hot exhaust away. The servers stay air-cooled.",
-    `Up to ${hall.maxRackKW} kW per rack, and a better PUE than plain fans, so more of a small power room reaches the GPUs.`,
-    "Air-cooled Blackwell racks fit. NVL72 and Vera Rubin still need the liquid hall.",
+    "A radiator on the back door of the rack cools the hot air as it leaves, so ordinary air-cooled servers can be packed far denser.",
+    `About 40 to ${hall.maxRackKW} kW per rack and PUE ${hall.pue.toFixed(2)} (estimates); it needs the building's chilled water, so ${hall.fitOutWeeks} weeks and about ${formatMoney(hall.rackNrc)} a rack. Racks of 30 kW or less are right-sized for containment.`,
+    "Dense HGX racks of two to four 8-GPU nodes fit. NVL72 and Vera Rubin are direct-liquid designs: they still need the liquid hall.",
   ],
   super: (hall) => [
     "Coolant goes straight to cold plates on the chips. This is the LIQUID-COOLED HALL.",
@@ -224,7 +224,7 @@ const HALL_WHY = {
   cool: "Ready now and cheapest, but open air cools only small racks and wastes the most power on cooling.",
   aisle: "Doors and panels keep cold air in front of the racks and hot air behind them, so the fans work less.",
   row: "Coolers between the racks: a little more per rack, a little less waste.",
-  rear: "Water doors on air racks: a better PUE, so more of a small power room reaches the GPUs.",
+  rear: "A radiator on the rack's back door cools the hot air as it leaves, so ordinary air-cooled servers pack far denser.",
   super: "Cold plates on the chips: the only hall for NVL72 and Vera Rubin, and the least waste.",
 }
 
@@ -572,15 +572,21 @@ export function stepTiles(useCaseId, stepId, nerd = false, choices = {}) {
     return ids.home.map((id) => {
       const meta = HALL_META[id]
       const hall = byId(HALLS, meta.hallId)
-      /* The band a hall cools and its overhead sit on every tile: containment reads 15–30 kW, the rest "up to"; the
-         simple board says "29% on cooling" where nerd mode says PUE 1.29 (the simple board never shows PUE). */
-      const band = id === "aisle" ? `15–${hall.maxRackKW} kW` : `up to ${hall.maxRackKW} kW`
+      /* The band a hall cools, its overhead and its lead sit on every tile: containment reads 15–30 kW, the rear door
+         40–70 kW, the rest "up to"; the simple board says "29% on cooling" where nerd mode says PUE 1.29 (the simple
+         board never shows PUE). A liquid-only rack on the board marks every air hall "needs direct liquid". */
+      const band = id === "aisle" ? `15–${hall.maxRackKW} kW` : id === "rear" ? `40–${hall.maxRackKW} kW` : `up to ${hall.maxRackKW} kW`
       const overhead = nerd ? `PUE ${hall.pue.toFixed(2)}` : `${Math.round((hall.pue - 1) * 100)}% on cooling`
+      const lead = hall.fitOutWeeks ? `${hall.fitOutWeeks} wk` : "ready now"
+      const picked = byId(PLATFORMS, brainPick(useCaseId, choices.brains, modelPicks(useCaseId, choices).users).platform)
+      const liquidNeeded = picked?.cooling === "liquid" && hall.cooling !== "liquid"
+      const plainHint = id === "cool" ? "fans, ready now, small racks only" : id === "aisle" ? "doors keep hot and cold air apart" : id === "super" ? "water to the chip, faster" : id === "rear" ? "radiator door: dense air racks" : "coolers between the racks"
       return {
         id,
         label: nerd ? meta.nerdLabel : meta.label,
-        hint: nerd ? `${hall.maxRackKW} kW · PUE ${hall.pue} · ${hall.fitOutWeeks} wk` : id === "cool" ? "fans, ready now, small racks only" : id === "aisle" ? "doors keep hot and cold air apart" : id === "super" ? "water to the chip, faster" : id === "rear" ? "water door, more kW on air" : "coolers between the racks",
-        tag: `${band} · ${overhead}`,
+        hint: liquidNeeded ? `needs direct liquid for ${picked.name}` : nerd ? `${hall.maxRackKW} kW · PUE ${hall.pue} · ${lead}` : plainHint,
+        tag: `${band} · ${overhead} · ${lead}`,
+        liquidNeeded,
         art: meta.art,
         lines: HALL_LEARN[id](hall),
         nerd: `PUE ${hall.pue}. Fit-out ${hall.fitOutWeeks} weeks. Up to ${hall.maxRackKW} kW per rack.`,

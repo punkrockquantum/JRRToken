@@ -282,7 +282,7 @@ test("every step offers three tiles on the simple board, a short list of metros,
     for (const stepId of ["gpu", "cooling", "memory", "wires", "storage"]) {
       const tiles = stepTiles(id, stepId)
       /* CONNECTIVITY adds a fourth tile, COMBO, only where a mixture pays (RAG, coding, research, robots); the GPU step offers six NVIDIA platforms. */
-      assert.equal(tiles.length, stepId === "gpu" ? 6 : stepId === "wires" && hasCombo(id) ? 4 : 3, `${id} ${stepId}`)
+      assert.equal(tiles.length, stepId === "gpu" ? 6 : stepId === "cooling" ? 4 : stepId === "wires" && hasCombo(id) ? 4 : 3, `${id} ${stepId}`)
       assert.ok(stepTiles(id, stepId, true).length >= tiles.length, `${id} ${stepId} nerd offers at least the simple tiles`)
       for (const tile of tiles) {
         assert.ok(tile.label.length > 0 && tile.label.length <= 32, `${id} ${stepId} label "${tile.label}"`)
@@ -303,7 +303,7 @@ test("every step offers three tiles on the simple board, a short list of metros,
       assert.ok(comboTile.why.length > 0, `${id} COMBO why`)
     }
     assert.deepEqual(hasCombo(id), ["rag", "code", "research", "robot"].includes(id), `${id}: COMBO only where mixing pays`)
-    assert.deepEqual(stepTiles(id, "cooling").map((tile) => tile.label), ["Air-cooled hall", "Cold aisle containment", "Liquid-cooled hall"], id)
+    assert.deepEqual(stepTiles(id, "cooling").map((tile) => tile.label), ["Air-cooled hall", "Cold aisle containment", "Rear door heat exchanger", "Liquid-cooled hall"], id)
     assert.deepEqual(stepTiles(id, "memory").map((tile) => tile.label), ["KV cache OFF", "KV cache ON", "KV cache ON + CPU host memory"], id)
     assert.deepEqual(stepTiles(id, "storage").map((tile) => tile.label), ["Local only", "File & object", "Vector index"], id)
     const gpus = stepTiles(id, "gpu")
@@ -376,14 +376,14 @@ test("the simple space is every metro set times six GPU tiles and three tiles on
   for (const { id, orca } of USE_CASES) {
     const combos = allSimple(id)
     const metroSets = new Set(combos.map((combo) => combo.metros.join("+")))
-    const perSet = 6 * 27 * wireIds(id).length
+    const perSet = 6 * 4 * 9 * wireIds(id).length
     assert.equal(combos.length, metroSets.size * perSet * (orca ? 2 : 1), id)
     assert.ok(combos.every((combo) => combo.mcp === false && combo.metros.length >= 1), id)
   }
-  assert.equal(allSimple("chat").length, 14 * 486, "four metros, up to three at a time")
-  assert.equal(allSimple("rag").length, 4 * 648, "a fourth connectivity tile, COMBO")
-  assert.equal(allSimple("drug").length, 4 * 486 * 2)
-  assert.equal(allSimple("robot").length, 10 * 648, "four metros, up to two at a time")
+  assert.equal(allSimple("chat").length, 14 * 648, "four metros, up to three at a time; four cooling tiles")
+  assert.equal(allSimple("rag").length, 4 * 864, "a fourth connectivity tile, COMBO")
+  assert.equal(allSimple("drug").length, 4 * 648 * 2)
+  assert.equal(allSimple("robot").length, 10 * 864, "four metros, up to two at a time")
 })
 
 /* ---------- The game screen wiring ---------- */
