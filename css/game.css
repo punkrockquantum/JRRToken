@@ -924,11 +924,11 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .screen.game .step-panel.step-gpu .tiles.count-6 .tile-title { -webkit-line-clamp: 2; }
 .screen.game .step-panel.step-gpu .tiles.count-6 .tile-hint { -webkit-line-clamp: 2; }
 /* Nerd GPUs: the whole roster plus the HUGE trap, four a row, three rows, the spec in the "?" and the design panel's title. */
-.screen.game.nerd .step-panel.step-gpu .tiles.count-11 { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-.screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile { min-height: 76px; gap: 4px; padding: 6px 36px 6px 8px; }
-.screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-title { -webkit-line-clamp: 3; }
-.screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-hint { -webkit-line-clamp: 3; }
-.screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-tag { white-space: normal; overflow: visible; }
+.screen.game.nerd .step-panel.step-gpu .tiles.count-11, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile { min-height: 76px; gap: 4px; padding: 6px 36px 6px 8px; }
+.screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-title, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile-title { -webkit-line-clamp: 3; }
+.screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-hint, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile-hint { -webkit-line-clamp: 3; }
+.screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-tag, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile-tag { white-space: normal; overflow: visible; }
 .screen.game .step-panel .tile-tag { display: block; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .screen.game .step-panel .tile-copy { max-width: 100%; }
 /* TOKEN IMPACT strip on connectivity tiles: three coloured chips, one plain sentence, nerd detail. */
@@ -1156,11 +1156,11 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
   .screen.game .step-panel.step-gpu .tiles.count-6 .tile-title { -webkit-line-clamp: 3; }
   .screen.game .step-panel.step-gpu .tiles.count-6 .tile-hint { -webkit-line-clamp: 3; }
   /* Eleven nerd GPU tiles: three a row, four rows, no sprite, the name only; the "?" and the design panel carry the specs. */
-  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
-  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile { min-height: 56px; gap: 4px; padding: 4px 34px 4px 8px; }
-  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-art { display: none; }
-  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-title { -webkit-line-clamp: 3; }
-  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-hint { display: none; }
+  .screen.game.nerd .step-panel.step-gpu .tiles.count-11, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile { min-height: 56px; gap: 4px; padding: 4px 34px 4px 8px; }
+  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-art, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile-art { display: none; }
+  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-title, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile-title { -webkit-line-clamp: 3; }
+  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-hint, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile-hint { display: none; }
   .ra-card .ra-line:nth-of-type(2) { display: none; } /* the spec line lives in the "?" popover here */
   .refarch { gap: 2px; }
   .workers { max-width: 48px; }
@@ -1204,8 +1204,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
   .screen.game.nerd .step-gpu .tiles { gap: 6px; }
   /* Eleven tiles three a row: the longest names ("RTX PRO 6000 Server") need a fourth line in this narrow column. */
   .screen.game.nerd .step-panel.step-gpu { gap: 6px; }
-  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile { min-height: 52px; }
-  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-title { -webkit-line-clamp: 4; }
+  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile { min-height: 52px; }
+  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-title, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile-title { -webkit-line-clamp: 4; }
   .screen.game.nerd .step-gpu .step-head .fine { display: none; }
   .ra-title .fine { display: none; }
   /* Location: the job paragraph goes (the "?" and the brief's numbers keep the lesson); tiles get a little shorter. */
