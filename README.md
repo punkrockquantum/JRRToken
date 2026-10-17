@@ -115,6 +115,11 @@ npm run build:worker && npm run deploy:worker   # publish to the team URL
 
 Node 18+ and Google Chrome (for the smoke test). No npm dependencies.
 
+Works on phones and tablets in portrait: the page scrolls and the main action stays pinned at the bottom.
+The phone rules live in `css/mobile.css`, loaded only below 900px wide or in portrait under 1100px, so the
+kiosk layout is untouched; `SHOTS=.shots node scripts/smoke-mobile.mjs` plays the game as an iPhone (390×844,
+430×932) and a portrait iPad (820×1180) and audits every screen for overflow, 44px tap targets and type size.
+
 ## Privacy
 
 The booth laptop's `data/` folder and Desktop workbook, and the private players repository, hold
