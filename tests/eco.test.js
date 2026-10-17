@@ -295,7 +295,7 @@ test("every step offers three tiles on the simple board, a short list of metros,
         assert.ok(tile.patch && Object.keys(tile.patch).length > 0, `${id} ${stepId} ${tile.id} sets something`)
       }
     }
-    assert.deepEqual(stepTiles(id, "wires").map((tile) => tile.label), ["Public internet", "Peering + eyeballs", "ServiceFabric", ...(hasCombo(id) ? ["COMBO"] : [])], id)
+    assert.deepEqual(stepTiles(id, "wires").map((tile) => tile.label), ["Public internet", "Peering", "ServiceFabric", ...(hasCombo(id) ? ["COMBO"] : [])], id)
     if (hasCombo(id)) {
       const comboTile = stepTiles(id, "wires").find((tile) => tile.id === "combo")
       assert.deepEqual(comboTile.parts, COMBO[id].parts, `${id} COMBO names its legs`)
@@ -368,7 +368,7 @@ test("picking a tile patches the choice set; metros toggle up to the story's max
   assert.deepEqual([memoryOn.memory, memoryOn.hosts], [true, "grace"])
   assert.deepEqual(untouchedSteps("chat", memoryOn), ["location", "model", "gpu", "cooling", "wires", "storage"])
   assert.deepEqual(untouchedSteps("chat", applyTile("chat", "model", "medium", chat)), ["location", "gpu", "cooling", "memory", "wires", "storage"], "a smaller crowd counts as a touched first step")
-  assert.equal(describeChoices("chat", chat), "NVIDIA HGX B300 ×6, cold aisle containment in London, with the KV cache off, on Peering + eyeballs, local only storage")
+  assert.equal(describeChoices("chat", chat), "NVIDIA HGX B300 ×6, cold aisle containment in London, with the KV cache off, on Peering, local only storage")
   assert.match(describeChoices("drug", applyTile("drug", "qpu", "orca", simpleDefaults("drug"))), /, with ORCA PT-3$/)
 })
 

@@ -92,3 +92,36 @@ export function ordinal(rank) {
   const suffix = { 1: "ST", 2: "ND", 3: "RD" }[rank % 10] || "TH"
   return `${rank}${suffix}`
 }
+
+/** How many rows the title board shows: the top three players by best score. */
+export const TITLE_ROWS = 3
+
+/** A player's name as entered, with the whitespace tidied: "ada   lovelace " -> "ada lovelace". */
+export function displayName(name) {
+  return String(name ?? "").trim().replace(/\s+/g, " ")
+}
+
+/**
+ * The title board's rows. The shared sheet (the /api/league players, sorted by best score) wins
+ * whenever the API answered, even with nobody on it yet; the browser's own league is the fallback
+ * only when the API could not be reached (`shared` is null). Each row: rank, the name as entered,
+ * and the score.
+ */
+export function titleBoard(shared, local = [], limit = TITLE_ROWS) {
+  if (Array.isArray(shared)) {
+    const rows = shared
+      .filter((entry) => entry && Number.isFinite(Number(entry.best)))
+      .slice()
+      .sort((a, b) => Number(b.best) - Number(a.best) || (a.rank || 0) - (b.rank || 0))
+      .slice(0, limit)
+      .map((entry, index) => ({ rank: index + 1, name: displayName(entry.name), score: Number(entry.best) }))
+    return { source: "shared", rows }
+  }
+  const rows = sortLeague(local).slice(0, limit).map((entry, index) => ({ rank: index + 1, name: displayName(entry.name), score: entry.score }))
+  return { source: "local", rows }
+}
+
+/** The small note under the title board when the shared sheet is not wired up yet (health says configured: false). */
+export function sharedScoresHint(health) {
+  return health && typeof health === "object" && health.configured === false ? "shared scores offline" : ""
+}

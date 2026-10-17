@@ -10,7 +10,11 @@ for a booth (see [HOSTING.md](HOSTING.md)).
 
 ## What a player does
 
-1. **Sign in.** Full name, email, and consent to Digital Realty's privacy practices. A **TEST
+1. **Sign in.** Full name, email, and consent to Digital Realty's privacy practices. HIGH SCORES
+   beside the form is the top three from the shared player sheet (first and last name as entered,
+   best score), re-read from `/api/league` every time the title shows; the browser's own league
+   stands in only when the server is unreachable, and a small "shared scores offline" note appears
+   while the hosted sheet is not configured yet. A **TEST
    MODE** pill beside START (title screen only) lets staff play without saving anything: the
    form may stay blank, the HUD shows a TEST MODE badge, the results say "Test mode: not saved",
    and no league entry, booth upload or local record is made. It switches itself off for the

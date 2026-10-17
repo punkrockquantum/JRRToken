@@ -8,7 +8,8 @@ import { detailLine, wireImpact } from "./impact.js"
 import { plainCoach } from "./coach.js"
 import { createFloor } from "./floor.js"
 import { createAdvanceGate, createIntro, matchingScene, sceneCaption, scenesFor, setIntroDetail } from "./intro.js"
-import { leagueCsv, leagueJson, ordinal, rankOf, sortLeague } from "./league.js"
+import { TITLE_ROWS, leagueCsv, leagueJson, ordinal, sharedScoresHint, sortLeague, titleBoard } from "./league.js"
+import { fetchHealth } from "./health.js"
 import { STAR_POINTS, defaultSitePlans, evaluateBuild, formatMoney, formatScore, formatTokens, scenarioFor, stars } from "./model.js"
 import { blockedReason, peopleCount, peopleLead, savingsLine } from "./results.js"
 import { syncStatusLine } from "./attempt.js"
@@ -41,6 +42,7 @@ const state = {
   plan: freshPlan(FIRST_SCENARIO),
   league: loadLeague(),
   serverLeague: null,
+  serverHealth: null,
   serverUp: null,
   lessons: new Set(),
   tip: null,
@@ -157,7 +159,7 @@ function toggleNerd() {
   }
   if (state.screen === "title") {
     const slot = document.getElementById("league-slot")
-    if (slot) slot.replaceChildren(leagueTable(null, 5))
+    if (slot) slot.replaceChildren(leagueTable())
     return
   }
   if (state.plan) {
@@ -378,7 +380,7 @@ function titleScreen() {
         }),
         el("div", { class: "scores" }, [
           el("h2", { text: "HIGH SCORES" }),
-          el("div", { id: "league-slot" }, [leagueTable(null, 5)]),
+          el("div", { id: "league-slot" }, [leagueTable()]),
           el("div", { class: "prize" }, [spriteImg("trophy", 3), el("span", { text: "TOP SCORE WINS THE PRIZE" })]),
         ]),
       ]),
@@ -387,52 +389,41 @@ function titleScreen() {
   ])
 }
 
-function leagueRows(limit) {
-  if (Array.isArray(state.serverLeague)) {
-    return state.serverLeague.slice(0, limit).map((entry) => ({
-      name: entry.name,
-      score: entry.best,
-      rank: entry.rank,
-      attempts: entry.attempts,
-      label: entry.bestUseCase || "",
-    }))
-  }
-  return sortLeague(state.league).slice(0, limit).map(({ name, score, useCase: id, fteEquivalent }, index) => ({
-    name,
-    score,
-    rank: index + 1,
-    attempts: null,
-    label: byId(USE_CASES, id)?.npc?.toUpperCase() || "",
-    fte: fteEquivalent,
-  }))
-}
-
+/**
+ * The title board is re-read from the shared sheet every time the title shows (on load, after
+ * every game, after a staff action): /api/league for the players, /api/health for whether the
+ * hosted sheet is wired up yet. The browser's own league only stands in when the API is unreachable.
+ */
 function refreshServerLeague() {
-  fetchLeague().then((players) => {
-    state.serverLeague = players
+  const paint = () => {
     const slot = document.getElementById("league-slot")
     if (!slot || state.screen !== "title") return
-    slot.replaceChildren(leagueTable(null, 5))
+    slot.replaceChildren(leagueTable())
+  }
+  fetchLeague().then((players) => {
+    state.serverLeague = players
+    paint()
+  }).catch(() => {})
+  fetchHealth().then((health) => {
+    state.serverHealth = health
+    paint()
   }).catch(() => {})
 }
 
-function leagueTable(highlight, limit) {
-  const rows = leagueRows(limit)
-  if (!rows.length) return el("p", { class: "empty", text: "NO SCORES YET. BE THE FIRST!" })
-  const mine = highlight?.toLocaleLowerCase()
-  const table = el("ol", { class: "league" }, rows.map((entry) =>
-    el("li", { class: mine && entry.name.toLocaleLowerCase() === mine ? "mine" : "" }, [
+/** HIGH SCORES: exactly the top three by best score, first and last name as entered, and the score. */
+function leagueTable() {
+  const board = titleBoard(state.serverLeague, state.league, TITLE_ROWS)
+  const hint = sharedScoresHint(state.serverHealth)
+  const note = hint ? el("p", { class: "fine shared-hint", "data-key": "shared-hint", text: hint }) : null
+  if (!board.rows.length) return el("div", { "data-key": "league-board", "data-source": board.source }, [el("p", { class: "empty", "data-key": "league-empty", text: "No scores yet. Be the first!" }), note])
+  const table = el("ol", { class: "league", "data-source": board.source }, board.rows.map((entry) =>
+    el("li", {}, [
       el("span", { class: "rank", text: ordinal(entry.rank) }),
-      el("span", { class: "lname", text: `${entry.name.toUpperCase()}${entry.attempts ? ` ×${entry.attempts}` : ""}` }),
-      el("span", { class: "lcase", text: entry.label }),
+      el("span", { class: "lname", text: entry.name }),
       el("span", { class: "lscore", text: formatScore(entry.score) }),
-      state.nerd && entry.fte ? el("span", { class: "fine", text: `${peopleCount(entry.fte)} people` }) : null,
     ]),
   ))
-  const rank = highlight ? rankOf(state.league, highlight) : null
-  if (!rank || rank <= limit) return table
-  const entry = state.league.find((item) => item.name.toLocaleLowerCase() === mine)
-  return el("div", {}, [table, el("p", { class: "fine", text: `YOU: ${ordinal(rank)} · ${formatScore(entry.score)}` })])
+  return el("div", { "data-key": "league-board", "data-source": board.source }, [table, note])
 }
 
 /* ---------- Intro ---------- */

@@ -15,7 +15,7 @@ const KINDS = {
 
 const WIRES = {
   cheap: "Public internet",
-  peer: "Peering + eyeball networks",
+  peer: "Peering",
   fast: "ServiceFabric",
   private: "Cross connect + Dark fiber",
 }

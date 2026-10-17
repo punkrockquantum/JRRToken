@@ -159,7 +159,7 @@ test("picture presets map onto builds, and the preset board stays in the scoring
     "Rear door heat exchanger",
     "Public internet",
     "cheap, busy, slow at peaks",
-    "Peering + eyeballs",
+    "Peering",
     "straight into home networks",
     "ServiceFabric",
     "private lane, fast and steady",

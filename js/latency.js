@@ -26,7 +26,7 @@ export const MSS_BYTES = 1460
  */
 export const OPTIONS = {
   internet: { name: "Public internet", ...ROUTE.public, gbps: 10 },
-  peer: { name: "Peering + eyeballs", ...ROUTE.peer, gbps: 10 },
+  peer: { name: "Peering", ...ROUTE.peer, gbps: 10 },
   fabric: { name: "ServiceFabric", ...ROUTE.fabric, gbps: 100 },
   fiber: { name: "Dark fiber", ...ROUTE.fiber, gbps: 400 },
   cross: { name: "Cross connect", ...ROUTE.cross, gbps: 100 },

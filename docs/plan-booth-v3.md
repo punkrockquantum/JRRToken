@@ -109,7 +109,7 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
       (50 Mbps…100 Gbps) cap ingest and inter-site traffic; monthly cost = port MRC + per-connection MRC by tier
       + NRC; lead times: ports 15-day SLA (published), VXC minutes, cross connect ~1 week, metro dark fibre weeks,
       IX peering days
-- [ ] Simple mode keeps 4 tiles (Public internet / Peering + eyeballs / ServiceFabric / COMBO); COMBO and
+- [ ] Simple mode keeps 4 tiles (Public internet / Peering / ServiceFabric / COMBO); COMBO and
       ServiceFabric resolve to the specific products per leg and the TOKEN IMPACT strip names them; nerd mode's
       per-leg board lists the full product set with the numbers
 - [ ] Tests: product table completeness, ordering (internet slowest), bandwidth caps, cost monotonicity, lead times
@@ -161,6 +161,11 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
       estimates; US DOE FEMP and Schneider WP 135 cited in data.js); open air drops to its real ~15 kW so an HGX rack
       throttles there; simple board = air / containment / liquid, nerd adds in-row and rear door; every story opens on
       containment; tests/cooling.test.js
+- [x] TITLE BOARD = TOP 3 FROM THE SHARED SHEET (user: "I don't see the league table on the first page updating
+      properly. This should just display the first name & last name top 3"): `titleBoard()` in js/league.js picks the
+      top three by best score from /api/league (re-fetched on every title show), names as entered, score; local league
+      only when the API is unreachable; "shared scores offline" hint from /api/health configured:false (js/health.js)
+- [x] "Peering + eyeballs" renamed "Peering" everywhere a player reads it (eyeball networks stay in the learn text)
 - [ ] C. MULTI-SELECT CONNECTIVITY with best-path routing (user: "Ensure that there is always an option to turn the
       connections green ... the user can select many different types of connection ... public internet, cross
       connect, ServiceFabric, ServiceFabricMCP (which allows agentic routing), Dark Fiber."): the NET step is a

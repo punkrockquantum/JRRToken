@@ -80,7 +80,7 @@ test("the start gate: consent, a name and an email are required unless test mode
 test("the title screen carries the toggle, the HUD the badge, the results the not-saved line, and the resets clear it", () => {
   assert.match(main, /"data-key": "test-mode"/, "the toggle is on the title screen")
   assert.equal((main.match(/"data-key": "test-mode"/g) || []).length, 1, "one toggle, on the first page only")
-  assert.match(main, /function titleScreen\(\)[\s\S]*"data-key": "test-mode"[\s\S]*function leagueRows/, "the toggle is built inside titleScreen")
+  assert.match(main, /function titleScreen\(\)[\s\S]*"data-key": "test-mode"[\s\S]*function refreshServerLeague/, "the toggle is built inside titleScreen")
   assert.match(main, /testMode: false,/, "default off")
   assert.match(main, /state\.testMode = testModeAfterReset\(\)/, "resetRun (NEXT PLAYER and the idle reset) turns it off")
   assert.match(main, /idleTimer = setTimeout\(\(\) => \{\s*if \(state\.running\) return poke\(\)\s*resetRun\(\)/, "the idle reset goes through resetRun")

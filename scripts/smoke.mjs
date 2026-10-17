@@ -483,10 +483,18 @@ try {
     /* ---------- League and the next player ---------- */
     await click('[data-key="next-player"]')
     await waitFor(`!!document.querySelector('.league li')`, "league row")
+    /* The title board is the shared sheet's top three (the kiosk server's own log here), re-read after the game:
+       first and last name as entered, and the score; never more than three rows, never an email. */
+    if (booth) await waitFor(`document.querySelector('.league')?.dataset.source === 'shared'`, "shared league")
     await layout("league")
     await shot("10-league")
     const board = await evaluate(`document.querySelector('.league').innerText`)
-    if (!board.includes("ADA LOVELACE")) throw new Error(`League missed the player: ${board}`)
+    if (!board.includes("Ada Lovelace")) throw new Error(`League missed the player: ${board}`)
+    if (/ADA LOVELACE|×\d/.test(board)) throw new Error(`The title board should read the name as entered, without attempts: ${board}`)
+    const rows = await evaluate(`document.querySelectorAll('.league li').length`)
+    if (rows < 1 || rows > 3) throw new Error(`The title board shows the top three, saw ${rows} rows`)
+    const first = await evaluate(`document.querySelector('.league li .lname').textContent`)
+    if (first !== "Ada Lovelace") throw new Error(`The only player should top the board: ${first}`)
     if (/@/.test(board)) throw new Error(`League board showed an email: ${board}`)
     const cleared = await evaluate(`document.querySelector('#player-name').value + '|' + document.querySelector('#player-email').value + '|' + document.querySelector('#player-consent').checked`)
     if (cleared !== "||false") throw new Error(`Next player still sees the last entry: ${cleared}`)
