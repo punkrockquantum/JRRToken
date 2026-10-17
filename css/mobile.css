@@ -1,0 +1,400 @@
+/*
+ * Token Quest on a phone or a portrait tablet.
+ *
+ * index.html loads this sheet after game.css, and only below 900px wide or in portrait under
+ * 1100px (the media attribute on the <link>), so nothing here reaches the kiosk layouts. The
+ * kiosk's one rule, "nothing scrolls", is turned over here: the page scrolls, every screen stacks
+ * in one column, and the step's main action (NEXT, REVIEW, GO) sits in a bar pinned to the bottom
+ * of the viewport. Long kiosk selectors are out-ranked with an id prefix (#stage, #result), not
+ * with !important; the two !important declarations below beat the inline canvas size that
+ * fitCanvas() writes, which nothing else can.
+ */
+
+/* ---------- Type: 14px body, 12px labels, 16px inputs (no zoom-on-focus on iOS) ---------- */
+:root { --fs: 14px; --fs-s: 12px; --fs-l: 16px; --gap: 8px; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+html, body { height: auto; overflow: visible; }
+#app { height: auto; min-height: 100vh; overflow: visible; }
+#stage { flex: none; min-height: 0; overflow: visible; }
+input, .enter input, .dialog input { font-size: 16px; }
+button, .tile, .story-card, .rail-btn, .learn-btn, .eco-part, .ra-card, .dot, a { touch-action: manipulation; }
+.btn { min-height: 44px; }
+.seg-btn { min-height: 44px; }
+.build-stamp { margin-top: auto; padding: 6px 10px calc(6px + env(safe-area-inset-bottom, 0px)); font-size: 12px; text-align: center; }
+
+/* ---------- Top bar: logo and HUD on the first row, the two buttons that work on a phone below ---------- */
+.top { flex-wrap: wrap; gap: 4px 10px; padding: 4px 10px; }
+.logo { font-size: 14px; }
+.hud { flex: 1 1 auto; min-width: 0; justify-content: flex-end; gap: 2px 12px; margin: 0; font-size: 12px; line-height: 1.5; }
+.hud-item { min-width: 0; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top-actions { flex: 1 1 100%; gap: 6px; }
+.top-actions .btn { flex: 1 1 0; min-width: 0; padding: 6px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* iPhone Safari has no fullscreen API for a page, and three 12px labels do not fit a 390px row: the two that work stay. */
+@media (max-width: 479px) { #present { display: none; } }
+.idle { font-size: 12px; }
+
+/* ---------- Every screen: full width, natural height, room for the home indicator ---------- */
+#stage .screen, #stage .intro, #stage .title-screen {
+  width: 100%;
+  height: auto;
+  padding: 8px 8px calc(12px + env(safe-area-inset-bottom, 0px));
+  overflow: visible;
+}
+
+/* ---------- Title ---------- */
+#stage .title-screen { display: block; }
+#stage .title-card { width: 100%; max-height: none; grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 12px 10px; overflow: visible; }
+#stage .logo-art { gap: 12px; }
+#stage .logo-row { gap: 12px; justify-content: space-between; }
+#stage .game-logo { font-size: clamp(26px, 8vw, 40px); }
+#stage .brand-mark { height: clamp(56px, 16vw, 90px); }
+#stage .subtitle, #stage .pitch { font-size: 14px; }
+#stage .tagline { font-size: 16px; }
+#stage .scores h2 { font-size: 14px; }
+/* League rows: rank, name over the job, the score on the right, so a long name never pushes the score off. */
+#stage .league li { grid-template-columns: 44px minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: 0 8px; align-items: center; }
+#stage .league .rank { grid-row: 1 / span 2; }
+#stage .league .lcase { grid-column: 2; grid-row: 2; }
+#stage .league .lscore { grid-column: 3; grid-row: 1 / span 2; }
+#stage .league .fine { grid-column: 2 / -1; grid-row: 3; margin: 0; }
+#stage .prize { font-size: 12px; }
+#stage .enter label { font-size: 12px; }
+#stage .enter input { min-height: 48px; }
+#stage .consent { grid-template-columns: 32px minmax(0, 1fr); }
+#stage .consent input[type="checkbox"] { width: 28px; height: 28px; min-height: 28px; margin-top: 2px; }
+#stage .enter .consent-copy { font-size: 14px; line-height: 1.5; }
+#stage .form-error { font-size: 12px; }
+
+/* ---------- Intro: the canvas takes the full width at 16:9, captions below, CONTINUE full width ---------- */
+#stage .intro { gap: 10px; }
+#stage .intro .crt {
+  flex: none;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  border: 0;
+  outline: 4px solid #3a3a5a;
+  box-shadow: 0 0 0 7px var(--ink);
+  margin: 6px 0 4px;
+}
+/* fitCanvas() writes a whole-number size inline; on a phone the canvas stretches to the width instead. */
+#stage .intro-canvas { width: 100% !important; height: auto !important; aspect-ratio: 16 / 9; image-rendering: pixelated; }
+#stage .caption { padding: 10px 12px; }
+#stage .caption b, #stage .caption p, #stage .caption.deep p { font-size: 14px; line-height: 1.5; }
+#stage .nerd-tag { font-size: 12px; }
+#stage .scene-dots { flex-wrap: wrap; gap: 22px; padding: 6px 0; }
+#stage .intro .row { flex-wrap: wrap; gap: 8px; min-height: 0; }
+#stage .intro .row .btn { flex: 1 1 auto; }
+#stage .intro .row .btn.big { flex: 1 1 100%; order: 1; min-height: 56px; }
+
+/* ---------- Stories: one card a row, the brief wraps ---------- */
+#stage .stories, #stage .stories.simple { display: flex; flex-direction: column; gap: 10px; }
+#stage .stories h2 { font-size: 16px; }
+#stage .story-cards, #stage .story-cards.featured { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: none; gap: 10px; }
+#stage .story-card, #stage .story-cards.featured .story-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  justify-items: start;
+  gap: 4px 12px;
+  min-height: 64px;
+  padding: 10px 12px;
+  text-align: left;
+}
+#stage .story-card img { grid-row: 1 / span 2; width: 64px; height: 64px; }
+#stage .story-card strong, #stage .story-cards.featured .story-card strong { font-size: 14px; }
+#stage .story-card span, #stage .story-cards.featured .story-card span { font-size: 14px; line-height: 1.45; white-space: normal; }
+#stage .stories .row.end { margin: 0; }
+#stage .stories .row.end .btn { width: 100%; }
+
+/* ---------- The game screen: one column; the step panel's children join it (display: contents) so the
+   action bar at its end is the page's last item and sticks to the bottom of the viewport everywhere ---------- */
+#stage .screen.game, #stage .screen.game.simple, #stage .screen.game.nerd {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  height: auto;
+  padding: 8px 8px 0;
+  overflow: visible;
+}
+#stage .step-panel { display: contents; }
+#stage .feel, #stage .feel.simple { order: 1; }
+#stage .think { order: 2; }
+#stage .price-note { order: 3; margin: 0 0 4px; text-align: center; }
+#stage .step-nav, #stage .review-go { order: 4; }
+
+/* Scenario card: who and the story, the two places, then the five facts and NEW STORY in two columns. */
+#stage .screen.game .scenario {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px;
+}
+#stage .scenario .sc-who { grid-column: 1 / -1; gap: 10px; }
+#stage .scenario .sc-who > div { min-width: 0; }
+#stage .scenario .sc-who h1, #stage .scenario .sc-who .story-line { white-space: normal; overflow: visible; text-overflow: clip; }
+#stage .scenario .sc-who h1 { font-size: 14px; }
+#stage .scenario .sc-who .story-line { font-size: 12px; }
+#stage .scenario .sc-places { grid-column: 1 / -1; gap: 4px; }
+#stage .scenario .sc-place { font-size: 12px; -webkit-line-clamp: 3; }
+#stage .scenario .sc-facts { display: contents; }
+#stage .scenario .sc-fact { padding: 4px 6px; }
+#stage .scenario .sc-fact .fine { font-size: 12px; }
+#stage .scenario .sc-fact strong { font-size: 12px; white-space: normal; }
+#stage .scenario .btn { width: 100%; min-height: 44px; }
+
+/* Ecosystem bar: five lights in one row. The names sit under the lights on two alternating rows, so
+   CONNECTIONS has two columns of width to itself and nothing is cut short. */
+:is(#stage, #result) .eco-bar:not(.detail) { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; position: relative; padding-bottom: 42px; overflow: hidden; }
+:is(#stage, #result) .eco-bar:not(.detail) .eco-part { position: relative; flex-wrap: nowrap; justify-content: center; gap: 6px; min-height: 44px; padding: 4px 2px; }
+/* top: 100% is the padding box, 3px inside the border, so +7px lands the name 4px under the box. */
+:is(#stage, #result) .eco-bar:not(.detail) .eco-part b {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 50%;
+  transform: translateX(-50%);
+  flex: none;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  overflow: visible;
+  font-size: 12px;
+  line-height: 1.2;
+  text-align: center;
+}
+:is(#stage, #result) .eco-bar:not(.detail) .eco-part:nth-child(even) b { top: calc(100% + 24px); }
+:is(#stage, #result) .eco-bar:not(.detail) .eco-part:first-child b { left: 0; transform: none; text-align: left; }
+:is(#stage, #result) .eco-bar:not(.detail) .eco-part:last-child b { left: auto; right: 0; transform: none; text-align: right; }
+/* Under 375px two rows of names would touch: three rows. */
+@media (max-width: 374px) {
+  :is(#stage, #result) .eco-bar:not(.detail) { padding-bottom: 59px; }
+  :is(#stage, #result) .eco-bar:not(.detail) .eco-part:nth-child(3) b { top: calc(100% + 41px); }
+  :is(#stage, #result) .eco-bar:not(.detail) .eco-part:nth-child(4) b { top: calc(100% + 7px); }
+}
+
+/* The step rail: one strip across the width that scrolls sideways if it ever has to. Under 760px the
+   steps already passed and still to come show their number only and the current step keeps its name:
+   eight 30px boxes and "5 · MODEL" come to 358px, so all nine fit a 375px phone without scrolling. */
+#stage .eco-strip { gap: 8px; }
+#stage .rail {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  padding: 0 0 2px;
+}
+#stage .rail::-webkit-scrollbar { display: none; }
+#stage .rail-step { flex: 1 0 auto; }
+#stage .rail-btn { position: relative; width: 100%; min-width: 44px; min-height: 44px; gap: 4px; padding: 4px 6px; font-size: 12px; white-space: nowrap; }
+#stage .rail-num { width: 22px; height: 22px; font-size: 12px; }
+@media (max-width: 759px) {
+  #stage .rail-step:not(.current) .rail-name { display: none; }
+  #stage .rail-step:not(.current) .rail-btn { min-width: 30px; padding: 4px 0; }
+  /* The drawn box is 30px wide; the finger-sized hit area is the invisible halo around it. */
+  #stage .rail-step:not(.current) .rail-btn::after { content: ""; position: absolute; inset: -7px; }
+  #stage .rail-step.current .rail-btn { padding: 4px 8px; }
+}
+
+/* The step itself: title and hint, then the tiles one a row (two from 480px), each tile lying down. */
+#stage .step-head { min-width: 0; }
+#stage .step-head h2 { font-size: 16px; }
+#stage .step-head .fine { font-size: 14px; margin-top: 4px; }
+#stage .screen.game .step-panel.step-location .step-head .fine { display: block; }
+#stage .screen.game .step-panel .tiles {
+  display: grid;
+  grid-auto-flow: row;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  height: auto;
+  min-height: 0;
+  flex: none;
+  align-content: start;
+}
+@media (min-width: 480px) {
+  #stage .screen.game .step-panel .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+#stage .screen.game .step-panel .tile {
+  min-height: 80px;
+  height: 100%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 8px 44px 8px 10px;
+}
+#stage .screen.game .step-panel .tile-art { display: flex; flex: none; }
+#stage .screen.game .step-panel .tile-title { font-size: 14px; line-height: 1.35; -webkit-line-clamp: 3; }
+/* The kiosk hides some hints to fit; a phone has the height, so every tile says what it is for. */
+#stage .screen.game .step-panel .tile-hint { display: -webkit-box; font-size: 12px; line-height: 1.4; -webkit-line-clamp: 4; }
+#stage .screen.game .step-panel .tile-tag { font-size: 12px; white-space: normal; overflow: visible; }
+#stage .screen.game .step-panel .tile-copy { min-width: 0; flex: 1 1 auto; }
+#stage .row-nerd, #stage .screen.game .step-panel .row-nerd { font-size: 12px; white-space: normal; -webkit-line-clamp: 4; }
+#stage .tile-row-group .row-title { font-size: 12px; }
+#stage .tile-row-group .row-title .row-nerd { font-size: 12px; -webkit-line-clamp: 3; }
+.nerd { font-size: 12px; line-height: 1.4; }
+#stage .mcp-toggle { font-size: 12px; height: 32px; }
+
+/* Location: the brief in one column, then the metro tiles with one trip a line. */
+#stage .who-where { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 8px; }
+#stage .ww-chip { flex: 1 1 150px; }
+#stage .ww-chip .fine { font-size: 12px; white-space: normal; overflow: visible; }
+#stage .ww-chip strong { font-size: 12px; -webkit-line-clamp: 3; }
+#stage .ww-job { display: -webkit-box; font-size: 14px; line-height: 1.45; -webkit-line-clamp: 5; }
+#stage .ww-needs { display: block; font-size: 14px; line-height: 1.45; padding-left: 16px; overflow: visible; }
+#stage .ww-needs li { overflow: visible; white-space: normal; }
+#stage .screen.game .step-panel.step-location .tile { flex-direction: column; align-items: flex-start; gap: 4px; }
+#stage .screen.game .step-panel.step-location .tile-art { display: none; } /* the rows carry the trips; no room is spent on a sprite */
+#stage .screen.game .step-panel.step-location .tile-title { -webkit-line-clamp: 2; padding-right: 0; }
+#stage .screen.game .step-panel.step-location .tile-hint { -webkit-line-clamp: 3; }
+#stage .screen.game .step-panel.step-location .tile-copy { width: 100%; }
+#stage .tile-rows { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+#stage .tile-row { flex-direction: row; justify-content: space-between; align-items: baseline; gap: 8px; }
+#stage .tile-row .row-label, #stage .tile-row b { font-size: 12px; }
+#stage .tile-row .row-label { flex: none; overflow: visible; }
+#stage .tile-row b { min-width: 0; text-align: right; }
+
+/* Connectivity: the TOKEN IMPACT strip under the words at full tile width, chips wrapping. */
+#stage .screen.game .step-wires .tile { flex-wrap: wrap; align-content: center; row-gap: 6px; padding-right: 10px; }
+#stage .screen.game .step-wires .tile-copy { flex: 1 1 0; min-width: 0; padding-right: 34px; }
+#stage .screen.game .step-wires .tile .impact { flex: 1 0 100%; margin: 0; gap: 4px; }
+#stage .screen.game .step-wires .imp-chip { flex-direction: row; align-items: baseline; gap: 2px 6px; padding: 3px 6px; }
+#stage .imp-label, #stage .imp-nerd { font-size: 12px; }
+#stage .imp-why { font-size: 14px; -webkit-line-clamp: 4; }
+#stage .imp-nerd { -webkit-line-clamp: 4; }
+#stage .screen.game .step-wires .tile-title, #stage .screen.game .step-wires .tile-hint { -webkit-line-clamp: 3; }
+
+/* Nerd GPU step: reference architectures one a row (two from 480px), every line readable. */
+#stage .refarch { gap: 6px; }
+#stage .ra-title h3, #stage .ra-title .fine { font-size: 12px; white-space: normal; overflow: visible; }
+#stage .ra-cards, #stage .ra-cards.count-3 { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+@media (min-width: 480px) {
+  #stage .ra-cards, #stage .ra-cards.count-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+#stage .ra-card { min-height: 44px; gap: 2px; padding: 6px 40px 6px 8px; }
+#stage .ra-head { flex-wrap: wrap; }
+#stage .ra-head b, #stage .ra-form, #stage .ra-line { font-size: 12px; line-height: 1.3; white-space: normal; overflow: visible; }
+
+/* The action bar: BACK and NEXT (or GO) pinned to the bottom of the viewport, above the home indicator. */
+#stage .step-nav, #stage .review-go {
+  position: sticky;
+  bottom: 0;
+  z-index: 8;
+  display: flex;
+  gap: 8px;
+  margin: 0 -8px;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+  background: var(--ink);
+  border-top: 3px solid var(--cyan);
+  box-shadow: 0 -8px 16px rgba(11, 11, 23, 0.6);
+}
+#stage .step-nav .btn, #stage .review-go .btn { flex: 1 1 auto; min-width: 0; }
+#stage .step-nav .btn.big, #stage .review-go .btn.run { flex: 2 1 auto; min-height: 52px; }
+#stage .review-go .btn.run { min-width: 0; font-size: 20px; }
+#stage .review-go .target { display: none; } /* the Scouter card above carries the same target line */
+
+/* Review: one row a step, then the five lights with their reasons, each on its own line. */
+#stage .step-review .review-rows { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+@media (min-width: 600px) {
+  #stage .step-review .review-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+#stage .review-row { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 6px 6px 6px 10px; }
+#stage .review-row .fine { font-size: 12px; }
+#stage .review-row strong { font-size: 14px; white-space: normal; overflow: visible; }
+#stage .btn.small { font-size: 12px; }
+#stage .step-review .eco-bar.detail { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+#stage .step-review .eco-bar.detail .eco-part { flex-wrap: wrap; min-height: 44px; padding: 6px 8px; }
+#stage .eco-bar.detail .eco-part b { flex: 0 0 auto; min-width: 0; font-size: 12px; }
+#stage .eco-why { flex: 1 1 100%; font-size: 12px; line-height: 1.4; -webkit-line-clamp: 3; }
+#stage .target { gap: 4px 10px; padding: 6px 8px; }
+#stage .target .fine { display: none; }
+#stage .target-step { font-size: 12px; }
+
+/* The Scouter, below the tiles: target, gauges two a row, the crowd, the coach's question, REVIEW. */
+#stage .feel, #stage .feel.simple {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: start;
+  min-height: 0;
+  padding: 10px;
+  overflow: visible;
+}
+#stage .feel > .target, #stage .feel > .round-badge, #stage .feel > .crowd, #stage .feel > .coach, #stage .feel > .people-badge, #stage .feel > .btn { grid-column: 1 / -1; }
+#stage .feel .meter { margin: 0; }
+#stage .feel .meter-top { flex-wrap: wrap; gap: 2px 8px; font-size: 12px; }
+#stage .feel .meter-bar, #stage .feel.simple .meter-bar { height: 14px; }
+#stage .feel .crowd, #stage .feel.simple .crowd { flex-wrap: wrap; justify-content: center; gap: 8px; min-height: 0; padding: 6px 8px; }
+#stage .feel .coach, #stage .feel.simple .coach { gap: 8px; padding: 8px; }
+#stage .feel .coach p, #stage .feel.simple .coach p { font-size: 14px; line-height: 1.5; }
+#stage .feel .btn.big, #stage .feel.simple .btn.big { min-height: 52px; }
+#stage .feel .btn.nerd-toggle { display: none; } /* the top bar has NERD MODE */
+#stage .people-badge { min-height: 0; }
+#stage .people-copy strong, #stage .people-copy .fine { white-space: normal; overflow: visible; }
+#stage .people-copy .over-tag { position: static; margin-left: 8px; }
+#stage .round-badge { flex-wrap: wrap; gap: 4px 10px; padding: 4px 8px; }
+#stage .think { max-height: none; overflow: visible; padding: 10px; }
+#stage .think h3, #stage .think p, #stage .site-designer h4, #stage .site-plan b, #stage .step { font-size: 12px; }
+#stage .step { min-width: 44px; min-height: 44px; }
+
+/* The two-second reason and the factory run float over the viewport, not over the tall page. */
+#stage .toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+  z-index: 25;
+  width: min(720px, 92vw);
+  font-size: 14px;
+}
+#stage .run-overlay { position: fixed; inset: 0; z-index: 30; padding: 12px; gap: 8px; }
+#stage .run-overlay .crt { height: 100%; }
+#stage .run-meter .fine { font-size: 12px; }
+
+/* ---------- Learn popover: fits the viewport, big CLOSE ---------- */
+.learn-pop { width: min(460px, 92vw); max-width: 92vw; max-height: min(70vh, calc(100dvh - 16px)); padding: 12px; }
+.learn-pop b { font-size: 14px; }
+.learn-pop p { font-size: 14px; line-height: 1.5; }
+.learn-pop .nerd { font-size: 14px; }
+.learn-pop .learn-close { width: 100%; min-height: 44px; }
+
+/* ---------- Dialogs: the results are a full-screen sheet that scrolls as one; buttons full width at the end ---------- */
+.dialog-back { padding: 0; display: block; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+#staff .dialog { width: 100%; max-height: none; margin: 8px 0; }
+#result .dialog.result, #result .dialog.result.simple {
+  width: 100%;
+  max-height: none;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 8px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-width: 4px 0 0;
+  box-shadow: none;
+  overflow: visible;
+}
+#result .result-body { flex: none; overflow: visible; scrollbar-gutter: auto; }
+#result .result-head { grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; }
+#result .result-head > div { min-width: 0; }
+#result .result-head .rank-box { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 4px 10px; padding: 6px 10px; }
+#result .result-head .rank-box strong { margin: 0; font-size: 16px; }
+#result .big-score { font-size: 26px; }
+#result .card-kicker { font-size: 12px; }
+#result .result-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#result .right-try { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 480px) {
+  #result .right-try { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+#result .headline, #result .dialog.result.simple .headline { font-size: 14px; line-height: 1.5; padding: 10px 12px; }
+#result .people-card, #result .dialog.result .people-card { grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; padding: 8px 10px; }
+#result .people-lead, #result .dialog.result .people-lead, #result .savings-line, #result .blocked-line, #result .beat-line, #result .dialog.result .beat-line { font-size: 14px; }
+#result .explain h3, #result .right-try h3, #result .banner, #result .rank-box .fine, #result .rival { font-size: 12px; }
+#result .explain li, #result .right-try li, #result .coach p, #result .share, #result .sync-line { font-size: 14px; line-height: 1.45; }
+#result .right-try .fine { font-size: 14px; }
+#result .eco-bar:not(.detail) { gap: 3px; }
+#result .row.end, #result .dialog.result .row.end { flex-direction: column; align-items: stretch; gap: 8px; margin: 4px 0 0; }
+#result .row.end .btn { width: 100%; min-height: 52px; }
+#result .dr-footer { font-size: 12px; line-height: 1.45; }
+#result .dr-footer .price-note { font-size: 12px; }
