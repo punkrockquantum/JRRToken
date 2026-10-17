@@ -183,20 +183,22 @@ test("the league entry after any round stores both rounds and keeps the better o
 
 /* ---------- The stepped build ---------- */
 
-test("the build is nine steps in order, MODEL & USERS first, and the step helpers never fall off the rail", () => {
-  assert.deepEqual(STEP_IDS, ["model", "location", "gpu", "cooling", "memory", "wires", "storage", "qpu", "review"])
-  assert.deepEqual(STEPS.map((step) => step.title), ["MODEL & USERS", "LOCATION", "GPU", "COOLING", "MEMORY", "CONNECTIVITY", "STORAGE", "QPU", "REVIEW"])
+test("the build is nine steps in order, WHERE first then MODEL & USERS, and the step helpers never fall off the rail", () => {
+  /* User: "Move the 'where' section to be the first stage of the playable game, so users understand the scenario." */
+  assert.deepEqual(STEP_IDS, ["location", "model", "gpu", "cooling", "memory", "wires", "storage", "qpu", "review"])
+  assert.deepEqual(STEPS.map((step) => step.title), ["LOCATION", "MODEL & USERS", "GPU", "COOLING", "MEMORY", "CONNECTIVITY", "STORAGE", "QPU", "REVIEW"])
+  assert.equal(STEPS[0].short, "WHERE")
   assert.deepEqual(BUILD_STEP_IDS, STEP_IDS.slice(0, -1))
-  assert.equal(stepIndex("model"), 0)
-  assert.equal(stepIndex("location"), 1)
+  assert.equal(stepIndex("location"), 0)
+  assert.equal(stepIndex("model"), 1)
   assert.equal(stepIndex("review"), 8)
   assert.equal(stepIndex("nope"), 0)
-  assert.equal(nextStep("model"), "location")
-  assert.equal(nextStep("location"), "gpu")
+  assert.equal(nextStep("location"), "model")
+  assert.equal(nextStep("model"), "gpu")
   assert.equal(nextStep("qpu"), "review")
   assert.equal(nextStep("review"), "review")
-  assert.equal(prevStep("model"), "model")
-  assert.equal(prevStep("location"), "model")
+  assert.equal(prevStep("location"), "location")
+  assert.equal(prevStep("model"), "location")
   assert.equal(prevStep("review"), "qpu")
   for (const step of STEPS) assert.ok(step.hint.length > 0 && step.short.length <= 5, step.id)
 })
@@ -364,7 +366,7 @@ test("picking a tile patches the choice set; metros toggle up to the story's max
   assert.deepEqual(applyTile("rag", "location", "fra", rag).metros, ["fra"], "a one-metro story swaps metros")
   const memoryOn = applyTile("chat", "memory", "plus", chat)
   assert.deepEqual([memoryOn.memory, memoryOn.hosts], [true, "grace"])
-  assert.deepEqual(untouchedSteps("chat", memoryOn), ["model", "location", "gpu", "cooling", "wires", "storage"])
+  assert.deepEqual(untouchedSteps("chat", memoryOn), ["location", "model", "gpu", "cooling", "wires", "storage"])
   assert.deepEqual(untouchedSteps("chat", applyTile("chat", "model", "medium", chat)), ["location", "gpu", "cooling", "memory", "wires", "storage"], "a smaller crowd counts as a touched first step")
   assert.equal(describeChoices("chat", chat), "NVIDIA HGX B300 ×6, air cooling in London, with the KV cache off, on Peering + eyeballs, local only storage")
   assert.match(describeChoices("drug", applyTile("drug", "qpu", "orca", simpleDefaults("drug"))), /, with ORCA PT-3$/)
@@ -406,7 +408,7 @@ test("the game screen is the stepped build: scenario card, ecosystem bar, rail, 
   assert.match(game, /scenarioCard\(uc\)/)
   assert.match(game, /ecoBar\(result\), rail\(stepId\)/)
   assert.match(game, /stepPanel\(stepId, result\)/)
-  assert.match(main, /step: "model", round: 1, rounds: \[\]/)
+  assert.match(main, /step: STEP_IDS\[0\], round: 1, rounds: \[\]/)
   /* The first step renders two rows, MODEL SIZE and USERS, each with its own tiles grid. */
   assert.match(main, /"data-key": `row-\$\{row\}`/)
   assert.match(main, /row === "model" \? "MODEL SIZE" : "USERS"/)

@@ -1021,13 +1021,20 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .feel.simple .btn.big { min-height: 72px; }
 .round-badge { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px; background: var(--ink); border: 3px solid var(--purple); }
 .round-badge .fine { margin: 0; color: var(--purple); }
+/* The toast is a grid item in the step panel's own cell, so it never reaches the side panel's REVIEW or RUN
+   button; it sits just above the step nav, so it never covers BACK or NEXT either. It takes the pointer now:
+   hovering holds it up, a tap on it dismisses it. */
 .toast {
-  position: absolute;
+  position: relative;
+  grid-column: 1;
+  grid-row: 3;
+  align-self: end;
+  justify-self: start;
   z-index: 6;
   left: 50%;
-  bottom: 112px; /* above the step nav: a why-toast never sits on BACK or NEXT */
+  bottom: 76px; /* above the step nav: a why-toast never sits on BACK or NEXT */
   transform: translateX(-50%);
-  pointer-events: none; /* and a tap goes straight through it */
+  cursor: pointer;
   width: min(720px, 90%);
   margin: 0;
   padding: 12px 16px;
@@ -1200,7 +1207,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
   .feel:not(.simple) .coach { gap: 6px; padding: 4px 6px; }
   .feel:not(.simple) .coach p { line-height: 1.4; }
   .feel:not(.simple) .coach img { width: 32px; height: auto; }
-  .toast { bottom: 96px; }
+  .toast { bottom: 66px; }
   .stories { padding: 10px 12px 8px; }
 }
 

@@ -232,3 +232,19 @@ test("one game screen with a step rail, and the sync wiring is in place", () => 
   assert.match(main, /"\/api\/reset", \{ method: "POST"/)
   assert.match(main, /fetch\("\/api\/health"/)
 })
+
+test("the picked tile's reason stays up for seven seconds, holds while hovered, and a tap on it dismisses it", () => {
+  /* User: "Make the black pop up with yellow box/text stay displayed for longer." */
+  assert.match(main, /const TOAST_MS = 7000/)
+  assert.match(main, /function flashWhy\(text\) \{\s*clearTimeout\(toastTimer\)\s*state\.toast = text \|\| null\s*if \(!text\) return\s*armToast\(TOAST_MS\)/, "another pick replaces the text and restarts the timer")
+  assert.match(main, /node\.addEventListener\("pointerenter", \(\) => \{\s*toastLeftMs = Math\.max\(1000, toastDue - Date\.now\(\)\)\s*clearTimeout\(toastTimer\)/, "hover pauses the timer")
+  assert.match(main, /node\.addEventListener\("pointerleave", \(\) => \{\s*if \(state\.toast && !toastTimer\) armToast\(toastLeftMs \|\| TOAST_MS\)/, "leaving resumes what was left")
+  assert.match(main, /node\.addEventListener\("click", \(\) => hideToast\(\)\)/, "a tap dismisses it")
+  assert.match(main, /state\.toast \? toastNode\(\) : null/)
+  const css = readFileSync(new URL("../css/game.css", import.meta.url), "utf8")
+  const toast = css.slice(css.indexOf(".toast {"), css.indexOf("@keyframes toast-in"))
+  assert.doesNotMatch(toast, /pointer-events: none/, "the toast takes the pointer")
+  assert.match(toast, /cursor: pointer/)
+  assert.match(toast, /grid-column: 1;\s*grid-row: 3;\s*align-self: end;/, "it lives in the step panel's cell, clear of REVIEW and RUN")
+  assert.match(toast, /bottom: 76px; \/\* above the step nav/, "it still sits above BACK and NEXT")
+})

@@ -50,7 +50,7 @@ function locationPhrase(useCaseId, before, after) {
 function neighbours(useCaseId, choices, nerd = false) {
   const list = []
   for (const stepId of BUILD_STEP_IDS) {
-    /* The first step is the brief the player chose (model size and crowd), not a build decision to second-guess. */
+    /* MODEL & USERS is the brief the player chose (model size and crowd), not a build decision to second-guess. */
     if (stepId === "model") continue
     if (stepId === "qpu" && !qpuRelevant(useCaseId)) continue
     const value = stepValue(useCaseId, stepId, choices)

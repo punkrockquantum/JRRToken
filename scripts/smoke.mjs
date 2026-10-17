@@ -25,7 +25,7 @@ const SIMPLE_COPY = [
   "Take any one away and the AI stops: no power, no maths; no cooling, no GPUs; no data, nothing to know; no connection, no answer.",
   "Closer, cooler and better connected means faster answers for less money. Build the best AI factory you can afford!",
 ]
-const BUILD_STEPS = ["model", "location", "gpu", "cooling", "memory", "wires", "storage", "qpu"]
+const BUILD_STEPS = ["location", "model", "gpu", "cooling", "memory", "wires", "storage", "qpu"]
 
 /** Fails if the page scrolls, a panel clips its content, or a control sits outside the viewport. */
 const FITS = `(() => {
@@ -343,7 +343,7 @@ try {
       await click(`[data-key="step-${step}"]`)
       await waitFor(`document.querySelector('[data-key="step-panel"]').classList.contains('step-${step}')`, `${step} step`)
       if (step === "model") {
-        /* The first step: three model sizes on one row, three crowd sizes on the next, one of each pressed. */
+        /* Step 2: three model sizes on one row, three crowd sizes on the next, one of each pressed. */
         const rows = await evaluate(`['row-model', 'row-users'].map((row) => document.querySelectorAll('[data-key="' + row + '"] .tile').length).join(',')`)
         if (rows !== "3,3") throw new Error(`MODEL & USERS should show 3 model tiles and 3 users tiles, saw ${rows}`)
         const pressed = await evaluate(`[...document.querySelectorAll('.step-model .tile[aria-pressed="true"]')].map((t) => t.dataset.key).join(',')`)
@@ -359,7 +359,14 @@ try {
         if (!/10K shoppers a month/.test(smallCard) || !/\$360k/.test(smallCard)) throw new Error(`The scenario card should follow the crowd: ${smallCard}`)
       }
       if (step === "location") {
+        /* WHERE opens the game: the rail says so, and the brief marks the demand as the story's default until MODEL & USERS is set. */
+        const first = await text('[data-key="rail"] li:first-child .rail-btn')
+        if (!/WHERE/.test(first)) throw new Error(`The rail should open on WHERE, saw ${first}`)
+        const title = await text("#step-title")
+        if (title !== "1. LOCATION") throw new Error(`The first step should be 1. LOCATION, saw ${title}`)
         if (!(await has('[data-key="who-where"]'))) throw new Error("The LOCATION step should show who asks and where the data lives")
+        const defaulted = await text('[data-key="ww-needs"]')
+        if (!/default until MODEL & USERS is set/.test(defaulted)) throw new Error(`The brief should mark the demand as the default until step 2 is set: ${defaulted}`)
         const rows = await evaluate(`[...document.querySelectorAll('.step-location .tile')].map((t) => t.querySelectorAll('.tile-row').length)`)
         if (!rows.length || rows.some((n) => n < 2)) throw new Error(`Every metro tile should list its audience and data trips: ${JSON.stringify(rows)}`)
         const brief = await text('[data-key="ww-needs"]')

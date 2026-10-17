@@ -152,7 +152,7 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
       upload, nothing in localStorage); NEXT PLAYER and the idle reset switch it off. `js/testmode.js` is the pure
       state machine (`canStart`, `settleAttempt`); tests/testmode.test.js spies both save hooks; the smoke plays a
       test run at its first viewport
-- [ ] B. WHERE FIRST (user: "Move the 'where' section to be the first stage of the playable game, so users understand
+- [x] B. WHERE FIRST (user: "Move the 'where' section to be the first stage of the playable game, so users understand
       the scenario, workload they need to manage and geographic dependencies."): LOCATION (with WHO & WHERE) is
       step 1, MODEL & USERS step 2; the brief reads "default" numbers until step 2 is set; rail, review, smoke,
       tests and this plan follow

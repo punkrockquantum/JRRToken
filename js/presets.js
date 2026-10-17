@@ -287,7 +287,7 @@ const EXPERTS = {
 export function expertChoices(useCaseId) {
   const useCase = byId(USE_CASES, useCaseId)
   const expert = EXPERTS[useCaseId] || EXPERTS.chat
-  /* The expert picked these GPUs: the first step keeps them (steps.js affordableChoices). */
+  /* The expert picked these GPUs: MODEL & USERS keeps them (steps.js affordableChoices). */
   return { ...defaultChoices(useCaseId), ...expert, brainsAuto: false, mcp: false, helper: Boolean(useCase?.orca && expert.helper) }
 }
 

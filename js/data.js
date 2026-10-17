@@ -578,7 +578,7 @@ export const NETWORKS = [
 ]
 
 /**
- * The three model sizes a player can deploy, picked on the first step. Public-class figures,
+ * The three model sizes a player can deploy, picked on MODEL & USERS (step 2). Public-class figures,
  * one byte per parameter at FP8 (FP4 racks halve the bytes in js/model.js `weightScale`):
  * - 70B dense (Llama-3.x-70B class): 70 GB at FP8, 140 GB at FP16; grouped-query KV cache about
  *   0.16 MB per token at FP8 (80 layers × 8 KV heads × 128 dims × 2).
@@ -600,7 +600,7 @@ export const MODEL_IDS = MODELS.map((model) => model.id)
 export const USER_TIER_IDS = ["small", "medium", "large"]
 
 /**
- * How many people (or robots, or scientists) ask, picked on the first step: three tiers per story
+ * How many people (or robots, or scientists) ask, picked on MODEL & USERS (step 2): three tiers per story
  * ten times apart (enterprise sizes, not consumer-internet scale). Demand in tokens per second is
  * derived with a labelled concurrency model, so the number on the tile and the maths agree:
  *   people:  at once   = count × daily-active share × sessions a day × minutes a session / 1,440 × peak-to-mean

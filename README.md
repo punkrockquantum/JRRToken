@@ -21,8 +21,10 @@ for a booth (see [HOSTING.md](HOSTING.md)).
 3. **Pick a job.** Customer Chat, Knowledge RAG, Coding Agent, Deep Research, Drug Discovery or
    Robotics. Each scenario states where the users are, where the model weights and data live,
    the demand, the response-time target, the budget, the power available and the go-live deadline.
-4. **Build, one step at a time.** Model size and number of users → Location (real Digital Realty
-   metros with distances to customers, employees and data) → GPU (NVIDIA only: DGX Spark, L40S,
+4. **Build, one step at a time.** WHERE first: Location (real Digital Realty metros with distances
+   to customers, employees and data, under a WHO & WHERE brief: who asks and from where, where the
+   model and data live, and the three numbers the maths runs on, marked as the story's defaults until
+   the next step is set) → Model size and number of users → GPU (NVIDIA only: DGX Spark, L40S,
    RTX PRO 6000 Blackwell Server, HGX H100/H200/B200/B300, GB200 NVL72, GB300 NVL72, Vera Rubin
    NVL72) → Cooling (air, rear-door heat exchanger, in-row, direct liquid) → Memory (KV cache,
    CPU host memory) → Connectivity (Cross Connect, Metro Connect, ServiceFabric Link/Connection,
@@ -35,7 +37,9 @@ for a booth (see [HOSTING.md](HOSTING.md)).
 
 A live **ecosystem bar** (power, cooling, compute, data, connections) shows green, amber or red
 as choices change; the score itself stays hidden until GO. Nothing a player picks can take the
-build over budget, and no build that runs scores zero.
+build over budget, and no build that runs scores zero. Every pick pops a one-line reason (the black
+box with the yellow border) that stays about seven seconds, holds while the pointer rests on it and
+goes on a tap.
 
 ## The model (what the maths does)
 

@@ -67,10 +67,10 @@ let logoTimer = 0
 const stage = document.getElementById("stage")
 const hud = document.getElementById("hud")
 
-/** A new plan for a story: the opening defaults, the LOCATION step, round one of two. */
+/** A new plan for a story: the opening defaults, the first step (WHERE), round one of two. */
 function freshPlan(useCaseId, nerd = false) {
   const choices = simpleDefaults(useCaseId)
-  return { useCase: useCaseId, choices, build: choicesToBuild(useCaseId, choices, nerd), step: "model", round: 1, rounds: [] }
+  return { useCase: useCaseId, choices, build: choicesToBuild(useCaseId, choices, nerd), step: STEP_IDS[0], round: 1, rounds: [] }
 }
 
 function el(tag, props = {}, children = []) {
@@ -190,6 +190,8 @@ function render() {
   renderHud()
   stage.scrollTop = 0
   if (focusKey) stage.querySelector(`[data-key="${CSS.escape(focusKey)}"]`)?.focus()
+  /* A toast whose timer was paused under the pointer resumes after a redraw rather than staying for ever. */
+  if (state.toast && !toastTimer) armToast(toastLeftMs || TOAST_MS)
 }
 
 function renderHud() {
@@ -553,8 +555,16 @@ function introScreen() {
 
 /* ---------- The game screen: a stepped build ---------- */
 
-const TOAST_MS = 2000
+/**
+ * How long the picked tile's reason (the black box with the yellow border) stays up. User:
+ * "Make the black pop up with yellow box/text stay displayed for longer." Seven seconds; the
+ * timer pauses while the pointer rests on it, a tap on it dismisses it, and another pick
+ * replaces the text and starts the seven seconds again.
+ */
+const TOAST_MS = 7000
 let toastTimer = 0
+let toastDue = 0
+let toastLeftMs = 0
 
 function syncBuild() {
   state.plan.build = choicesToBuild(state.plan.useCase, state.plan.choices, state.nerd)
@@ -569,15 +579,40 @@ function pick(patch) {
   render()
 }
 
-/** The two-second reason that pops up when a tile is picked. The screen re-renders, so the text lives in state. */
+function hideToast() {
+  clearTimeout(toastTimer)
+  toastTimer = 0
+  state.toast = null
+  document.getElementById("toast")?.remove()
+}
+
+function armToast(ms) {
+  clearTimeout(toastTimer)
+  toastDue = Date.now() + ms
+  toastTimer = setTimeout(hideToast, ms)
+}
+
+/** The reason that pops up when a tile is picked. The screen re-renders, so the text lives in state and the timer here. */
 function flashWhy(text) {
   clearTimeout(toastTimer)
   state.toast = text || null
   if (!text) return
-  toastTimer = setTimeout(() => {
-    state.toast = null
-    document.getElementById("toast")?.remove()
-  }, TOAST_MS)
+  armToast(TOAST_MS)
+}
+
+/** The toast node: hovering pauses its timer, a tap anywhere on it dismisses it. */
+function toastNode() {
+  const node = el("div", { class: "toast", id: "toast", role: "status", "aria-live": "polite", "data-key": "toast", text: state.toast })
+  node.addEventListener("pointerenter", () => {
+    toastLeftMs = Math.max(1000, toastDue - Date.now())
+    clearTimeout(toastTimer)
+    toastTimer = 0
+  })
+  node.addEventListener("pointerleave", () => {
+    if (state.toast && !toastTimer) armToast(toastLeftMs || TOAST_MS)
+  })
+  node.addEventListener("click", () => hideToast())
+  return node
 }
 
 function pickTile(stepId, tile) {
@@ -817,7 +852,7 @@ function responseWords(seconds) {
 
 /**
  * The brief every step shows: who the users are, where the model and data live, and the limits.
- * `uc` is the story at the first step's picks, so the crowd, the model, the demand, the budget
+ * `uc` is the story at the MODEL & USERS picks, so the crowd, the model, the demand, the budget
  * and the power follow them live.
  */
 function scenarioCard(uc) {
@@ -950,7 +985,7 @@ function stepPanel(stepId, result) {
   })
   const selected = tiles.find(isOn)
   // The wires step carries its nerd detail on every tile's TOKEN IMPACT strip, not under the grid;
-  // the GPU step carries it in the reference-architecture panel's title; the first step has two rows.
+  // the GPU step carries it in the reference-architecture panel's title; MODEL & USERS has two rows.
   const nerdLine = state.nerd && stepId !== "wires" && stepId !== "gpu" && stepId !== "model" ? selected?.nerd || "" : ""
   const max = maxMetros(id)
   const subtitle = stepId === "location"
@@ -960,7 +995,7 @@ function stepPanel(stepId, result) {
       : stepId === "qpu" && !qpuRelevant(id)
         ? "No choice here. Read why, then NEXT."
         : step.hint
-  /* The first step: MODEL SIZE tiles on one row, USERS tiles on the next, each row with its own heading. */
+  /* MODEL & USERS: MODEL SIZE tiles on one row, USERS tiles on the next, each row with its own heading. */
   const grid = stepId === "model"
     ? ["model", "users"].map((row) => {
       const mine = wraps.filter((_, index) => tiles[index].row === row)
@@ -1264,9 +1299,9 @@ function siteDesigner(result) {
 
 function gameScreen() {
   const result = live()
-  /* The story at the first step's picks (model size, crowd), so the card tracks them. */
+  /* The story at the MODEL & USERS picks (model size, crowd), so the card tracks them. */
   const uc = result.useCase || useCase()
-  const stepId = STEP_IDS.includes(state.plan.step) ? state.plan.step : "model"
+  const stepId = STEP_IDS.includes(state.plan.step) ? state.plan.step : STEP_IDS[0]
   return el("section", { class: `screen game${state.nerd ? " nerd" : " simple"} on-${stepId}` }, [
     scenarioCard(uc),
     el("div", { class: "eco-strip" }, [ecoBar(result), rail(stepId)]),
@@ -1278,7 +1313,7 @@ function gameScreen() {
     ]) : null,
     feel(result),
     el("p", { class: "fine price-note", text: "Game numbers are estimates." }),
-    state.toast ? el("div", { class: "toast", id: "toast", role: "status", "aria-live": "polite", text: state.toast }) : null,
+    state.toast ? toastNode() : null,
     el("div", { class: "run-overlay", id: "run-overlay", hidden: true }, [
       el("div", { class: "crt" }, [el("canvas", { class: "floor-canvas", id: "floor-canvas", "aria-label": "Your factory at work" })]),
       el("div", { class: "run-meter" }, [

@@ -10,9 +10,14 @@ import { effectivePue, evaluateBuild, formatMoney, formatTokens, metroOffers, sc
 import { COMBO, NERD_IDS, SIMPLE_IDS, brainPick, brainsId, choicesToBuild, cleanMetros, defaultChoices, maxMetros, memoryChoices, memoryTile, metroSets, modelPicks, nerdBrainIds, simpleBrainIds, wireIds } from "./presets.js"
 import { designFor } from "./refarch.js"
 
+/**
+ * The build in order. WHERE comes first so a player meets the scenario (who asks, from where, where
+ * the data lives, the three numbers) before choosing the model and crowd; the numbers show the
+ * story's defaults until MODEL & USERS is set.
+ */
 export const STEPS = [
-  { id: "model", title: "MODEL & USERS", hint: "Which model answers, and how many people ask", short: "MODEL" },
   { id: "location", title: "LOCATION", hint: "Which Digital Realty metros", short: "WHERE" },
+  { id: "model", title: "MODEL & USERS", hint: "Which model answers, and how many people ask", short: "MODEL" },
   { id: "gpu", title: "GPU", hint: "The computers that run the AI", short: "GPU" },
   { id: "cooling", title: "COOLING", hint: "How the racks are cooled", short: "COOL" },
   { id: "memory", title: "MEMORY", hint: "What the GPUs remember between turns", short: "MEM" },
@@ -347,7 +352,7 @@ export function usersDerivation(useCaseId, tierId) {
   }
 }
 
-/** The six tiles of the first step: three model sizes, then three users tiers, each knowing its row. */
+/** The six tiles of the MODEL & USERS step: three model sizes, then three users tiers, each knowing its row. */
 function modelTiles(useCaseId, choices = {}) {
   const picks = modelPicks(useCaseId, choices)
   const models = MODELS.map((model) => {
@@ -406,16 +411,26 @@ export function audienceSummary(useCaseId, choices = null) {
   return { groups, data: home ? { city: home.city, label: home.label, what: home.what } : null }
 }
 
+/** True while MODEL & USERS still sits on the story's defaults: the brief's numbers say so. */
+export function modelDefaulted(useCaseId, choices = null) {
+  if (!choices) return true
+  const picks = modelPicks(useCaseId, choices)
+  const base = modelPicks(useCaseId)
+  return picks.model === base.model && picks.users === base.users
+}
+
 /**
  * The job in plain words plus the three numbers the maths runs on: who asks and how much,
  * how fast the first word must come, and how often an answer goes back to the data.
- * With a choice set, the demand and the model follow the first step's picks.
+ * With a choice set, the demand and the model follow the MODEL & USERS picks; the brief opens
+ * the game (WHERE is step 1), so until that step is set the demand is marked as the default.
  */
 export function jobBrief(useCaseId, choices = null) {
   const uc = choices ? resolveUseCase(useCaseId, modelPicks(useCaseId, choices)) : byId(USE_CASES, useCaseId)
   if (!uc) return { job: "", needs: [] }
   const { groups, data } = audienceSummary(useCaseId, choices)
   const who = groups.map((group) => `${group.name.toLowerCase()} (${pct(group.share)} of requests)`).join(" and ")
+  const defaulted = modelDefaulted(useCaseId, choices)
   const demand = `${formatTokens(uc.demand)} tokens a second`
   const first = uc.ttft < 1 ? `${Math.round(uc.ttft * 1000)} ms` : `${uc.ttft} s`
   const trips = dataTrips(uc)
@@ -425,7 +440,7 @@ export function jobBrief(useCaseId, choices = null) {
   return {
     job: JOBS[useCaseId] || uc.blurb,
     needs: [
-      `${demand} of answers for ${who}`,
+      `${demand} of answers for ${who}${defaulted ? " · the story's default until MODEL & USERS is set" : ""}`,
       `First word within ${first}${uc.ttft >= 5 ? " (batch: nobody is waiting on one answer)" : ""}`,
       dataLine,
     ],
@@ -604,7 +619,7 @@ export function stepValue(useCaseId, stepId, choices = {}) {
 
 /**
  * The choice set after picking one tile on one step. A metro toggles; the last metro stays.
- * The first step sets the budget: a smaller crowd that leaves the build over budget snaps the
+ * MODEL & USERS sets the budget: a smaller crowd that leaves the build over budget snaps the
  * GPU (then the rest of the board) back to something the new budget affords, so the hidden
  * defaults are always affordable. `nerd` says which board's tiles count.
  */
@@ -622,7 +637,7 @@ export function applyTile(useCaseId, stepId, tileId, choices = {}, nerd = false)
   const tile = stepTiles(useCaseId, stepId, true, base).find((item) => item.id === tileId) || stepTiles(useCaseId, stepId, false, base).find((item) => item.id === tileId)
   const next = tile ? { ...base, ...tile.patch } : base
   /* A reference architecture belongs to one platform: a new GPU tile drops a design built for another.
-   * A GPU the player picked is theirs: the first step stops re-deriving it (brainsAuto). */
+   * A GPU the player picked is theirs: MODEL & USERS stops re-deriving it (brainsAuto). */
   if (stepId === "gpu") {
     dropForeignDesign(useCaseId, next)
     next.brainsAuto = false
@@ -720,7 +735,7 @@ function dropLine(useCaseId, stepId, next, money, nerd) {
   return `${lead} Nothing else on the board frees enough: this crowd's budget needs a cheaper GPU.`
 }
 
-/** True when a tile is the one a choice set is on: metros toggle, the first step has two rows. */
+/** True when a tile is the one a choice set is on: metros toggle, MODEL & USERS has two rows. */
 export function tileOn(useCaseId, stepId, tile, choices = {}) {
   const value = stepValue(useCaseId, stepId, choices)
   if (stepId === "location") return value.includes(tile.id)
@@ -728,7 +743,7 @@ export function tileOn(useCaseId, stepId, tile, choices = {}) {
   return value === tile.id
 }
 
-/** One line naming the first step's picks: the model size and the crowd. */
+/** One line naming the MODEL & USERS picks: the model size and the crowd. */
 export function modelLabel(useCaseId, choices = {}) {
   const picks = modelPicks(useCaseId, choices)
   const model = byId(MODELS, picks.model)
