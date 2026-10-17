@@ -38,7 +38,11 @@ build over budget, and no build that runs scores zero.
 - **Inference physics.** Prefill is compute-bound; decode is a memory-bandwidth roofline over the
   weights plus every active stream's KV cache. HBM capacity caps streams; CPU host memory and the
   KV cache tier park idle sessions; FP4/FP8 halve bytes per weight on Blackwell and Rubin; a
-  model that spills off its NVLink domain is penalised.
+  model that spills off its NVLink domain is penalised. The DGX Spark shelf (16 desktop GB10
+  boxes, 128 GB of unified LPDDR5x at 273 GB/s each, $3,999 a box published) loads a 70B or
+  100B model at FP4 but streams it at a few tokens a second, below every story's target, so it
+  is never the right answer for a crowd: a dev box on the board to show what memory bandwidth
+  does.
 - **Latency.** Real great-circle distances between real metros; fibre at ~4.9 µs/km with a route
   inflation factor; time to first token = users' round trip + retrieval/tool round trips to the
   data + prefill + queueing. Jitter sets the probability of missing the response target; packet
@@ -50,7 +54,8 @@ build over budget, and no build that runs scores zero.
 - **Power.** Rack kW is IT power built from the node datasheets: nodes per rack × node kW plus a
   top-of-rack switch (DGX H100/H200 10.2 kW, DGX B200 14.3 kW, DGX B300 ~14 kW, GB200 NVL72
   132 kW, GB300 NVL72 142 kW, Vera Rubin NVL72 ~210 kW estimate; the 8-GPU RTX PRO 6000 and
-  L40S nodes ~6.5 and ~4.5 kW estimates). Cooling changes facility power only through the PUE
+  L40S nodes ~6.5 and ~4 kW estimates; a DGX Spark shelf 16 × ~170 W plus a small switch ≈ 3 kW).
+  Cooling changes facility power only through the PUE
   (air 1.38, Digital Realty's published portfolio figure; rear door, in-row and liquid are game
   values). Every scenario, crowd and metro offers at least the **power floor**: one rack of the
   least powerful platform through the air PUE, rounded up to a 100 kW suite on a

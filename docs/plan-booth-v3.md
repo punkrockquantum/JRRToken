@@ -58,11 +58,13 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
 - [x] Memory-bound decode makes the GDDR parts slower per GPU; RTX PRO 6000 wins only for small models with
       modest users; the SMALL users tier makes the budget GPUs (RTX PRO 6000 / L40S / H100 ×2) the right answer
 - [x] `scripts/balance.mjs` re-run: naive 0 / best ~1,400 / optima differ
-- [ ] P2b — NVIDIA DGX Spark (user request "Add in an option for an NVIDIA SPARK as the GPU"): a "DGX Spark
+- [x] P2b — NVIDIA DGX Spark (user request "Add in an option for an NVIDIA SPARK as the GPU"): a "DGX Spark
       shelf" platform (16 desktop GB10 boxes on a shelf, 128 GB unified LPDDR5x at 273 GB/s each, ~1 PFLOP FP4
       sparse / ~0.5 dense, ~170 W, $3,999 published a unit, ConnectX-7 pairs two so the NVLink domain is one) in
       both the simple six-tile step and the nerd list; fits 70B/100B at FP4, never 650B; decode ~30× below an
       H100 a unit, so it only wins the smallest crowd; coach says "a dev box, not for a crowd"; balance + tests
+      (0a33cf9: it streams a 70B model at ~8 tok/s a box, below every story's speed, so it is never the optimum
+      at any crowd and never the hidden default; the COMPUTE light says "a dev box, not a crowd server")
 
 ## Corrections (user: "Some of the game logic is incorrect ... Service fabric is not worse latency than peering
 ## and it is much better than public internet. It should be impossible to go completely over budget or get a
