@@ -6,6 +6,10 @@ node_modules/
 data/
 *.xlsx
 
+# Local settings for the kiosk server (UPSTREAM_URL, UPSTREAM_KEY, STAFF_PIN, KIOSK_URL): never commit
+.env
+.env.*
+
 # Static demo build output (npm run build:static)
 dist/
 

@@ -11,6 +11,8 @@ mirrored to an Excel workbook on the Desktop after every run.
 - The first time, macOS may ask you to allow the script (right-click → Open) and to let Terminal
   access the Desktop so the Excel file can be written.
 - From a shell: `npm start` (same thing without the browser). `node scripts/serve.mjs --help` lists all options.
+- More than one laptop on the stand? See "Many laptops, one league" at the end: either every laptop opens
+  the team URL (nothing local), or each local kiosk also sends every game to the team server.
 
 ## Where the Excel file lands
 
@@ -240,10 +242,11 @@ make it a redirect (see "Team access").
 ### Finish it (two logins: Cloudflare and GitHub)
 
 ```sh
-# 1. Cloudflare login + the three Worker secrets (typed or piped in; none of them lives in a file or commit)
+# 1. Cloudflare login + the Worker secrets (typed or piped in; none of them lives in a file or commit)
 cd deploy/intake-worker && npx wrangler login
 npx wrangler secret put ACCESS_PASSWORD                      # the team password colleagues type to play
 openssl rand -hex 32 | npx wrangler secret put SESSION_SECRET  # random key that signs the 14-day session cookie
+npx wrangler secret put INTAKE_KEY                           # `openssl rand -hex 24`; the kiosk laptops' UPSTREAM_KEY
 npx wrangler secret put GITHUB_TOKEN                         # fine-grained PAT for the private players repo
 #    (https://github.com/settings/personal-access-tokens/new -> Only select repositories ->
 #     token-quest-players -> Repository permissions -> Contents: Read and write; expire it after the event)
@@ -258,6 +261,9 @@ curl -s https://tokenquest.tokenquest.workers.dev/api/health
 #    -> {"ok":true,"service":"tokenquest","gate":true,"configured":true}
 #       "gate":false means ACCESS_PASSWORD is missing (the game is open);
 #       "configured":false means GITHUB_TOKEN is missing (games play, the sheet waits)
+curl -s -H "X-Intake-Key: $(cat)" https://tokenquest.tokenquest.workers.dev/api/health   # paste the key, Ctrl-D
+#    -> adds "store":{"ok":true,"lastError":null,...}; "lastError":"write 404: token has no access to
+#       PLAYERS_REPO ..." means the PAT was not given the players repo (games queue until it is fixed)
 curl -sI https://tokenquest.tokenquest.workers.dev/ | head -1     # HTTP/2 200, the login page
 ```
 
@@ -281,8 +287,8 @@ gh secret set CLOUDFLARE_ACCOUNT_ID --repo punkrockquantum/JRRToken --body <32-h
 gh workflow run deploy-worker.yml --repo punkrockquantum/JRRToken --ref cursor/token-quest-datacenter-game
 ```
 
-The Worker's secrets (`ACCESS_PASSWORD`, `SESSION_SECRET`, `GITHUB_TOKEN`) are set once with `wrangler
-secret put` and survive every deploy; `wrangler.toml` carries only plain variables (`PLAYERS_REPO`,
+The Worker's secrets (`ACCESS_PASSWORD`, `SESSION_SECRET`, `INTAKE_KEY`, `GITHUB_TOKEN`) are set once with
+`wrangler secret put` and survive every deploy; `wrangler.toml` carries only plain variables (`PLAYERS_REPO`,
 `PLAYERS_BRANCH`, `ALLOWED_ORIGINS`, rate limits). The workflow pins `wranglerVersion: "4.151.1"`; bump it
 together with the local `npx wrangler@4`.
 
@@ -303,6 +309,8 @@ Colleagues go to the URL, type the team password once, and play. The password is
   it, so the public Internet cannot post rows to the sheet or read the league. The one exception is
   `GET /api/health`, which stays public but only says `{ ok, service, gate, configured }` (no repo name, no
   counts) until the caller is logged in. The game's own `fetch` calls carry the cookie automatically.
+  Kiosk laptops, which have no cookie, present the `INTAKE_KEY` secret as `X-Intake-Key` instead (API
+  only, never the game files; see "Many laptops, one league").
 - **Two secrets, no files.** `ACCESS_PASSWORD` is the team password; `SESSION_SECRET` is a random key
   (`openssl rand -hex 32`) that signs the cookies. Set both with `npx wrangler secret put <NAME>` from
   `deploy/intake-worker/` (the value is typed or piped on the terminal). Neither is written into
@@ -432,3 +440,90 @@ for f in deploy/intake-worker/src/*.mjs; do node --check "$f"; done
 npm run build:worker && ! grep -q TOKEN_QUEST_INTAKE dist/index.html   # same-origin build, nothing injected
 npx wrangler@4 deploy --dry-run --outdir /tmp/tq-wrangler-dry -c deploy/intake-worker/wrangler.toml
 ```
+
+## Many laptops, one league
+
+The Worker is the single source of truth for scores: whichever laptop a game is played on, it ends up on
+the team server, and the running totals (best score, attempts, rank) are the same on every screen.
+Two ways to set the stand up; both can be mixed.
+
+### Simplest: every laptop opens the team URL
+
+Nothing runs locally. On each laptop put one line in a file called `.env` next to
+`start-token-quest.command` (the file is git-ignored; never commit it):
+
+```sh
+KIOSK_URL=https://tokenquest.tokenquest.workers.dev
+```
+
+Double-clicking the launcher then opens Chrome in kiosk mode straight on the team server (no local
+server, no `data/`, no Excel on that laptop). Type the team password once per laptop (the cookie lasts 14
+days and survives Chrome restarts because the launcher uses its own profile). Every game is written to
+the private players repo as it happens; the sheet there is the only copy. The laptop needs the venue
+Wi-Fi for the whole game, and the staff panel's Excel/reset buttons do nothing on this host.
+
+### Offline-tolerant: local kiosk + write-through
+
+Each laptop runs its own server as before (local `data/attempts.jsonl`, Desktop Excel, works with no
+network at all) **and** forwards every accepted game to the team server. Put this in `.env` on each
+laptop:
+
+```sh
+UPSTREAM_URL=https://tokenquest.tokenquest.workers.dev
+UPSTREAM_KEY=<the Worker's INTAKE_KEY>
+```
+
+The key is a Worker secret that kiosk servers present as `X-Intake-Key` instead of the team password
+cookie (it opens `/api/attempt`, `/api/league` and `/api/health` only, never the game files). Make it
+once, set it on the Worker, and copy the same value into each laptop's `.env`:
+
+```sh
+openssl rand -hex 24                                          # the key; keep it out of chat logs and git
+cd deploy/intake-worker && npx wrangler secret put INTAKE_KEY  # paste it
+```
+
+What the server does with it (`server/upstream.mjs`, `server/merge.mjs`):
+
+- **Write-through, local first.** `POST /api/attempt` appends to `data/attempts.jsonl` and schedules the
+  Excel export exactly as before, then journals the game in `data/upstream-queue.jsonl` and sends it to
+  `${UPSTREAM_URL}/api/attempt`. It waits up to 3 s for the answer (GitHub commits take a moment) so the
+  results screen can show the merged `ATTEMPT n · BEST · RANK`; if the team server is slower, the player
+  gets the laptop's own numbers and the send finishes in the background.
+- **Nothing is dropped.** Venue Wi-Fi down, a 5xx, a 429, `503 store_unavailable` (the Worker's GitHub
+  token is broken) or a wrong key: the game stays in the journal and is retried in order every 30 s
+  (doubling to 2 min while it keeps failing), on the next game, and on start-up. Games recorded before
+  `UPSTREAM_URL` was set are queued on start-up too. The Worker treats the same email + `playedAt` + score
+  as the same game, so a retry after a lost answer never duplicates a row, and the kiosk itself stores a
+  re-posted game only once. The only thing it gives up on is a game the Worker refuses outright with
+  `400` (a version mismatch); it stays on the laptop and in Excel and health counts it under `rejected`.
+- **One league on every screen.** `GET /api/league` fetches the team server's league with the key
+  (rows carry the email so players can be matched; the kiosk strips it again before the browser sees
+  anything), caches it for 10 s and merges it with the local attempts: per player, the higher best score
+  (ties go to the earlier one), the later game's name and latest score, and attempts = the team
+  server's count + this laptop's not-yet-confirmed games (never less than the laptop has on file). A
+  copy up to 2 min old stands in while the server cannot be reached; after that the board is this
+  laptop's league only. Responses carry `source: "merged"` or `"local"`.
+- **Health.** `GET /api/health` on the kiosk includes `upstream: { configured, url, key, queued, sent,
+  rejected, lastSyncAt, lastError, lastErrorAt, nextRetryAt }`. `queued` should be 0 shortly after
+  every game; `lastError` says why not in plain words (`team server unreachable`, `HTTP 503
+  store_unavailable`, `HTTP 401 bad_key: the team server refused the key (check UPSTREAM_KEY ...)`).
+- **The Worker's side.** With the key, `GET https://tokenquest.tokenquest.workers.dev/api/health` shows
+  `store: { ok, lastError, lastErrorAt, lastOkAt }`. `ok` is whether the players repo can be read right
+  now; `lastError` is the newest failure, kept until a game is written, for example `write 404: token
+  has no access to PLAYERS_REPO (give the fine-grained PAT that repository, or fix PLAYERS_REPO /
+  PLAYERS_BRANCH)`. Games are refused with `503 store_unavailable` while that is the case, every kiosk
+  queues them, and they all land once the token is fixed; nothing has to be replayed by hand.
+
+Check a laptop:
+
+```sh
+curl -s http://127.0.0.1:8080/api/health | python3 -m json.tool      # upstream.queued, lastSyncAt, lastError
+cat data/upstream-queue.jsonl                                       # the journal: queued / sent / rejected lines
+```
+
+Things to know: one `UPSTREAM_KEY` is shared by all laptops (rotate it with `wrangler secret put
+INTAKE_KEY` and update every `.env`); kiosk requests have their own, larger rate bucket on the Worker
+(120 a minute per IP, `RATE_LIMIT_KIOSK_PER_MINUTE`), enough to drain a long queue; each laptop keeps
+its own `data/` and Excel (its own games only; the private repo's `PLAYERS.md` is the one with
+everything); `.env` is also honoured by the launchd agent (`scripts/install-autostart.sh`) because the
+server reads it itself; `ENV_FILE=/path/to/file` reads another file and `ENV_FILE=off` none at all.

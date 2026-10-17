@@ -8,7 +8,9 @@ origin, `https://tokenquest.tokenquest.workers.dev`, behind one team password:
   (inline CSS, one field), `POST /login` checks the password against the `ACCESS_PASSWORD` secret in
   constant time and sets an HMAC-signed cookie (`HttpOnly`, `Secure`, `SameSite=Lax`, 14 days, key
   `SESSION_SECRET`), `/api/*` answers `401` without the cookie (except the public, minimal
-  `/api/health`), `GET /logout` clears it. No `ACCESS_PASSWORD` secret = no gate (local dev);
+  `/api/health`), `GET /logout` clears it. No `ACCESS_PASSWORD` secret = no gate (local dev).
+  Kiosk laptops have no cookie and send the `INTAKE_KEY` secret as `X-Intake-Key` instead (constant
+  time; opens `/api/*` only, never the game; a wrong or stale key is `401 bad_key`);
 - the game: Workers Static Assets uploaded from `dist/` (`npm run build:worker`), with
   `dist/404.html` for unknown paths; the script re-applies the cache rules from `deploy/static/_headers`
   (HTML/JS/CSS `no-store`, fonts one year) because Workers skip `_headers` when the script runs first;
@@ -20,13 +22,19 @@ origin, `https://tokenquest.tokenquest.workers.dev`, behind one team password:
 Both files are committed before the Worker answers `{ ok: true }`. There is no batching, debounce
 or "write later": if GitHub cannot be written after three compare-and-swap tries the Worker answers
 `503 { ok: false, error: "store_unavailable" }` and the game client keeps the attempt in its
-localStorage queue and retries. Staff read the sheet by opening `PLAYERS.md` in the private repo on
-GitHub (it renders as two tables); there is deliberately no export endpoint here.
+localStorage queue and retries (a kiosk laptop keeps it in `data/upstream-queue.jsonl`). Staff read
+the sheet by opening `PLAYERS.md` in the private repo on GitHub (it renders as two tables); there is
+deliberately no export endpoint here.
+
+This Worker is the single source of truth when several laptops play at once: browsers on the team URL
+write straight to it, and local kiosk servers (`server/upstream.mjs` in the game repo) forward every
+game to it with the key and merge its league into their own board, so the running totals are the same
+on every device and nothing is lost while a laptop is offline.
 
 The step-by-step setup (deploy, secrets, private repo, PAT, GitHub Actions auto-deploy) is in
-[`HOSTING.md`](../../HOSTING.md), sections **One URL on workers.dev** and **Team access**. workers.dev
-names are always `<worker>.<account-subdomain>.workers.dev`; `wrangler.toml` shows how to add a custom
-domain later.
+[`HOSTING.md`](../../HOSTING.md), sections **One URL on workers.dev**, **Team access** and **Many
+laptops, one league**. workers.dev names are always `<worker>.<account-subdomain>.workers.dev`;
+`wrangler.toml` shows how to add a custom domain later.
 
 ## Endpoints
 
@@ -37,9 +45,9 @@ Same contract as the kiosk server (`server/app.mjs`), documented at the top of `
 | `GET /login` | the login page (`200`, `text/html`), or `303 /` when already logged in or the gate is off |
 | `POST /login` | form field `password` (same-origin `Origin`, `application/x-www-form-urlencoded`) · right: `303 /` + `Set-Cookie: tq_session=…; Max-Age=1209600; Path=/; HttpOnly; Secure; SameSite=Lax` · wrong: `401` login page with "Wrong password" after 1 s · `429` login page "Too many tries" (10 per IP per minute) · `403 cross_origin` · `415` |
 | `GET /logout` | `303 /` + `Set-Cookie: tq_session=; Max-Age=0; …` |
-| `POST /api/attempt` | `{ ok: true, attempts, best, latest, rank, players, newBest }` · `400 invalid_attempt` (with `details`) · `401 unauthorised` (no session) · `413 too_large` (16 KB cap) · `415 unsupported_media_type` · `429 rate_limited` (`Retry-After`) · `503 store_unavailable` · `503 not_configured` (no `GITHUB_TOKEN` yet) |
-| `GET /api/league` | `{ ok: true, players: [{ rank, name, attempts, best, latest, bestUseCase, fteEquivalent, firstPlayedAt, lastPlayedAt }], attempts }` — never includes emails · `401 unauthorised` without a session |
-| `GET /api/health` | public: `{ ok: true, service, gate, configured }` · with a session: also `session` (`"secret"` or `"derived"`), `repo, branch, sheet, attempts, players` · `configured:false` while `GITHUB_TOKEN` is missing · `503 store_unavailable` when the repo or token is wrong |
+| `POST /api/attempt` | `{ ok: true, attempts, best, latest, rank, players, newBest }` · `400 invalid_attempt` (with `details`) · `401 unauthorised` (no session) / `401 bad_key` (wrong `X-Intake-Key`) · `413 too_large` (16 KB cap) · `415 unsupported_media_type` · `429 rate_limited` (`Retry-After`) · `503 store_unavailable` · `503 not_configured` (no `GITHUB_TOKEN` yet) |
+| `GET /api/league` | `{ ok: true, players: [{ rank, name, attempts, best, latest, bestUseCase, fteEquivalent, firstPlayedAt, lastPlayedAt }], attempts }` — never includes emails for browsers; with `X-Intake-Key` each row also carries `email, bestAt, latestAt` so a kiosk can merge by player · `401 unauthorised` without a session |
+| `GET /api/health` | public: `{ ok: true, service, gate, configured }` · with a session or the key: also `session` (`"secret"` or `"derived"`), `repo, branch, sheet, attempts, players` and `store: { ok, lastError, lastErrorAt, lastOkAt }` · `configured:false` while `GITHUB_TOKEN` is missing · always `200`: `store.ok:false` when the repo cannot be read right now, and `store.lastError` keeps the newest failure (`write 404: token has no access to PLAYERS_REPO …`, `read 401: GitHub rejected the token …`) until a game is written |
 | `GET /api/export.xlsx`, `POST /api/reset` | `404` with a message: the private repo is the sheet |
 | `OPTIONS /api/*` | CORS preflight for the extra allowed origins (the game itself is same-origin) |
 | anything else | with a session (or no gate): the game from the assets (`env.ASSETS`) · without: the login page (`200`) for GET/HEAD, `401` JSON otherwise |
@@ -56,11 +64,13 @@ both pairs give the same answers.
 | --- | --- | --- |
 | `ACCESS_PASSWORD` | `npx wrangler secret put ACCESS_PASSWORD` | The team password. Set = gate on; `npx wrangler secret delete ACCESS_PASSWORD` = game open. Never written to a file in this repo |
 | `SESSION_SECRET` | `openssl rand -hex 32 \| npx wrangler secret put SESSION_SECRET` | Signs the session cookie; rotate it to log everyone out. If missing, a key derived from the password is used and health says `"session":"derived"` |
-| `GITHUB_TOKEN` | `npx wrangler secret put GITHUB_TOKEN` | Fine-grained PAT scoped to the one private repo, permission **Contents: Read and write** |
+| `INTAKE_KEY` | `openssl rand -hex 24 \| npx wrangler secret put INTAKE_KEY` | The kiosk laptops' `UPSTREAM_KEY` (their git-ignored `.env`), sent as `X-Intake-Key`. Unset = no key is accepted (a header is still `401 bad_key`). Rotate it and update every laptop's `.env` |
+| `GITHUB_TOKEN` | `npx wrangler secret put GITHUB_TOKEN` | Fine-grained PAT scoped to the one private repo, permission **Contents: Read and write**. A `write 404` in health's `store.lastError` means the PAT was not given that repository |
 | `PLAYERS_REPO` | `wrangler.toml` `[vars]` | `owner/repo` of the private players repo |
 | `PLAYERS_BRANCH` | `[vars]` | default `main` |
 | `ALLOWED_ORIGINS` | `[vars]` | Comma-separated extra browser origins (the GitHub Pages copy, a local preview); the Worker's own origin is always allowed. Only useful while the gate is off: the cookie is `SameSite=Lax`, so cross-site posts are `401` |
 | `RATE_LIMIT_ATTEMPTS_PER_MINUTE` / `RATE_LIMIT_READS_PER_MINUTE` / `RATE_LIMIT_LOGINS_PER_MINUTE` | `[vars]` | Per-IP token buckets (defaults 20, 60 and 10) |
+| `RATE_LIMIT_KIOSK_PER_MINUTE` | `[vars]` | One per-IP bucket for everything a key caller does (default 120), sized to drain a queue after an outage |
 
 ## Build, deploy, test
 
@@ -98,8 +108,11 @@ once the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets e
   `wrangler secret put ACCESS_PASSWORD`; rotate `SESSION_SECRET` to invalidate every cookie at once.
   For named logins or a hard rate cap put the Worker behind Cloudflare Access.
 - **Idempotent replays.** An attempt with the same email, `playedAt` and score as one already on
-  file is treated as the same game (the client re-posts unchanged payloads after a failure); it is
-  not appended twice, but `PLAYERS.md` is still regenerated.
+  file is treated as the same game (the browser client and the kiosk journal re-post unchanged
+  payloads after a failure); it is not appended twice, but `PLAYERS.md` is still regenerated.
+- **One key for all laptops.** `INTAKE_KEY` is a shared machine credential, not a person: anyone
+  holding it can post valid-looking games and read the league with emails. Keep it in the laptops'
+  git-ignored `.env` only, and rotate it after the event.
 - **Size.** Each game adds about 400 bytes to `players.json`. The Contents API serves files up to
   1 MB inline and the Worker falls back to the raw media type above that, so thousands of games fit;
   the free tier's CPU budget (10 ms per request) is the practical ceiling. Archive the repo after
@@ -110,4 +123,5 @@ once the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets e
 - **Staff panel on this host.** `/api/health` is 200, so the game's staff panel enables its Excel and
   reset buttons; both answer 404 here ("EXPORT FAILED" / "RESET FAILED"). The sheet is `PLAYERS.md`.
 - **Nothing is logged about people.** Log lines are `METHOD /path status ms` plus GitHub HTTP
-  status codes; the token, the password, cookies and file contents never appear in errors.
+  status codes; the token, the password, the intake key, cookies and file contents never appear in
+  errors.

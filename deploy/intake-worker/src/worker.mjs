@@ -14,18 +14,30 @@
  * compare, 1 s delay on a miss) sets the cookie (HttpOnly, Secure, SameSite=Lax, 14 days) and
  * redirects to /; GET /logout clears it. Without ACCESS_PASSWORD the game is open (local dev).
  *
+ * Kiosk laptops (server/upstream.mjs in the game repo) have no cookie: they send the INTAKE_KEY
+ * secret as `X-Intake-Key` (constant-time compare). The key opens the /api routes only, never the
+ * game files; a header that does not match (or an unset INTAKE_KEY) is 401 bad_key, so a laptop
+ * with a stale key sees the problem in its own health instead of queuing for ever. Key callers get
+ * their own, larger rate bucket and a league that carries email/bestAt/latestAt so the laptop can
+ * merge its local games per player (it strips the email again before its browser sees anything).
+ *
  * API (same contract as the kiosk server, see js/sync.js in the game repo):
  *   POST /api/attempt   JSON body -> { ok, attempts, best, latest, rank, players, newBest }
- *                       400 invalid_attempt · 401 unauthorised · 413 too_large · 415 unsupported_media_type
+ *                       400 invalid_attempt · 401 unauthorised / bad_key · 413 too_large · 415 unsupported_media_type
  *                       429 rate_limited · 503 store_unavailable (the sheet could not be written: the client
  *                       queues and retries) · 503 not_configured (no GITHUB_TOKEN yet: same client behaviour)
  *   GET  /api/league    { ok, players: [{ rank, name, attempts, best, latest, bestUseCase, fteEquivalent,
- *                         firstPlayedAt, lastPlayedAt }], attempts }      (never includes emails)
- *   GET  /api/health    public: { ok, service, gate, configured }; with a session also
- *                       { session, repo, branch, sheet, attempts, players }; 503 when GitHub is unreachable
+ *                         firstPlayedAt, lastPlayedAt }], attempts }      (never includes emails for browsers;
+ *                       with the key each row also has email, bestAt, latestAt)
+ *   GET  /api/health    public: { ok, service, gate, configured }; with a session or the key also
+ *                       { session, repo, branch, sheet, attempts, players, store: { ok, lastError, lastErrorAt,
+ *                       lastOkAt } }. Always 200: store.ok says whether the repo can be read right now and
+ *                       store.lastError keeps the newest GitHub failure in plain words (for example
+ *                       "write 404: token has no access to PLAYERS_REPO ...") until a game is written again.
  *
  * Every accepted attempt is committed to players.json AND PLAYERS.md before the 200 goes out:
- * nothing is deferred to ctx.waitUntil, so "ok" means "it is on the sheet".
+ * nothing is deferred to ctx.waitUntil, so "ok" means "it is on the sheet". While GitHub refuses the
+ * write, attempts are 503 store_unavailable and every client (browser queue, kiosk journal) keeps them.
  *
  * Origins: the game itself is same-origin, so it needs no CORS. Other browser origins (the GitHub
  * Pages copy, a local preview) are allowed only when listed in ALLOWED_ORIGINS, and only while the
@@ -34,19 +46,20 @@
  * Environment (wrangler.toml [vars] + `wrangler secret put ...`; secrets never live in files):
  *   ACCESS_PASSWORD                   secret; the team password (gate on when set)
  *   SESSION_SECRET                    secret; random 32+ bytes that sign the session cookie
+ *   INTAKE_KEY                        secret; `openssl rand -hex 24`, the kiosk laptops' UPSTREAM_KEY
  *   GITHUB_TOKEN                      secret; fine-grained PAT, Contents read/write on PLAYERS_REPO only
  *   PLAYERS_REPO                      "owner/repo" of the private players repo
  *   PLAYERS_BRANCH                    default "main"
  *   ALLOWED_ORIGINS                   comma-separated extra browser origins allowed to call the API
  *   RATE_LIMIT_ATTEMPTS_PER_MINUTE    per IP, default 20     RATE_LIMIT_READS_PER_MINUTE  per IP, default 60
- *   RATE_LIMIT_LOGINS_PER_MINUTE      per IP, default 10
+ *   RATE_LIMIT_LOGINS_PER_MINUTE      per IP, default 10     RATE_LIMIT_KIOSK_PER_MINUTE  per IP, default 120 (key callers)
  *
  * Plain ESM on Web APIs only, so Node can import it for tests (tests/intake.test.js,
  * tests/gate.test.js) and `node --check` works on every file here. Nothing in this file logs names,
  * email addresses, passwords or cookies.
  */
 import { LOGIN_PAGE_HEADERS, SESSION_COOKIE, clearSessionCookie, constantTimeEqual, createSession, loginPage, parseCookies, sessionCookie, verifySession } from "./gate.mjs"
-import { createContentsClient } from "./github.mjs"
+import { GitHubError, createContentsClient } from "./github.mjs"
 import { aggregatePlayers, findPlayer, publicLeague } from "./players.mjs"
 import { createRateLimiter } from "./ratelimit.mjs"
 import { PLAYERS_MD, StoreUnavailableError, createPlayersStore } from "./store.mjs"
@@ -59,7 +72,38 @@ export const DEFAULT_ALLOWED_ORIGINS = "https://punkrockquantum.github.io"
 export const DEFAULT_ATTEMPTS_PER_MINUTE = 20
 export const DEFAULT_READS_PER_MINUTE = 60
 export const DEFAULT_LOGINS_PER_MINUTE = 10
+export const DEFAULT_KIOSK_PER_MINUTE = 120
+export const INTAKE_KEY_HEADER = "X-Intake-Key"
 export const SERVICE = "tokenquest"
+
+/**
+ * One line staff can act on, from a store failure. The GitHub status code says what is wrong:
+ * 404 is the usual one (the fine-grained PAT was not given access to PLAYERS_REPO, or the repo or
+ * branch name is wrong), 401 an expired or revoked token, 403 a token without Contents: write.
+ */
+export function describeStoreError(error) {
+  const github = error instanceof GitHubError ? error : error?.cause instanceof GitHubError ? error.cause : null
+  if (!github) return String(error?.message || "unknown error")
+  const where = `${github.operation} ${github.status || "network"}`
+  const hint =
+    github.status === 404
+      ? "token has no access to PLAYERS_REPO (give the fine-grained PAT that repository, or fix PLAYERS_REPO / PLAYERS_BRANCH)"
+      : github.status === 401
+        ? "GitHub rejected the token (expired or revoked): make a new PAT and run wrangler secret put GITHUB_TOKEN"
+        : github.status === 403
+          ? "token lacks Contents: Read and write, or GitHub is rate limiting it"
+          : github.status === 0
+            ? "GitHub could not be reached"
+            : github.status === 409 || github.status === 422
+              ? "the file kept changing underneath the Worker"
+              : `GitHub answered HTTP ${github.status}`
+  return `${where}: ${hint}`
+}
+
+/** The league for kiosks (X-Intake-Key): the public fields plus what merging by player needs. */
+export function kioskLeague(players) {
+  return publicLeague(players).map((row, index) => ({ ...row, email: players[index].email, bestAt: players[index].bestAt, latestAt: players[index].latestAt }))
+}
 
 /** Cache rules for the game files, the same as deploy/static/_headers (which Workers skip when the script runs first). */
 const ASSET_HEADERS = { "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer" }
@@ -204,6 +248,20 @@ export function createHandler(deps = {}) {
   const { fetch: fetchImpl = (...args) => globalThis.fetch(...args), now = () => new Date(), random = Math.random, sleep, log = (line) => console.log(line) } = deps
   const stores = new Map()
   let limiters = null
+  /**
+   * The last thing the sheet did in this isolate, so /api/health can show staff why games are
+   * queuing. lastError is kept until a WRITE succeeds (a read working again does not prove the
+   * token may write); lastOkAt is the last successful write.
+   */
+  let storeStatus = { lastError: null, lastErrorAt: null, lastOkAt: null }
+
+  function storeFailed(error) {
+    storeStatus = { ...storeStatus, lastError: describeStoreError(error), lastErrorAt: now().toISOString() }
+  }
+
+  function storeWrote() {
+    storeStatus = { lastError: null, lastErrorAt: null, lastOkAt: now().toISOString() }
+  }
 
   function storeConfig(env) {
     return {
@@ -216,7 +274,7 @@ export function createHandler(deps = {}) {
   function storeFor(env) {
     const { repo, branch, token } = storeConfig(env)
     if (!repo || !token) throw new HttpError(503, "not_configured", "The player sheet is not configured yet (PLAYERS_REPO or the GITHUB_TOKEN secret is missing).", { "Retry-After": "60" })
-    const key = `${repo}@${branch}`
+    const key = `${repo}@${branch}\n${token}` // in memory only: a rotated token must not reuse the old client
     let store = stores.get(key)
     if (!store) {
       let client
@@ -238,11 +296,27 @@ export function createHandler(deps = {}) {
         attempt: createRateLimiter({ perMinute: positiveInt(env.RATE_LIMIT_ATTEMPTS_PER_MINUTE, DEFAULT_ATTEMPTS_PER_MINUTE), now: clock }),
         read: createRateLimiter({ perMinute: positiveInt(env.RATE_LIMIT_READS_PER_MINUTE, DEFAULT_READS_PER_MINUTE), now: clock }),
         login: createRateLimiter({ perMinute: positiveInt(env.RATE_LIMIT_LOGINS_PER_MINUTE, DEFAULT_LOGINS_PER_MINUTE), now: clock }),
+        kiosk: createRateLimiter({ perMinute: positiveInt(env.RATE_LIMIT_KIOSK_PER_MINUTE, DEFAULT_KIOSK_PER_MINUTE), now: clock }),
       }
     }
     const ip = request.headers.get("CF-Connecting-IP") || "unknown"
     const verdict = limiters[kind].take(ip)
     if (!verdict.ok) throw new HttpError(429, "rate_limited", "Too many requests from this network; try again in a moment.", { "Retry-After": String(verdict.retryAfter) })
+  }
+
+  /**
+   * Kiosk laptops authenticate with the INTAKE_KEY secret instead of a cookie. A header that is
+   * present but wrong (or set while the Worker has no INTAKE_KEY) is refused outright, so a
+   * misconfigured laptop sees 401 in its own health instead of silently filling its queue.
+   */
+  async function keyAuthorised(request, env) {
+    const given = request.headers.get(INTAKE_KEY_HEADER)
+    if (given === null) return false
+    const configured = typeof env.INTAKE_KEY === "string" ? env.INTAKE_KEY.trim() : ""
+    if (!configured || !(await constantTimeEqual(given.trim(), configured))) {
+      throw new HttpError(401, "bad_key", `The ${INTAKE_KEY_HEADER} header does not match the Worker's INTAKE_KEY secret.`)
+    }
+    return true
   }
 
   async function hasSession(request, gate) {
@@ -302,12 +376,13 @@ export function createHandler(deps = {}) {
 
     if (pathname === "/api/attempt") {
       if (method !== "POST") throw new HttpError(405, "method_not_allowed", "Use POST here.", { Allow: "POST, OPTIONS" })
-      rateLimit(env, "attempt", request)
+      rateLimit(env, access.key ? "kiosk" : "attempt", request)
       const body = await readJson(request)
       const checked = validateAttempt(body, now())
       if (!checked.ok) return json(400, { ok: false, error: "invalid_attempt", message: "The attempt was rejected.", details: checked.errors }, cors)
       const store = storeFor(env)
       const { attempts } = await store.record(checked.attempt)
+      storeWrote()
       const players = aggregatePlayers(attempts)
       const player = findPlayer(players, checked.attempt.email)
       return json(
@@ -327,24 +402,39 @@ export function createHandler(deps = {}) {
 
     if (pathname === "/api/league") {
       if (method !== "GET") throw new HttpError(405, "method_not_allowed", "Use GET here.", { Allow: "GET, OPTIONS" })
-      rateLimit(env, "read", request)
+      rateLimit(env, access.key ? "kiosk" : "read", request)
       const attempts = await storeFor(env).all()
-      return json(200, { ok: true, players: publicLeague(aggregatePlayers(attempts)), attempts: attempts.length }, cors)
+      const players = aggregatePlayers(attempts)
+      // Kiosks merge by player, so with the key the rows carry the email; browsers never see it.
+      return json(200, { ok: true, players: access.key ? kioskLeague(players) : publicLeague(players), attempts: attempts.length }, cors)
     }
 
     if (pathname === "/api/health") {
       if (method !== "GET") throw new HttpError(405, "method_not_allowed", "Use GET here.", { Allow: "GET, OPTIONS" })
-      rateLimit(env, "read", request)
+      rateLimit(env, access.key ? "kiosk" : "read", request)
       const { repo, branch, token } = storeConfig(env)
       const summary = { ok: true, service: SERVICE, gate: access.gate, configured: Boolean(repo && token) }
       // Public (no session): just the flags, nothing about where the sheet lives or how full it is.
       if (access.gate && !access.authorised) return json(200, summary, cors)
       const base = { ...summary, session: access.gate ? access.session : null, repo: repo || null, branch, sheet: PLAYERS_MD }
-      if (!base.configured) return json(200, { ...base, attempts: null, players: null, message: "The player sheet is not configured yet: set PLAYERS_REPO and the GITHUB_TOKEN secret." }, cors)
-      const store = storeFor(env)
-      await store.ping()
-      const attempts = await store.all()
-      return json(200, { ...base, attempts: attempts.length, players: aggregatePlayers(attempts).length }, cors)
+      if (!base.configured) {
+        const lastError = "not configured: set PLAYERS_REPO and the GITHUB_TOKEN secret"
+        return json(200, { ...base, attempts: null, players: null, store: { ok: false, lastError, lastErrorAt: null, lastOkAt: null }, message: "The player sheet is not configured yet: set PLAYERS_REPO and the GITHUB_TOKEN secret." }, cors)
+      }
+      // Health answers 200 whatever the sheet is doing and says in `store` what is wrong (ok = the
+      // repo can be read right now; lastError = the newest failure, kept until a game is written),
+      // so staff and the kiosks' own health can show it. Games are still refused with 503 meanwhile.
+      try {
+        const store = storeFor(env)
+        await store.ping()
+        const attempts = await store.all()
+        return json(200, { ...base, attempts: attempts.length, players: aggregatePlayers(attempts).length, store: { ok: true, ...storeStatus } }, cors)
+      } catch (error) {
+        if (!(error instanceof StoreUnavailableError)) throw error
+        storeFailed(error)
+        log(`store unavailable: ${storeStatus.lastError}`)
+        return json(200, { ...base, attempts: null, players: null, store: { ok: false, ...storeStatus } }, cors)
+      }
     }
 
     if (pathname === "/api/export.xlsx" || pathname === "/api/reset") {
@@ -378,7 +468,9 @@ export function createHandler(deps = {}) {
       const cors = crossOriginOk ? corsHeaders(origin) : {}
       let response
       try {
-        const gated = await gateCheck(request, env, url, gate)
+        // A kiosk's key opens the API (never the game files); a wrong key is a 401 before anything else.
+        const key = url.pathname.startsWith("/api/") && (await keyAuthorised(request, env))
+        const gated = key ? null : await gateCheck(request, env, url, gate)
         if (gated) {
           response = gated
         } else if (isAssetRequest(url, env)) {
@@ -386,13 +478,15 @@ export function createHandler(deps = {}) {
           return withAssetHeaders(await env.ASSETS.fetch(request), url.pathname)
         } else {
           if (origin !== null && !sameOrigin && !crossOriginOk) throw new HttpError(403, "cross_origin", "This origin may not use the Token Quest API.")
-          response = await route(request, env, url, cors, { gate: gate.enabled, authorised: gate.enabled ? await hasSession(request, gate) : true, session: gate.session })
+          const authorised = key || !gate.enabled || (await hasSession(request, gate))
+          response = await route(request, env, url, cors, { gate: gate.enabled, authorised, key, session: gate.session })
         }
       } catch (error) {
         if (error instanceof HttpError) {
           response = json(error.status, { ok: false, error: error.code, message: error.message }, { ...cors, ...error.headers })
         } else if (error instanceof StoreUnavailableError) {
-          log(`store unavailable: ${error.message}`)
+          storeFailed(error)
+          log(`store unavailable: ${storeStatus.lastError}`)
           response = json(503, { ok: false, error: "store_unavailable", message: "The player sheet could not be updated. Please try again shortly." }, { ...cors, "Retry-After": "5" })
         } else {
           log(`error: ${request.method} ${url.pathname} -> ${error?.name || "Error"}: ${error?.message || "unknown"}`)

@@ -2,10 +2,12 @@
 # `npm run build:worker`) and the /api/* JSON routes on the same origin,
 # https://tokenquest.tokenquest.workers.dev, behind a team password.
 #
-# Deploy from the repo root. The first time, log in and set the three secrets (never in files):
+# Deploy from the repo root. The first time, log in and set the secrets (never in files):
 #   cd deploy/intake-worker && npx wrangler login
 #   npx wrangler secret put ACCESS_PASSWORD        # the team password colleagues type to play
 #   openssl rand -hex 32 | npx wrangler secret put SESSION_SECRET   # signs the 14-day session cookie
+#   npx wrangler secret put INTAKE_KEY             # `openssl rand -hex 24`; kiosk laptops send it as X-Intake-Key
+#                                                  # (their UPSTREAM_KEY in .env; HOSTING.md "Many laptops, one league")
 #   npx wrangler secret put GITHUB_TOKEN           # fine-grained PAT for the private players repo
 #   cd ../.. && npm run deploy:worker              # = npm run build:worker && npx wrangler deploy -c deploy/intake-worker/wrangler.toml
 #
@@ -45,6 +47,9 @@ RATE_LIMIT_ATTEMPTS_PER_MINUTE = "20"
 RATE_LIMIT_READS_PER_MINUTE = "60"
 # Login tries per IP per minute (each wrong password also costs the caller a one-second delay).
 RATE_LIMIT_LOGINS_PER_MINUTE = "10"
+# Requests carrying the INTAKE_KEY (kiosk laptops): one bucket for their attempts, league reads and
+# health, large enough to drain a queue that built up while the venue Wi-Fi was down.
+RATE_LIMIT_KIOSK_PER_MINUTE = "120"
 
 # Optional: persisted Workers Logs in the dashboard (`npx wrangler tail` streams them live without
 # this). The Worker never logs names or email addresses, only method, path, status and timing.

@@ -5,14 +5,18 @@ import http from "node:http"
 import os from "node:os"
 import path from "node:path"
 import { Exporter, buildWorkbook } from "./export.mjs"
+import { mergeLeague } from "./merge.mjs"
 import { aggregatePlayers, findPlayer, publicLeague } from "./players.mjs"
 import { createStaticHandler } from "./static.mjs"
-import { AttemptStore, archiveStamp } from "./store.mjs"
+import { AttemptStore, archiveStamp, attemptKey } from "./store.mjs"
+import { createUpstream, disabledUpstream } from "./upstream.mjs"
 import { validateAttempt } from "./validate.mjs"
 import { XLSX_MIME } from "./xlsx.mjs"
 
 const BODY_LIMIT = 64 * 1024
 const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"])
+/** How long POST /api/attempt waits for the team server before answering with what it knows (the browser gives up at 6 s). */
+export const FORWARD_WAIT_MS = 3000
 
 class HttpError extends Error {
   constructor(status, code, message) {
@@ -89,8 +93,16 @@ async function readJson(req) {
   }
 }
 
-export function createApp(config, { store, exporter, log = () => {} }) {
+export function createApp(config, { store, exporter, upstream = null, forwardWaitMs = FORWARD_WAIT_MS, log = () => {} }) {
   const serveStatic = createStaticHandler({ root: config.root, deny: [config.dataDir] })
+  const team = upstream ?? disabledUpstream()
+
+  /** This laptop's attempts plus the team server's league, as one ranked list (emails included). */
+  async function leagueNow() {
+    const attempts = await store.all()
+    const theirs = team.configured ? await team.league() : null
+    return mergeLeague(attempts, theirs, team.pendingKeys())
+  }
 
   function requireStaff(req) {
     const given = req.headers["x-staff-pin"]
@@ -111,30 +123,42 @@ export function createApp(config, { store, exporter, log = () => {} }) {
       const body = await readJson(req)
       const checked = validateAttempt(body)
       if (!checked.ok) return sendJson(res, 400, { ok: false, error: "invalid_attempt", message: "The attempt was rejected.", details: checked.errors })
-      const record = await store.add(checked.attempt)
-      const players = aggregatePlayers(await store.all())
-      const player = findPlayer(players, record.email)
-      exporter.schedule()
+      // Local first (the Excel file and this laptop's board never depend on the network), then the team server.
+      const { record, replayed } = await store.addOnce(checked.attempt)
+      if (!replayed) exporter.schedule()
+      if (team.configured) {
+        await team.enqueue(record)
+        await team.waitFor(attemptKey(record), forwardWaitMs)
+      }
+      const league = await leagueNow()
+      const player = findPlayer(league.players, record.email)
       return sendJson(res, 200, {
         ok: true,
         attempts: player.attempts,
         best: player.best,
         latest: player.latest,
         rank: player.rank,
-        players: players.length,
+        players: league.players.length,
         newBest: player.best === record.score && player.bestAt === record.playedAt,
+        source: league.source,
       })
     }
 
     if (route === "GET /api/league") {
-      const attempts = await store.all()
-      const players = publicLeague(aggregatePlayers(attempts))
-      return sendJson(res, 200, { ok: true, players, attempts: attempts.length })
+      const league = await leagueNow()
+      return sendJson(res, 200, { ok: true, players: publicLeague(league.players), attempts: league.attempts, source: league.source })
     }
 
     if (route === "GET /api/health") {
       const attempts = await store.all()
-      return sendJson(res, 200, { ok: true, service: "token-quest", attempts: attempts.length, players: aggregatePlayers(attempts).length, uptime: Math.round(process.uptime()) })
+      return sendJson(res, 200, {
+        ok: true,
+        service: "token-quest",
+        attempts: attempts.length,
+        players: aggregatePlayers(attempts).length,
+        uptime: Math.round(process.uptime()),
+        upstream: team.status(),
+      })
     }
 
     if (route === "GET /api/export.xlsx") {
@@ -207,14 +231,15 @@ function lanAddresses() {
     .map((entry) => entry.address)
 }
 
-/** Starts everything and resolves with { server, store, exporter, url, close }. */
+/** Starts everything and resolves with { server, store, exporter, upstream, url, close }. */
 export async function startServer(options, { log = (line) => process.stdout.write(`${line}\n`) } = {}) {
   const store = await new AttemptStore(options.dataDir, { log }).init()
   // The data directory exists now; pin its real absolute path so the static guard sees the same form
   // whatever relative or symlinked value DATA_DIR was given as.
   const config = { ...options, dataDir: await realpath(options.dataDir) }
   const exporter = new Exporter(store, config.exportPath, { log })
-  const server = createApp(config, { store, exporter, log })
+  const upstream = config.upstreamUrl ? await createUpstream({ url: config.upstreamUrl, key: config.upstreamKey, dataDir: config.dataDir, log }).init() : null
+  const server = createApp(config, { store, exporter, upstream, log })
 
   await new Promise((resolve, reject) => {
     server.once("error", reject)
@@ -232,6 +257,13 @@ export async function startServer(options, { log = (line) => process.stdout.writ
   log(`  Data:     ${config.dataDir} (${store.attempts.length} attempt(s) on file)`)
   log(`  Excel:    ${config.exportPath}`)
   log(`  Staff:    ${config.staffPin ? "STAFF_PIN set; export/reset need the X-Staff-Pin header" : "STAFF_PIN not set; export/reset only from this laptop"}`)
+  if (config.envFile) log(`  Settings: ${config.envFile.file} (${config.envFile.keys.join(", ") || "nothing new"})`)
+  if (upstream) {
+    log(`  Upstream: ${config.upstreamUrl} (${config.upstreamKey ? "key set" : "NO KEY"}): every game is also sent to the team server; the board merges its totals`)
+    if (!config.upstreamKey) log("  WARNING:  UPSTREAM_KEY is not set; the team server will refuse the forwards (401) unless its gate is off.")
+  } else {
+    log('  Upstream: not set; scores stay on this laptop (see HOSTING.md, "Many laptops, one league")')
+  }
   if (config.lan) {
     log("  WARNING:  --lan exposes the game to every device on this network. Only use it on a trusted network.")
     for (const address of lanAddresses()) log(`  LAN:      http://${address}:${port}/`)
@@ -240,17 +272,20 @@ export async function startServer(options, { log = (line) => process.stdout.writ
   log(`listening on ${url}`)
 
   if (store.attempts.length) exporter.schedule()
+  // Games recorded before UPSTREAM_URL was set (or while the journal was missing) go to the team server too.
+  if (upstream) upstream.backfill(store.attempts).catch((error) => log(`upstream: backfill failed: ${error.message}`))
 
   let closing = null
   const close = () =>
     (closing ||= (async () => {
       await exporter.flush()
+      await upstream?.close()
       await new Promise((resolve) => {
         server.close(() => resolve())
         server.closeIdleConnections?.()
       })
     })())
-  return { server, store, exporter, url, port, close }
+  return { server, store, exporter, upstream, url, port, close }
 }
 
 /** One-shot export for `npm run export`. Resolves with the path written. */

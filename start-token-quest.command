@@ -1,8 +1,27 @@
 #!/bin/bash
 # Token Quest kiosk launcher for macOS. Double-click to start the local server and open the game.
 # This window shows the server log; press Ctrl+C here to stop the server. See HOSTING.md.
+#
+# Several laptops at the show, one league (HOSTING.md, "Many laptops, one league"). Put the
+# settings in a file called .env next to this script (git-ignored: never commit it):
+#
+#   KIOSK_URL=https://tokenquest.tokenquest.workers.dev     simplest: no local server, Chrome opens the
+#                                                           team URL in kiosk mode; everything is central
+#   UPSTREAM_URL=https://tokenquest.tokenquest.workers.dev  offline-tolerant: the local server runs as
+#   UPSTREAM_KEY=<the Worker's INTAKE_KEY>                  usual and also sends every game to the team
+#                                                           server (queued while the Wi-Fi is down)
+#
+# KIOSK_URL is read here; UPSTREAM_URL / UPSTREAM_KEY (and STAFF_PIN, PORT...) by the server itself.
 set -u
 cd "$(dirname "$0")" || exit 1
+
+# A value from the environment wins over the .env file.
+env_value() {
+  local line
+  line="$(grep -E "^[[:space:]]*(export[[:space:]]+)?$1[[:space:]]*=" .env 2>/dev/null | tail -1 | cut -d= -f2-)"
+  printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e "s/^[\"']//" -e "s/[\"']\$//" | tr -d '\r'
+}
+KIOSK_URL="${KIOSK_URL:-$(env_value KIOSK_URL)}"
 
 PORT="${PORT:-8080}"
 URL="http://127.0.0.1:${PORT}/"
@@ -65,6 +84,26 @@ open_game() {
     open "$URL"
   fi
 }
+
+case "$KIOSK_URL" in
+  https://*)
+    # Central mode: the game, the scores and the team password all live on the team server.
+    URL="$KIOSK_URL"
+    echo "Central mode: opening the team server $URL (no local server on this laptop)."
+    echo "Type the team password once; every game played here is kept with the other laptops' games."
+    open_game
+    exit 0
+    ;;
+  "")
+    ;;
+  *)
+    pause_and_exit "KIOSK_URL must start with https:// (got: $KIOSK_URL). Fix it in .env or leave it out."
+    ;;
+esac
+
+if [ -f .env ]; then
+  echo "Reading .env: $(grep -oE '^[[:space:]]*(export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*' .env | sed -E 's/^[[:space:]]*(export[[:space:]]+)?//' | tr '\n' ' ')(values are not shown)"
+fi
 
 SERVER_PID=""
 if port_open; then

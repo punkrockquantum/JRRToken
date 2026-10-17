@@ -340,8 +340,9 @@ test("every accepted POST commits players.json and PLAYERS.md before answering o
   ])
   assert.ok(!JSON.stringify(league).includes("@"), "the league never carries emails")
 
-  const health = await (await get(handler, "/api/health")).json()
+  const { store: storeHealth, ...health } = await (await get(handler, "/api/health")).json()
   assert.deepEqual(health, { ok: true, service: SERVICE, gate: false, configured: true, session: null, repo: REPO, branch: "main", sheet: PLAYERS_MD, attempts: 5, players: 3 })
+  assert.deepEqual(storeHealth, { ok: true, lastError: null, lastErrorAt: null, lastOkAt: "2026-10-16T15:00:04.000Z" }, "the last successful write is on record")
 })
 
 test("a 409 from the Contents API (someone else wrote first) re-reads, re-applies and succeeds", async () => {
@@ -406,20 +407,46 @@ test("when GitHub cannot be written the answer is 503 store_unavailable and noth
   assert.equal(gh.attempts().length, 2)
   assert.equal(gh.commitsFor(PLAYERS_MD).length, before.md + 1)
 
-  // Reads fail the same way: the league answers 503 so the game shows its local board instead.
+  // Reads fail the same way: the league answers 503 so the game shows its local board instead,
+  // while health stays 200 and says in `store` what is wrong.
   gh.state.failReads = 500
   assert.equal((await get(handler, "/api/league")).status, 503)
-  assert.equal((await get(handler, "/api/health")).status, 503)
+  const readsDown = await get(handler, "/api/health")
+  assert.equal(readsDown.status, 200)
+  const readsDownStore = (await readsDown.json()).store
+  assert.equal(readsDownStore.ok, false)
+  assert.equal(readsDownStore.lastError, "read 500: GitHub answered HTTP 500")
+  assert.equal(readsDownStore.lastErrorAt, "2026-10-16T15:00:00.000Z")
   gh.state.failReads = null
 
-  // A wrong token or a repo the token cannot see: health says so, attempts are not lost.
-  const badToken = await get(handler, "/api/health", { environment: env({ GITHUB_TOKEN: "github_pat_WRONG", PLAYERS_REPO: "punkrockquantum/other" }) })
-  assert.equal(badToken.status, 503)
+  // The trade-show case: the token was not given the players repo, so GitHub answers 404 on the write.
+  // The game is refused with 503 (the client queues it) and health names the cause for staff.
+  gh.state.failWrites = 404
+  const noAccess = await post(handler, attempt({ score: 1100, playedAt: "2026-10-16T14:08:00.000Z" }))
+  assert.equal(noAccess.status, 503)
+  assert.equal((await noAccess.json()).error, "store_unavailable")
+  const after404 = (await (await get(handler, "/api/health")).json()).store
+  assert.equal(after404.ok, true, "the repo can still be read")
+  assert.match(after404.lastError, /^write 404: token has no access to PLAYERS_REPO/)
+  assert.equal(after404.lastErrorAt, "2026-10-16T15:00:00.000Z")
+  gh.state.failWrites = null
+  assert.equal((await post(handler, attempt({ score: 1100, playedAt: "2026-10-16T14:08:00.000Z" }))).status, 200)
+  const repaired = (await (await get(handler, "/api/health")).json()).store
+  assert.deepEqual(repaired, { ok: true, lastError: null, lastErrorAt: null, lastOkAt: "2026-10-16T15:00:00.000Z" }, "a successful write clears the error")
+
+  // A wrong token, or a repo the token cannot see: health says which, attempts are not lost.
+  const badToken = await get(handler, "/api/health", { environment: env({ GITHUB_TOKEN: "github_pat_WRONG" }) })
+  assert.equal(badToken.status, 200)
+  assert.match((await badToken.json()).store.lastError, /^read 401: GitHub rejected the token/)
+  const otherRepo = (await (await get(handler, "/api/health", { environment: env({ PLAYERS_REPO: "punkrockquantum/other" }) })).json()).store
+  assert.equal(otherRepo.ok, false)
+  assert.match(otherRepo.lastError, /^read 404: token has no access to PLAYERS_REPO/)
   const unconfigured = await post(handler, attempt(), { environment: env({ GITHUB_TOKEN: "" }) })
   assert.equal(unconfigured.status, 503)
   assert.equal((await unconfigured.json()).error, "not_configured")
   const log = logs.join("\n")
-  assert.match(log, /store unavailable: GitHub write players\.json failed with HTTP 500/)
+  assert.match(log, /store unavailable: write 500: GitHub answered HTTP 500/)
+  assert.match(log, /store unavailable: write 404: token has no access to PLAYERS_REPO/)
   assert.ok(!log.includes("@") && !log.includes("WRONG") && !log.includes(TOKEN), "logs carry neither emails nor tokens")
 })
 
@@ -570,7 +597,7 @@ test("one origin: the game is served from env.ASSETS, /api/* by the handler, and
   const health = await handler.fetch(new Request(`${INTAKE}/api/health`), environment)
   assert.equal(health.status, 200)
   assert.equal(health.headers.get("Content-Type"), "application/json; charset=utf-8")
-  assert.deepEqual(await health.json(), { ok: true, service: SERVICE, gate: false, configured: true, session: null, repo: REPO, branch: "main", sheet: PLAYERS_MD, attempts: 0, players: 0 })
+  assert.deepEqual(await health.json(), { ok: true, service: SERVICE, gate: false, configured: true, session: null, repo: REPO, branch: "main", sheet: PLAYERS_MD, attempts: 0, players: 0, store: { ok: true, lastError: null, lastErrorAt: null, lastOkAt: null } })
   assert.equal((await handler.fetch(new Request(`${INTAKE}/api/nothing`), environment)).status, 404)
   assert.equal((await (await handler.fetch(new Request(`${INTAKE}/api/nothing`), environment)).json()).error, "not_found")
   const noExport = await handler.fetch(new Request(`${INTAKE}/api/export.xlsx`), environment)

@@ -8,11 +8,13 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, base64urlDecode, base64urlEncode, clearSessionCookie, constantTimeEqual, createSession, loginPage, parseCookies, sessionCookie, verifySession } from "../deploy/intake-worker/src/gate.mjs"
 import { PLAYERS_MD } from "../deploy/intake-worker/src/store.mjs"
-import { SERVICE, WRONG_PASSWORD_DELAY_MS, createHandler, gateConfig } from "../deploy/intake-worker/src/worker.mjs"
+import { INTAKE_KEY_HEADER, SERVICE, WRONG_PASSWORD_DELAY_MS, createHandler, gateConfig, kioskLeague } from "../deploy/intake-worker/src/worker.mjs"
+import { aggregatePlayers } from "../deploy/intake-worker/src/players.mjs"
 
 const SITE = "https://tokenquest.example.workers.dev"
 const PASSWORD = "correct horse battery staple (test fixture)"
 const SECRET = "test-session-secret-not-used-anywhere-real"
+const INTAKE_KEY = "test-intake-key-0123456789abcdef-not-real"
 const TOKEN = "github_pat_TEST_ONLY_not_a_real_token"
 const REPO = "punkrockquantum/token-quest-players"
 const T0 = Date.parse("2026-10-16T16:00:00.000Z")
@@ -85,7 +87,7 @@ function makeSite(envOverrides = {}) {
   return { handler, env, request, login, served, sleeps, logs, gh, tick: (ms) => (clock += ms) }
 }
 
-const attempt = () => ({ name: "Ada Lovelace", email: "ada@example.com", score: 900, consent: true, consentAt: "2026-10-16T15:00:00.000Z", playedAt: "2026-10-16T15:05:00.000Z" })
+const attempt = (overrides = {}) => ({ name: "Ada Lovelace", email: "ada@example.com", score: 900, consent: true, consentAt: "2026-10-16T15:00:00.000Z", playedAt: "2026-10-16T15:05:00.000Z", ...overrides })
 
 function cookieFrom(response) {
   const header = response.headers.get("Set-Cookie")
@@ -213,7 +215,7 @@ test("with a valid cookie the game and the API are served with the right cache h
   assert.equal((await posted.json()).attempts, 1)
   assert.ok(site.gh.files.has(PLAYERS_MD), "the sheet was written")
   const health = await (await site.request("/api/health", { headers: { Cookie: cookie } })).json()
-  assert.deepEqual(health, { ok: true, service: SERVICE, gate: true, configured: true, session: "secret", repo: REPO, branch: "main", sheet: PLAYERS_MD, attempts: 1, players: 1 })
+  assert.deepEqual(health, { ok: true, service: SERVICE, gate: true, configured: true, session: "secret", repo: REPO, branch: "main", sheet: PLAYERS_MD, attempts: 1, players: 1, store: { ok: true, lastError: null, lastErrorAt: null, lastOkAt: new Date(T0).toISOString() } })
 
   const [name, value] = cookie.split("=")
   const [expiry, signature] = value.split(".")
@@ -248,6 +250,65 @@ test("logout clears the cookie; the per-IP login limiter answers 429 with the pa
   site.tick(60_000)
   assert.equal((await site.login(PASSWORD)).status, 303, "the bucket refills")
   assert.equal(site.sleeps.filter((ms) => ms === WRONG_PASSWORD_DELAY_MS).length, 3)
+})
+
+test("kiosk laptops: X-Intake-Key opens the API (not the game), a wrong key is 401, the key is never logged", async () => {
+  const site = makeSite({ INTAKE_KEY })
+  const withKey = (route, init = {}) => site.request(route, { ...init, headers: { [INTAKE_KEY_HEADER]: INTAKE_KEY, ...(init.headers || {}) } })
+
+  // Right key, no cookie: the kiosk may post games and read the league.
+  const posted = await withKey("/api/attempt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(attempt()) })
+  assert.equal(posted.status, 200)
+  assert.deepEqual(await posted.json(), { ok: true, attempts: 1, best: 900, latest: 900, rank: 1, players: 1, newBest: true })
+  const league = await (await withKey("/api/league")).json()
+  assert.equal(league.ok, true)
+  assert.equal(league.attempts, 1)
+  assert.deepEqual(league.players, [
+    {
+      rank: 1,
+      name: "Ada Lovelace",
+      attempts: 1,
+      best: 900,
+      latest: 900,
+      bestUseCase: "",
+      fteEquivalent: null,
+      firstPlayedAt: "2026-10-16T15:05:00.000Z",
+      lastPlayedAt: "2026-10-16T15:05:00.000Z",
+      email: "ada@example.com",
+      bestAt: "2026-10-16T15:05:00.000Z",
+      latestAt: "2026-10-16T15:05:00.000Z",
+    },
+  ], "with the key the rows carry what a kiosk needs to merge by player")
+  const health = await (await withKey("/api/health")).json()
+  assert.equal(health.gate, true)
+  assert.equal(health.attempts, 1, "the key gets the full health too")
+
+  // The key is for the API only: the game files still want the cookie.
+  const page = await withKey("/")
+  assert.equal(page.status, 200)
+  assert.ok((await page.text()).includes('action="/login"'), "the key does not open the game itself")
+  assert.deepEqual(site.served, [])
+
+  // Wrong key (or a key while the Worker has none): 401, nothing stored, and the browser path is unchanged.
+  const wrong = await site.request("/api/attempt", { method: "POST", headers: { "Content-Type": "application/json", [INTAKE_KEY_HEADER]: `${INTAKE_KEY}x` }, body: JSON.stringify(attempt({ playedAt: "2026-10-16T15:06:00.000Z" })) })
+  assert.equal(wrong.status, 401)
+  assert.deepEqual(await wrong.json(), { ok: false, error: "bad_key", message: "The X-Intake-Key header does not match the Worker's INTAKE_KEY secret." })
+  assert.equal((await site.request("/api/league", { headers: { [INTAKE_KEY_HEADER]: "" } })).status, 401, "an empty key is still a wrong key")
+  const noKeyConfigured = makeSite({ INTAKE_KEY: undefined })
+  assert.equal((await noKeyConfigured.request("/api/league", { headers: { [INTAKE_KEY_HEADER]: INTAKE_KEY } })).status, 401, "a key sent to a Worker without INTAKE_KEY is refused, not ignored")
+  assert.equal(JSON.parse(await (await site.request("/api/league", { headers: { Cookie: cookieFrom(await site.login(PASSWORD)) } })).text()).players[0].email, undefined, "browsers never see emails")
+  assert.equal((await site.request("/api/league")).status, 401, "no key, no cookie: still closed")
+
+  // Kiosks get their own (larger) bucket; the key never shows up in the log.
+  const limited = makeSite({ INTAKE_KEY, RATE_LIMIT_KIOSK_PER_MINUTE: "2", RATE_LIMIT_READS_PER_MINUTE: "1" })
+  const keyed = (route) => limited.request(route, { headers: { [INTAKE_KEY_HEADER]: INTAKE_KEY } })
+  assert.equal((await keyed("/api/league")).status, 200)
+  assert.equal((await keyed("/api/league")).status, 200)
+  assert.equal((await keyed("/api/league")).status, 429, "the kiosk bucket, not the browser one")
+  assert.ok(!site.logs.concat(limited.logs).join("\n").includes(INTAKE_KEY), "the key is never logged")
+
+  const players = aggregatePlayers([attempt(), attempt({ name: "Grace Hopper", email: "GRACE@example.com", score: 1500, playedAt: "2026-10-16T15:07:00.000Z" })])
+  assert.deepEqual(kioskLeague(players).map((row) => [row.rank, row.email, row.bestAt]), [[1, "grace@example.com", "2026-10-16T15:07:00.000Z"], [2, "ada@example.com", "2026-10-16T15:05:00.000Z"]])
 })
 
 test("gate off: without ACCESS_PASSWORD the game is open and health says gate:false; a derived signing key still works", async () => {

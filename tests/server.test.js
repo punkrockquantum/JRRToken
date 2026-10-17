@@ -8,16 +8,20 @@ import test, { after } from "node:test"
 import { fileURLToPath } from "node:url"
 import { QUEUE_KEY, bindSync, fetchLeague, flushQueue, pendingCount, recordAttempt } from "../js/sync.js"
 import { createApp } from "../server/app.mjs"
+import { ConfigError, loadConfig, parseEnvFile, parseUpstreamUrl, withEnvFile } from "../server/config.mjs"
 import { Exporter } from "../server/export.mjs"
+import { mergeLeague } from "../server/merge.mjs"
 import { aggregatePlayers, publicLeague } from "../server/players.mjs"
 import { resolveStaticPath } from "../server/static.mjs"
-import { AttemptStore } from "../server/store.mjs"
+import { AttemptStore, attemptKey } from "../server/store.mjs"
+import { QUEUE_FILE, createUpstream, forwardPayload, parseQueueLog } from "../server/upstream.mjs"
 import { validateAttempt } from "../server/validate.mjs"
 import { readZip } from "../server/xlsx.mjs"
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const PIN = "4242"
 const EMAIL = "ada@example.com"
+const UPSTREAM_KEY = "test-upstream-key-not-a-real-secret"
 
 const servers = []
 
@@ -31,6 +35,10 @@ async function startServer(extraEnv = {}) {
     STAFF_PIN: "",
     HOST: "",
     PORT: "",
+    // Never pick up the developer's real .env or team server from the test suite.
+    ENV_FILE: "off",
+    UPSTREAM_URL: "",
+    UPSTREAM_KEY: "",
     ...extraEnv,
   }
   const child = spawn(process.execPath, [path.join(ROOT, "scripts", "serve.mjs"), "--port", "0"], { env, stdio: ["ignore", "pipe", "pipe"] })
@@ -550,13 +558,371 @@ test("server: without STAFF_PIN staff routes only answer loopback callers", asyn
 })
 
 test("server: refuses a non-loopback HOST without --lan", async () => {
-  const child = spawn(process.execPath, [path.join(ROOT, "scripts", "serve.mjs"), "--port", "0"], { env: { ...process.env, HOST: "0.0.0.0", STAFF_PIN: "" }, stdio: ["ignore", "pipe", "pipe"] })
+  const child = spawn(process.execPath, [path.join(ROOT, "scripts", "serve.mjs"), "--port", "0"], { env: { ...process.env, HOST: "0.0.0.0", STAFF_PIN: "", ENV_FILE: "off", UPSTREAM_URL: "", UPSTREAM_KEY: "" }, stdio: ["ignore", "pipe", "pipe"] })
   let output = ""
   child.stdout.on("data", (chunk) => (output += chunk))
   child.stderr.on("data", (chunk) => (output += chunk))
   const code = await new Promise((resolve) => child.once("exit", resolve))
   assert.equal(code, 2)
   assert.match(output, /Pass --lan/)
+})
+
+/* ---------- Several laptops, one league: write-through to the team server ---------- */
+
+/** A kiosk-side league row the way the Worker answers a kiosk (public fields + email, bestAt, latestAt). */
+function kioskRows(attempts) {
+  const players = aggregatePlayers(attempts)
+  return publicLeague(players).map((row, index) => ({ ...row, email: players[index].email, bestAt: players[index].bestAt, latestAt: players[index].latestAt }))
+}
+
+/**
+ * Stands in for the tokenquest Worker: takes forwarded games (checking the key), serves the league
+ * of everything it knows (its own "other laptops" games plus what it received), and can be told to
+ * be down, to answer 503 store_unavailable, to refuse the key or to reject a game.
+ */
+async function fakeUpstream({ others = [] } = {}) {
+  const received = []
+  const state = { mode: "ok", others, hits: { attempt: 0, league: 0 } }
+  const server = http.createServer((req, res) => {
+    if (state.mode === "down") return req.socket.destroy()
+    let body = ""
+    req.on("data", (chunk) => (body += chunk))
+    req.on("end", () => {
+      const reply = (status, payload) => {
+        res.statusCode = status
+        res.setHeader("Content-Type", "application/json; charset=utf-8")
+        res.end(JSON.stringify(payload))
+      }
+      if (req.headers["x-intake-key"] !== UPSTREAM_KEY) return reply(401, { ok: false, error: "bad_key", message: "wrong key" })
+      if (req.method === "POST" && req.url === "/api/attempt") {
+        state.hits.attempt += 1
+        if (state.mode === "store_unavailable") return reply(503, { ok: false, error: "store_unavailable", message: "The player sheet could not be updated." })
+        if (state.mode === "reject") return reply(400, { ok: false, error: "invalid_attempt", message: "The attempt was rejected.", details: ["nope"] })
+        const attempt = JSON.parse(body)
+        if (!received.some((item) => attemptKey(item.attempt) === attemptKey(attempt))) received.push({ headers: req.headers, attempt })
+        const players = aggregatePlayers([...state.others, ...received.map((item) => item.attempt)])
+        const player = players.find((row) => row.email === attempt.email)
+        return reply(200, { ok: true, attempts: player.attempts, best: player.best, latest: player.latest, rank: player.rank, players: players.length, newBest: player.bestAt === attempt.playedAt })
+      }
+      if (req.method === "GET" && req.url === "/api/league") {
+        state.hits.league += 1
+        if (state.mode === "store_unavailable") return reply(503, { ok: false, error: "store_unavailable" })
+        const all = [...state.others, ...received.map((item) => item.attempt)]
+        return reply(200, { ok: true, players: kioskRows(all), attempts: all.length })
+      }
+      reply(404, { ok: false, error: "not_found" })
+    })
+  })
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
+  return {
+    url: `http://127.0.0.1:${server.address().port}`,
+    state,
+    received,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  }
+}
+
+/** The kiosk app in-process, forwarding to `upstreamUrl`, with fast retries so tests do not wait 30 s. */
+async function listenKiosk(upstreamUrl, { key = UPSTREAM_KEY, upstream: upstreamOptions = {}, forwardWaitMs = 2000, seed = [] } = {}) {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "token-quest-kiosk-"))
+  const dataDir = path.join(dir, "data")
+  const logs = []
+  const log = (line) => logs.push(line)
+  const store = await new AttemptStore(dataDir, { log }).init()
+  for (const attempt of seed) await store.add(validateAttempt(attempt).attempt)
+  const exporter = new Exporter(store, path.join(dir, "out.xlsx"), { delay: 20, log })
+  const upstream = await createUpstream({ url: upstreamUrl, key, dataDir, log, retryMs: 150, maxRetryMs: 400, staleMs: 0, postTimeoutMs: 1500, getTimeoutMs: 1000, ...upstreamOptions }).init()
+  await upstream.backfill(store.attempts)
+  const server = createApp({ root: ROOT, dataDir, exportPath: exporter.exportPath, staffPin: null, host: "127.0.0.1", lan: false }, { store, exporter, upstream, forwardWaitMs, log })
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
+  const url = `http://127.0.0.1:${server.address().port}`
+  return {
+    url,
+    dataDir,
+    store,
+    upstream,
+    logs,
+    queueLog: async () => parseQueueLog(await readFile(path.join(dataDir, QUEUE_FILE), "utf8").catch(() => "")),
+    health: async () => (await fetch(`${url}/api/health`)).json(),
+    league: async () => (await fetch(`${url}/api/league`)).json(),
+    post: async (body) => (await json("POST", `${url}/api/attempt`, body)).json(),
+    async close() {
+      await upstream.close()
+      await exporter.flush()
+      await new Promise((resolve) => server.close(resolve))
+      await rm(dir, { recursive: true, force: true })
+    },
+  }
+}
+
+const OTHER_LAPTOP = [
+  attempt({ name: "Grace Hopper", email: "grace@example.com", score: 1500, useCase: "Drug discovery", fteEquivalent: 4, playedAt: "2026-10-08T09:07:00.000Z" }),
+  attempt({ name: "Grace Hopper", email: "grace@example.com", score: 1400, useCase: "Chat", fteEquivalent: 3, playedAt: "2026-10-08T09:09:00.000Z" }),
+  attempt({ score: 950, useCase: "RAG", playedAt: "2026-10-08T09:01:00.000Z" }),
+]
+
+test("write-through: every accepted game is forwarded with the key, and the board merges the team server's totals", async (t) => {
+  const upstream = await fakeUpstream({ others: OTHER_LAPTOP.map((item) => validateAttempt(item).attempt) })
+  const kiosk = await listenKiosk(upstream.url)
+  t.after(async () => {
+    await kiosk.close()
+    await upstream.close()
+  })
+
+  const result = await kiosk.post(attempt({ score: 900 }))
+  assert.deepEqual(result, { ok: true, attempts: 2, best: 950, latest: 900, rank: 2, players: 2, newBest: false, source: "merged" }, "the answer counts the game played on the other laptop too")
+  assert.equal(upstream.received.length, 1)
+  const forwarded = upstream.received[0]
+  assert.equal(forwarded.headers["x-intake-key"], UPSTREAM_KEY)
+  assert.equal(forwarded.headers["content-type"], "application/json")
+  assert.deepEqual(forwarded.attempt, forwardPayload(validateAttempt(attempt({ score: 900 })).attempt), "the Worker gets the validated game, not the local id or receivedAt")
+  assert.equal(forwarded.attempt.id, undefined)
+
+  const league = await kiosk.league()
+  assert.equal(league.source, "merged")
+  assert.equal(league.attempts, 4)
+  assert.deepEqual(league.players.map((row) => [row.rank, row.name, row.attempts, row.best, row.latest, row.bestUseCase, row.fteEquivalent]), [
+    [1, "Grace Hopper", 2, 1500, 1400, "Drug discovery", 4],
+    [2, "Ada Lovelace", 2, 950, 900, "RAG", 2.5],
+  ])
+  assert.ok(!JSON.stringify(league).includes("@"), "the merged league never carries emails")
+  assert.ok(!JSON.stringify(league).includes("bestAt"), "the merged league keeps the public shape")
+
+  const hits = upstream.state.hits.league
+  await kiosk.league()
+  await kiosk.league()
+  assert.equal(upstream.state.hits.league, hits, "the team server's league is cached for 10 s")
+
+  const health = await kiosk.health()
+  assert.equal(health.attempts, 1, "local count stays local")
+  assert.deepEqual(
+    { configured: health.upstream.configured, url: health.upstream.url, key: health.upstream.key, queued: health.upstream.queued, sent: health.upstream.sent, rejected: health.upstream.rejected, lastError: health.upstream.lastError },
+    { configured: true, url: upstream.url, key: true, queued: 0, sent: 1, rejected: 0, lastError: null },
+  )
+  assert.match(health.upstream.lastSyncAt, /^\d{4}-\d{2}-\d{2}T/)
+  assert.ok(!JSON.stringify(health).includes(UPSTREAM_KEY), "health never shows the key")
+
+  const log = await kiosk.queueLog()
+  assert.deepEqual([log.pending.size, log.sent.size, log.rejected.size], [0, 1, 0])
+  assert.ok(log.sent.has(attemptKey(forwarded.attempt)))
+  assert.ok(!kiosk.logs.join("\n").includes(UPSTREAM_KEY) && !kiosk.logs.join("\n").includes("@"), "logs carry neither the key nor emails")
+})
+
+test("write-through: an unreachable or failing team server never loses a game; the queue drains in order on the next game and on the timer", async (t) => {
+  const upstream = await fakeUpstream()
+  const kiosk = await listenKiosk(upstream.url)
+  t.after(async () => {
+    await kiosk.close()
+    await upstream.close()
+  })
+
+  upstream.state.mode = "down"
+  const first = await kiosk.post(attempt({ score: 900, playedAt: "2026-10-08T09:05:00.000Z" }))
+  assert.deepEqual(first, { ok: true, attempts: 1, best: 900, latest: 900, rank: 1, players: 1, newBest: true, source: "local" }, "the player still gets an answer from what the laptop knows")
+  let health = await kiosk.health()
+  assert.equal(health.upstream.queued, 1)
+  assert.equal(health.upstream.lastSyncAt, null)
+  assert.equal(health.upstream.lastError, "team server unreachable")
+  assert.match(health.upstream.nextRetryAt, /^\d{4}-/)
+  assert.equal((await kiosk.league()).source, "local", "offline: the board falls back to this laptop's league")
+  assert.equal((await kiosk.queueLog()).pending.size, 1, "the game is journaled on disk, not just in memory")
+  assert.equal((await readFile(path.join(kiosk.dataDir, "attempts.jsonl"), "utf8")).trim().split("\n").length, 1, "and stored locally as always")
+
+  // The team server is back: the next game flushes the queue in order before it is answered.
+  upstream.state.mode = "ok"
+  const second = await kiosk.post(attempt({ score: 1000, playedAt: "2026-10-08T09:10:00.000Z" }))
+  assert.deepEqual([second.attempts, second.best, second.source], [2, 1000, "merged"])
+  assert.deepEqual(upstream.received.map((item) => item.attempt.score), [900, 1000], "oldest first")
+  health = await kiosk.health()
+  assert.deepEqual([health.upstream.queued, health.upstream.sent, health.upstream.lastError], [0, 2, null])
+
+  // The sheet behind the Worker is down (503 store_unavailable): queued again, retried on the timer.
+  upstream.state.mode = "store_unavailable"
+  const third = await kiosk.post(attempt({ score: 800, playedAt: "2026-10-08T09:15:00.000Z" }))
+  assert.equal(third.ok, true)
+  health = await kiosk.health()
+  assert.equal(health.upstream.queued, 1)
+  assert.match(health.upstream.lastError, /HTTP 503 store_unavailable/)
+  upstream.state.mode = "ok"
+  await waitFor(async () => (await kiosk.health()).upstream.queued === 0, "the retry timer to drain the queue")
+  assert.deepEqual(upstream.received.map((item) => item.attempt.score), [900, 1000, 800])
+  const log = await kiosk.queueLog()
+  assert.deepEqual([log.pending.size, log.sent.size], [0, 3])
+
+  // A wrong key is reported in plain words and nothing is dropped.
+  const strayKey = await listenKiosk(upstream.url, { key: "not-the-key" })
+  t.after(() => strayKey.close())
+  await strayKey.post(attempt({ score: 500, playedAt: "2026-10-08T09:20:00.000Z" }))
+  const stray = (await strayKey.health()).upstream
+  assert.equal(stray.queued, 1)
+  assert.match(stray.lastError, /HTTP 401 bad_key: the team server refused the key \(check UPSTREAM_KEY/)
+  assert.equal(upstream.received.length, 3)
+})
+
+test("write-through: a game the team server refuses for good is kept on the laptop and does not block the others", async (t) => {
+  const upstream = await fakeUpstream()
+  const kiosk = await listenKiosk(upstream.url)
+  t.after(async () => {
+    await kiosk.close()
+    await upstream.close()
+  })
+  upstream.state.mode = "reject"
+  const refused = await kiosk.post(attempt({ score: 700, playedAt: "2026-10-08T09:05:00.000Z" }))
+  assert.equal(refused.ok, true, "locally it is a normal game")
+  let health = await kiosk.health()
+  assert.deepEqual([health.upstream.queued, health.upstream.rejected, health.attempts], [0, 1, 1])
+  upstream.state.mode = "ok"
+  await kiosk.post(attempt({ score: 750, playedAt: "2026-10-08T09:06:00.000Z" }))
+  assert.deepEqual(upstream.received.map((item) => item.attempt.score), [750])
+  health = await kiosk.health()
+  assert.deepEqual([health.upstream.queued, health.upstream.sent, health.upstream.rejected], [0, 1, 1])
+  const log = await kiosk.queueLog()
+  assert.deepEqual(log.rejected.get(attemptKey({ email: EMAIL, playedAt: "2026-10-08T09:05:00.000Z", score: 700 })).status, 400)
+  assert.match(kiosk.logs.join("\n"), /rejected by the team server \(HTTP 400 invalid_attempt\)/)
+})
+
+test("write-through: games recorded before UPSTREAM_URL was set are sent on start-up, a restart re-sends nothing, and a replayed POST is stored once", async (t) => {
+  const upstream = await fakeUpstream()
+  const seed = [attempt({ score: 600, playedAt: "2026-10-08T08:00:00.000Z" }), attempt({ name: "Alan Turing", email: "alan@example.com", score: 1200, playedAt: "2026-10-08T08:30:00.000Z" })]
+  const kiosk = await listenKiosk(upstream.url, { seed })
+  t.after(async () => {
+    await kiosk.close()
+    await upstream.close()
+  })
+  await waitFor(async () => (await kiosk.health()).upstream.sent === 2, "the backfill")
+  assert.deepEqual(upstream.received.map((item) => item.attempt.score), [600, 1200])
+  assert.match(kiosk.logs.join("\n"), /2 earlier game\(s\) queued for the team server/)
+
+  // Same data directory again (a restart): the journal says both are sent, so nothing moves.
+  const again = await createUpstream({ url: upstream.url, key: UPSTREAM_KEY, dataDir: kiosk.dataDir, retryMs: 100 }).init()
+  assert.equal(await again.backfill(kiosk.store.attempts), 0)
+  assert.deepEqual([again.status().queued, again.status().sent], [0, 2])
+  await again.close()
+  assert.equal(upstream.received.length, 2)
+
+  // The browser re-posts a game it never saw the answer for: stored once, forwarded once.
+  const game = attempt({ score: 900, playedAt: "2026-10-08T09:05:00.000Z" })
+  const one = await kiosk.post(game)
+  const two = await kiosk.post(game)
+  assert.deepEqual([one.attempts, two.attempts], [2, 2])
+  assert.equal((await readFile(path.join(kiosk.dataDir, "attempts.jsonl"), "utf8")).trim().split("\n").length, 3)
+  assert.equal(upstream.received.length, 3)
+  assert.equal(upstream.state.hits.attempt, 3, "the replay is not even forwarded again")
+})
+
+test("mergeLeague: best is the higher score, attempts add the unconfirmed local games, players from either side are kept", () => {
+  const local = [
+    validateAttempt(attempt({ score: 800, useCase: "Chat", playedAt: "2026-10-08T09:00:00.000Z" })).attempt, // confirmed upstream
+    validateAttempt(attempt({ name: "Ada L", score: 900, useCase: "Chat + RAG", playedAt: "2026-10-08T09:05:00.000Z" })).attempt, // still queued
+    validateAttempt(attempt({ name: "Bob Builder", email: "bob@example.com", score: 700, playedAt: "2026-10-08T09:02:00.000Z" })).attempt, // upstream lost it
+  ]
+  const pending = new Set([attemptKey(local[1])])
+  const upstream = {
+    attempts: 5,
+    players: kioskRows([
+      validateAttempt(attempt({ score: 800, useCase: "Chat", playedAt: "2026-10-08T09:00:00.000Z" })).attempt,
+      validateAttempt(attempt({ score: 950, useCase: "RAG", fteEquivalent: 9, playedAt: "2026-10-08T08:50:00.000Z" })).attempt, // another laptop
+      validateAttempt(attempt({ score: 500, playedAt: "2026-10-08T08:55:00.000Z" })).attempt,
+      validateAttempt(attempt({ name: "Grace Hopper", email: "grace@example.com", score: 1500, playedAt: "2026-10-08T09:07:00.000Z" })).attempt,
+      validateAttempt(attempt({ name: "Grace Hopper", email: "grace@example.com", score: 1400, playedAt: "2026-10-08T09:09:00.000Z" })).attempt,
+    ]),
+  }
+  const merged = mergeLeague(local, upstream, pending)
+  assert.equal(merged.source, "merged")
+  assert.equal(merged.attempts, 6, "5 on the team server + 1 not yet confirmed")
+  assert.deepEqual(merged.players.map((row) => [row.rank, row.email, row.attempts, row.best, row.latest, row.name, row.bestUseCase, row.bestFteEquivalent]), [
+    [1, "grace@example.com", 2, 1500, 1400, "Grace Hopper", "Chat + RAG", 2.5],
+    [2, EMAIL, 4, 950, 900, "Ada L", "RAG", 9],
+    [3, "bob@example.com", 1, 700, 700, "Bob Builder", "Chat + RAG", 2.5],
+  ], "Ada: 3 on the team server + 1 unconfirmed here; her best and its details come from the other laptop")
+  const ada = merged.players[1]
+  assert.equal(ada.firstPlayedAt, "2026-10-08T08:50:00.000Z", "first played is the earliest of both sides")
+  assert.equal(ada.lastPlayedAt, "2026-10-08T09:05:00.000Z", "latest follows the later game, here the local one")
+  assert.ok(!JSON.stringify(publicLeague(merged.players)).includes("@"))
+
+  // A better local score wins and brings its details; equal scores go to the earlier one.
+  const better = mergeLeague([validateAttempt(attempt({ score: 2000, useCase: "Everything", fteEquivalent: 11, playedAt: "2026-10-08T09:30:00.000Z" })).attempt], upstream, new Set())
+  assert.deepEqual([better.players[0].email, better.players[0].best, better.players[0].bestUseCase, better.players[0].bestFteEquivalent], [EMAIL, 2000, "Everything", 11])
+  const tie = mergeLeague([validateAttempt(attempt({ score: 950, useCase: "Local tie", playedAt: "2026-10-08T08:40:00.000Z" })).attempt], upstream, new Set())
+  assert.equal(tie.players.find((row) => row.email === EMAIL).bestUseCase, "Local tie", "the earlier 950 wins the tie")
+
+  // Nothing from the team server: exactly the local league.
+  const alone = mergeLeague(local, null, pending)
+  assert.equal(alone.source, "local")
+  assert.deepEqual(alone.players, aggregatePlayers(local))
+  assert.equal(alone.attempts, 3)
+  assert.equal(mergeLeague([], { players: [], attempts: 0 }).players.length, 0)
+})
+
+test("upstream helpers: the journal replays, forwardPayload strips local bookkeeping, keys match the Worker's replay rule", () => {
+  const game = { id: "x", receivedAt: "now", ...validateAttempt(attempt()).attempt }
+  const payload = forwardPayload(game)
+  assert.deepEqual(Object.keys(payload).sort(), ["annualSavings", "consent", "consentAt", "costPerMTok", "email", "fteEquivalent", "humanHoursPerYear", "name", "playedAt", "profitPerHour", "scenario", "score", "useCase"])
+  assert.equal(attemptKey(game), `${EMAIL}|2026-10-08T09:05:00.000Z|900`)
+  assert.equal(attemptKey({ ...game, email: "ADA@Example.com" }), attemptKey(game))
+  const text = [
+    JSON.stringify({ queued: payload, at: "t1" }),
+    JSON.stringify({ queued: { ...payload, score: 1 }, at: "t2" }),
+    "not json",
+    JSON.stringify({ sent: attemptKey(payload), at: "t3" }),
+    JSON.stringify({ rejected: attemptKey({ ...payload, score: 2 }), status: 400, error: "invalid_attempt", at: "t4" }),
+    JSON.stringify({ queued: { ...payload, score: 2 }, at: "t5" }),
+    "",
+  ].join("\n")
+  const log = parseQueueLog(text)
+  assert.deepEqual([...log.pending.keys()], [attemptKey({ ...payload, score: 1 })], "sent and rejected games are not pending, whatever the order of the lines")
+  assert.deepEqual([...log.sent], [attemptKey(payload)])
+  assert.deepEqual(log.rejected.get(attemptKey({ ...payload, score: 2 })), { status: 400, error: "invalid_attempt", at: "t4" })
+  assert.equal(log.skipped, 1)
+})
+
+test("config: UPSTREAM_URL and UPSTREAM_KEY come from the environment or a git-ignored .env file; https is required off the laptop", async (t) => {
+  assert.deepEqual(parseEnvFile(["# team server", "UPSTREAM_URL=https://tokenquest.example.workers.dev/ # trailing comment", 'UPSTREAM_KEY="abc=def"', "export STAFF_PIN='1234'", "KIOSK_URL = https://x.example", "garbage line", "EMPTY="].join("\r\n")), {
+    UPSTREAM_URL: "https://tokenquest.example.workers.dev/",
+    UPSTREAM_KEY: "abc=def",
+    STAFF_PIN: "1234",
+    KIOSK_URL: "https://x.example",
+    EMPTY: "",
+  })
+  assert.equal(parseUpstreamUrl(" https://tokenquest.example.workers.dev/ "), "https://tokenquest.example.workers.dev")
+  assert.equal(parseUpstreamUrl("https://example.com/quest/"), "https://example.com/quest")
+  assert.equal(parseUpstreamUrl("http://127.0.0.1:8787"), "http://127.0.0.1:8787", "plain http only on loopback")
+  assert.equal(parseUpstreamUrl(""), null)
+  assert.equal(parseUpstreamUrl(undefined), null)
+  for (const bad of ["http://tokenquest.example.workers.dev", "tokenquest.example.workers.dev", "https://user:pw@example.com", "https://example.com/?x=1", "ftp://example.com"]) {
+    assert.throws(() => parseUpstreamUrl(bad), ConfigError, bad)
+  }
+
+  const dir = await mkdtemp(path.join(os.tmpdir(), "token-quest-env-"))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const file = path.join(dir, ".env")
+  await writeFile(file, "UPSTREAM_URL=https://tokenquest.example.workers.dev\nUPSTREAM_KEY=from-file\nSTAFF_PIN=9999\n")
+  const loaded = withEnvFile({ ENV_FILE: file, UPSTREAM_KEY: "from-env", STAFF_PIN: "" })
+  assert.equal(loaded.file, file)
+  assert.deepEqual(loaded.keys, ["UPSTREAM_URL"], "only what the environment did not set, and the keys only (safe to log)")
+  assert.equal(loaded.env.UPSTREAM_KEY, "from-env", "the environment wins")
+  assert.equal(loaded.env.STAFF_PIN, "", "an empty environment value still counts as set")
+  const config = loadConfig([], loaded.env)
+  assert.deepEqual([config.upstreamUrl, config.upstreamKey], ["https://tokenquest.example.workers.dev", "from-env"])
+  assert.deepEqual(withEnvFile({ ENV_FILE: "off", UPSTREAM_URL: "" }).file, null)
+  assert.deepEqual(withEnvFile({ ENV_FILE: path.join(dir, "missing.env") }).keys, [])
+  assert.equal(loadConfig([], {}).upstreamUrl, null)
+
+  // End to end: the real server reads the file, says so without printing values, and forwards.
+  const upstream = await fakeUpstream()
+  t.after(() => upstream.close())
+  await writeFile(file, `UPSTREAM_URL=${upstream.url}\nUPSTREAM_KEY=${UPSTREAM_KEY}\n`)
+  const server = await startServer({ ENV_FILE: file, UPSTREAM_URL: undefined, UPSTREAM_KEY: undefined })
+  await json("POST", `${server.url}/api/attempt`, attempt())
+  await waitFor(() => upstream.received.length === 1, "the forward from the spawned server")
+  assert.equal(upstream.received[0].headers["x-intake-key"], UPSTREAM_KEY)
+  const health = await (await fetch(`${server.url}/api/health`)).json()
+  assert.deepEqual([health.upstream.configured, health.upstream.url, health.upstream.sent], [true, upstream.url, 1])
+  const output = server.output()
+  assert.match(output, /Settings: .*\.env \(UPSTREAM_URL, UPSTREAM_KEY\)/)
+  assert.match(output, /Upstream: http:\/\/127\.0\.0\.1:\d+ \(key set\)/)
+  assert.ok(!output.includes(UPSTREAM_KEY), "the key is never printed")
+  assert.equal((await fetch(`${server.url}/.env`)).status, 404)
 })
 
 after(async () => {

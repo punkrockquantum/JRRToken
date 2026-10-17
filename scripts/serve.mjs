@@ -6,8 +6,11 @@
  *   npm run serve:lan              -> also reachable from other devices (prints a warning)
  *   npm run export                 -> writes the Excel workbook once and prints its path
  *   node scripts/serve.mjs --help  -> all options
+ *
+ * Several laptops, one league: put UPSTREAM_URL and UPSTREAM_KEY in a .env file next to
+ * package.json (git-ignored) and every game is also sent to the team server; see HOSTING.md.
  */
-import { ConfigError, loadConfig, usage } from "../server/config.mjs"
+import { ConfigError, loadConfig, usage, withEnvFile } from "../server/config.mjs"
 import { exportOnce, startServer } from "../server/app.mjs"
 
 const [major] = process.versions.node.split(".").map(Number)
@@ -18,7 +21,10 @@ if (major < 18) {
 
 let config
 try {
-  config = loadConfig(process.argv.slice(2), process.env)
+  // .env in the repo root (git-ignored) fills in what the environment leaves unset: UPSTREAM_URL, UPSTREAM_KEY, STAFF_PIN...
+  const { env, file, keys } = withEnvFile(process.env)
+  config = loadConfig(process.argv.slice(2), env)
+  if (file) config.envFile = { file, keys }
 } catch (error) {
   if (!(error instanceof ConfigError)) throw error
   console.error(`${error.message}\n\n${usage()}`)

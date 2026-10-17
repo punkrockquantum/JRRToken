@@ -9,6 +9,15 @@ import path from "node:path"
 
 export const ATTEMPTS_FILE = "attempts.jsonl"
 
+/** The identity of a game everywhere (kiosk, Worker, queue): same email, playedAt and score = same game. */
+export function attemptKey(attempt) {
+  return `${String(attempt?.email || "").toLowerCase()}|${attempt?.playedAt}|${attempt?.score}`
+}
+
+export function sameAttempt(a, b) {
+  return Boolean(a && b) && String(a.email).toLowerCase() === String(b.email).toLowerCase() && a.playedAt === b.playedAt && a.score === b.score
+}
+
 async function signatureOf(file) {
   try {
     const info = await stat(file)
@@ -84,16 +93,34 @@ export class AttemptStore {
     return this.attempts.slice()
   }
 
+  async append(attempt) {
+    const record = { id: randomUUID(), receivedAt: new Date().toISOString(), ...attempt }
+    await mkdir(this.dataDir, { recursive: true })
+    await appendFile(this.file, `${JSON.stringify(record)}\n`, "utf8")
+    this.attempts.push(record)
+    this.signature = await signatureOf(this.file)
+    return record
+  }
+
   /** Appends a validated attempt and returns the stored record. */
   add(attempt) {
     return this.serial(async () => {
       await this.refresh()
-      const record = { id: randomUUID(), receivedAt: new Date().toISOString(), ...attempt }
-      await mkdir(this.dataDir, { recursive: true })
-      await appendFile(this.file, `${JSON.stringify(record)}\n`, "utf8")
-      this.attempts.push(record)
-      this.signature = await signatureOf(this.file)
-      return record
+      return this.append(attempt)
+    })
+  }
+
+  /**
+   * Like add(), but a game already on file (same email, playedAt and score) is returned as it is
+   * instead of being stored twice: the browser re-posts an attempt unchanged when it never saw the
+   * answer. Resolves { record, replayed }.
+   */
+  addOnce(attempt) {
+    return this.serial(async () => {
+      await this.refresh()
+      const existing = this.attempts.find((item) => sameAttempt(item, attempt))
+      if (existing) return { record: existing, replayed: true }
+      return { record: await this.append(attempt), replayed: false }
     })
   }
 
