@@ -142,3 +142,24 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
 - [ ] Smoke at the four viewports in both modes (new first step, six GPU tiles, cloud-saving line)
 - [ ] Read the 1180×820 and 1600×1000 screenshots of the new step, the GPU step and the results; fix clipping
 - [ ] `scripts/stamp.mjs`, final commit, tick the plan
+
+## V4 — Three booth requests (Oct 17)
+
+- [x] A. TEST MODE (user: "Create a test mode, where the player info or score isn't saved. Put a toggle for this on
+      the first page only."): a TEST MODE pill beside START on the title screen only (`data-key="test-mode"`, off by
+      default); on, START works with a blank form, the HUD carries a TEST MODE badge on every screen, the results say
+      "Test mode: not saved" in place of the ATTEMPT/RANK line, and nothing is kept (no league entry, no booth
+      upload, nothing in localStorage); NEXT PLAYER and the idle reset switch it off. `js/testmode.js` is the pure
+      state machine (`canStart`, `settleAttempt`); tests/testmode.test.js spies both save hooks; the smoke plays a
+      test run at its first viewport
+- [ ] B. WHERE FIRST (user: "Move the 'where' section to be the first stage of the playable game, so users understand
+      the scenario, workload they need to manage and geographic dependencies."): LOCATION (with WHO & WHERE) is
+      step 1, MODEL & USERS step 2; the brief reads "default" numbers until step 2 is set; rail, review, smoke,
+      tests and this plan follow
+- [ ] C. MULTI-SELECT CONNECTIVITY with best-path routing (user: "Ensure that there is always an option to turn the
+      connections green ... the user can select many different types of connection ... public internet, cross
+      connect, ServiceFabric, ServiceFabricMCP (which allows agentic routing), Dark Fiber."): the NET step is a
+      multi-select of products; a router puts the lowest-latency legal product on every leg; two private products on
+      a critical leg = REDUNDANT (no outage haircut); MCP with ServiceFabric = agent-routed; the CONNECTIONS light is
+      relative to `bestConnectivity(storyId, metros)` (green within 10%, amber within 35%); nerd mode keeps the
+      per-leg board with manual override; rebalance

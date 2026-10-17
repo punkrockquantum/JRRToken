@@ -8,17 +8,18 @@ import { detailLine, wireImpact } from "./impact.js"
 import { plainCoach } from "./coach.js"
 import { createFloor } from "./floor.js"
 import { createAdvanceGate, createIntro, matchingScene, sceneCaption, scenesFor, setIntroDetail } from "./intro.js"
-import { leagueCsv, leagueJson, ordinal, rankOf, sortLeague, upsertEntry } from "./league.js"
+import { leagueCsv, leagueJson, ordinal, rankOf, sortLeague } from "./league.js"
 import { STAR_POINTS, defaultSitePlans, evaluateBuild, formatMoney, formatScore, formatTokens, scenarioFor, stars } from "./model.js"
 import { blockedReason, peopleCount, peopleLead, savingsLine } from "./results.js"
-import { attemptPayload, syncStatusLine } from "./attempt.js"
+import { syncStatusLine } from "./attempt.js"
 import { validateEmail, validateName } from "./names.js"
 import { fetchLeague, recordAttempt } from "./sync.js"
 import { isMuted, loadMute, play, setMuted, unlock } from "./sound.js"
 import { spriteImg } from "./sprites.js"
 import { STORIES, brainPick, choicesToBuild, maxMetros, nerdChoices, simpleChoices } from "./presets.js"
 import { BUILD_STEP_IDS, STEPS, STEP_IDS, applyTile, audienceSummary, jobBrief, modelLabel, nextStep, prevStep, qpuRelevant, simpleDefaults, stepIndex, stepTiles, stepValue, tileGuard, tileOn, untouchedSteps } from "./steps.js"
-import { canImprove, roundEntry, roundHint, roundLine } from "./rounds.js"
+import { canImprove, roundHint, roundLine } from "./rounds.js"
+import { TEST_MODE_BADGE, TEST_MODE_LINE, canStart, settleAttempt, testModeAfterReset } from "./testmode.js"
 
 const LEAGUE_KEY = "token-quest-league-v1"
 // The kiosk's local staff PIN guards on-laptop tools only (download/clear the local league). The
@@ -33,6 +34,8 @@ const state = {
   name: "",
   email: "",
   consentAt: "",
+  /* TEST MODE (title toggle): the run is scored and shown, nothing about it is saved. */
+  testMode: false,
   nerd: false,
   moreStories: false,
   plan: freshPlan(FIRST_SCENARIO),
@@ -195,6 +198,7 @@ function renderHud() {
     el("span", { class: "hud-item" }, [el("b", { text: "1UP " }), state.name ? state.name.toUpperCase() : "----"]),
     el("span", { class: "hud-item" }, [el("b", { text: "SCORE " }), state.result?.result?.ok ? formatScore(state.result.result.score) : (state.screen === "game" || state.screen === "stories" ? "—" : "0")]),
     el("span", { class: "hud-item" }, [el("b", { text: "HI " }), top ? formatScore(top.score) : "0"]),
+    state.testMode ? el("span", { class: "hud-item hud-test", "data-key": "test-badge", text: TEST_MODE_BADGE }) : null,
   )
 }
 
@@ -202,6 +206,7 @@ function resetRun() {
   state.name = ""
   state.email = ""
   state.consentAt = ""
+  state.testMode = testModeAfterReset()
   state.nerd = false
   state.moreStories = false
   paintNerd()
@@ -254,14 +259,39 @@ function titleScreen() {
     "aria-describedby": "consent-error",
   })
   const startBtn = el("button", { class: "btn big", type: "submit", id: "start-btn", disabled: true, text: "START" })
+  /* TEST MODE: a pill beside START. On, nothing from this run is saved and the form may stay blank. */
+  const testToggle = el("button", {
+    type: "button",
+    class: `btn tiny ghost test-toggle${state.testMode ? " on" : ""}`,
+    "data-key": "test-mode",
+    "aria-pressed": state.testMode ? "true" : "false",
+    title: "Play without saving the player or the score",
+    text: state.testMode ? "TEST MODE ON" : "TEST MODE",
+  })
+  const testNote = el("p", { class: "fine test-note", "data-key": "test-note", text: state.testMode ? "Test mode: nothing from this run is saved." : "", "aria-live": "polite" })
   const refreshStart = () => {
     const nameOk = validateName(input.value).ok
     const emailOk = validateEmail(email.value).ok
     if (nameOk) nameError.textContent = ""
     if (emailOk) emailError.textContent = ""
     if (consent.checked) consentError.textContent = ""
-    startBtn.disabled = !(nameOk && emailOk && consent.checked)
+    startBtn.disabled = !canStart({ testMode: state.testMode, nameOk, emailOk, consent: consent.checked })
   }
+  testToggle.addEventListener("click", () => {
+    state.testMode = !state.testMode
+    testToggle.classList.toggle("on", state.testMode)
+    testToggle.setAttribute("aria-pressed", state.testMode ? "true" : "false")
+    testToggle.textContent = state.testMode ? "TEST MODE ON" : "TEST MODE"
+    testNote.textContent = state.testMode ? "Test mode: nothing from this run is saved." : ""
+    if (state.testMode) {
+      nameError.textContent = ""
+      emailError.textContent = ""
+      consentError.textContent = ""
+    }
+    refreshStart()
+    renderHud()
+    play("select")
+  })
   input.addEventListener("input", refreshStart)
   email.addEventListener("input", refreshStart)
   consent.addEventListener("change", () => {
@@ -286,12 +316,25 @@ function titleScreen() {
       ]),
     ]),
     consentError,
-    startBtn,
+    el("div", { class: "start-row" }, [startBtn, testToggle]),
+    testNote,
   ])
   form.addEventListener("submit", (event) => {
     event.preventDefault()
     const nameCheck = validateName(input.value)
     const emailCheck = validateEmail(email.value)
+    if (state.testMode) {
+      /* Nothing is stored in test mode: a blank form is fine, a filled one is used for the HUD only. */
+      unlock()
+      play("start")
+      state.name = nameCheck.ok ? nameCheck.name : ""
+      state.email = ""
+      state.consentAt = ""
+      state.plan = freshPlan(FIRST_SCENARIO, state.nerd)
+      state.lessons = new Set()
+      goto("intro")
+      return
+    }
     nameError.textContent = nameCheck.ok ? "" : nameCheck.error
     emailError.textContent = emailCheck.ok ? "" : emailCheck.error
     consentError.textContent = consent.checked ? "" : "Check the box to continue."
@@ -1318,32 +1361,45 @@ function stopRun() {
 
 function finishRun(result) {
   state.running = false
-  const prevBest = state.league.find((entry) => entry.name.toLocaleLowerCase() === state.name.toLocaleLowerCase())?.score ?? null
+  const prevBest = state.name ? state.league.find((entry) => entry.name.toLocaleLowerCase() === state.name.toLocaleLowerCase())?.score ?? null : null
   const plan = state.plan
   plan.rounds = [...(plan.rounds || []), { score: result.score, result, choices: { ...plan.choices } }]
-  const entry = roundEntry({ name: state.name, email: state.email, consentAt: state.consentAt }, result, plan.rounds, {
-    at: Date.now(),
-    story: STORIES[result.useCase.id]?.line || result.useCase.name,
-  })
   const leaderBefore = sortLeague(state.league)[0]
-  state.league = upsertEntry(state.league, entry)
-  saveLeague()
-  const localRank = rankOf(state.league, state.name)
-  state.syncLine = syncStatusLine(null, { rank: localRank, players: state.league.length })
+  /* Test mode calls neither hook: the league and the booth never hear about the run. */
+  const settled = settleAttempt(
+    {
+      testMode: state.testMode,
+      league: state.league,
+      player: { name: state.name, email: state.email, consentAt: state.consentAt },
+      result,
+      rounds: plan.rounds,
+      at: Date.now(),
+      story: STORIES[result.useCase.id]?.line || result.useCase.name,
+    },
+    {
+      saveLeague: (league) => {
+        state.league = league
+        saveLeague()
+      },
+      recordAttempt,
+    },
+  )
+  const localRank = settled.rank
+  state.syncLine = settled.syncLine
   state.result = {
     result,
     round: plan.rounds.length,
     rounds: plan.rounds,
     rank: localRank,
-    players: state.league.length,
+    players: settled.players,
     prevBest,
+    saved: settled.saved,
     newHigh: !leaderBefore || result.score > leaderBefore.score,
     personalBest: prevBest == null || result.score > prevBest,
   }
-  const payload = attemptPayload({ name: state.name, email: state.email, consentAt: state.consentAt }, result, entry.at)
-  recordAttempt(payload).then((sync) => {
+  settled.upload?.then((sync) => {
     if (!state.result || state.result.result !== result) return
-    state.syncLine = syncStatusLine(sync, { rank: localRank, players: state.league.length })
+    state.syncLine = syncStatusLine(sync, { rank: localRank, players: settled.players })
     if (sync?.ok) {
       state.result.rank = sync.rank
       state.result.players = sync.players
@@ -1414,7 +1470,7 @@ function rightAndTry(result, { final }) {
 }
 
 function showResult() {
-  const { result, rank, players, newHigh, personalBest, prevBest, rounds = [], round = 1 } = state.result
+  const { result, rank, players, newHigh, personalBest, prevBest, rounds = [], round = 1, saved = true } = state.result
   const uc = result.useCase
   const story = STORIES[uc.id]?.line || ""
   const blocked = blockedReason(result)
@@ -1422,11 +1478,13 @@ function showResult() {
   const helped = drHelp(result, state.plan.choices, { nerd: state.nerd })
   const improvable = canImprove(rounds)
   const hint = roundHint(result)
-  const banner = newHigh
-    ? el("p", { class: "banner blink", text: "NEW HIGH SCORE!" })
-    : personalBest
-      ? el("p", { class: "banner", text: "PERSONAL BEST!" })
-      : el("p", { class: "banner dim", text: `YOUR BEST STAYS ${formatScore(prevBest)}` })
+  const banner = !saved
+    ? el("p", { class: "banner dim", "data-key": "test-banner", text: TEST_MODE_LINE.toUpperCase() })
+    : newHigh
+      ? el("p", { class: "banner blink", text: "NEW HIGH SCORE!" })
+      : personalBest
+        ? el("p", { class: "banner", text: "PERSONAL BEST!" })
+        : el("p", { class: "banner dim", text: `YOUR BEST STAYS ${formatScore(prevBest)}` })
   const root = document.getElementById("result")
   const head = el("div", { class: "result-head" }, [
     spriteImg(newHigh ? "trophy" : uc.icon, 5),
@@ -1438,11 +1496,17 @@ function showResult() {
       el("p", { class: "round-line", "data-key": "round-line", text: roundLine(rounds) }),
       banner,
     ]),
-    el("div", { class: "rank-box" }, [
-      el("span", { class: "fine", text: "RANK" }),
-      el("strong", { text: ordinal(rank) }),
-      el("span", { class: "fine", text: `OF ${players}` }),
-    ]),
+    saved
+      ? el("div", { class: "rank-box" }, [
+        el("span", { class: "fine", text: "RANK" }),
+        el("strong", { text: ordinal(rank) }),
+        el("span", { class: "fine", text: `OF ${players}` }),
+      ])
+      : el("div", { class: "rank-box test", "data-key": "rank-box" }, [
+        el("span", { class: "fine", text: "TEST MODE" }),
+        el("strong", { text: "—" }),
+        el("span", { class: "fine", text: "NOT SAVED" }),
+      ]),
   ])
   const buttons = el("div", { class: "row end" }, [
     btn("PLAY AGAIN", playAgain, { kind: "ghost", key: "again" }),
@@ -1455,7 +1519,7 @@ function showResult() {
     /* Every dollar figure on the results card is a game estimate; say so where the money is read. */
     el("span", { class: "fine price-note", "data-key": "result-price-note", text: " Game numbers are estimates." }),
   ])
-  const syncLine = el("p", { class: "sync-line", "data-key": "sync-line", text: state.syncLine || syncStatusLine(null, { rank, players }) })
+  const syncLine = el("p", { class: "sync-line", "data-key": "sync-line", text: saved ? state.syncLine || syncStatusLine(null, { rank, players }) : TEST_MODE_LINE })
   const people = el("div", { class: `people-card${blocked || result.annualSavings < 0 ? " bad" : ""}`, "data-key": "people-card" }, [
     spriteImg("user", 4),
     blocked ? el("p", { class: "blocked-line", "data-key": "blocked-line", text: blocked.text }) : null,
@@ -1480,7 +1544,7 @@ function showResult() {
     ]),
     people,
     state.nerd && !improvable ? el("div", { class: "coach" }, [spriteImg("prof", 3), el("p", { text: plainCoach(result) })]) : null,
-    el("p", { class: "beat-line", "data-key": "beat-line", text: beatLine(players, rank) }),
+    saved ? el("p", { class: "beat-line", "data-key": "beat-line", text: beatLine(players, rank) }) : null,
     syncLine,
   ])
   const children = [head, body, buttons, footer]

@@ -10,7 +10,11 @@ for a booth (see [HOSTING.md](HOSTING.md)).
 
 ## What a player does
 
-1. **Sign in.** Full name, email, and consent to Digital Realty's privacy practices.
+1. **Sign in.** Full name, email, and consent to Digital Realty's privacy practices. A **TEST
+   MODE** pill beside START (title screen only) lets staff play without saving anything: the
+   form may stay blank, the HUD shows a TEST MODE badge, the results say "Test mode: not saved",
+   and no league entry, booth upload or local record is made. It switches itself off for the
+   next player.
 2. **Intro.** Click-through scenes: prompt → tokens → retrieval → generation, the data-center
    ecosystem, and "take any one away and the AI stops". **Nerd mode** (a toggle on every screen)
    swaps in longer, technical captions.

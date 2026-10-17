@@ -222,7 +222,10 @@ test("one game screen with a step rail, and the sync wiring is in place", () => 
   assert.match(main, /STEPS\.map\(\(step, index\) =>/)
   assert.match(main, /screens = \{ title: titleScreen, intro: introScreen, stories: storyScreen, game: gameScreen \}/)
   for (const key of ["budget", "power", "golive", "speed", "demand", "cost"]) assert.match(main, new RegExp(`key: "${key}"`))
-  assert.match(main, /recordAttempt\(payload\)\.then/)
+  /* The finish settles through js/testmode.js: the booth upload is the settlement's promise (none in test mode). */
+  assert.match(main, /settleAttempt\(/)
+  assert.match(main, /recordAttempt,\s*\},\s*\)/)
+  assert.match(main, /settled\.upload\?\.then/)
   assert.match(main, /fetchLeague\(\)\.then/)
   assert.match(main, /consentAt = consent\.checked \? new Date\(\)\.toISOString\(\) : ""/)
   assert.match(main, /"\/api\/export\.xlsx", \{ headers: \{ "X-Staff-Pin"/)

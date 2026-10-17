@@ -389,7 +389,9 @@ test("the simple space is every metro set times six GPU tiles and three tiles on
 test("the game screen is the stepped build: scenario card, ecosystem bar, rail, step panel, coach question", () => {
   assert.match(main, /import \{ ecoHint, ecoQuestion, ecoSummary, ecosystem \} from "\.\/eco\.js"/)
   assert.match(main, /from "\.\/steps\.js"/)
-  assert.match(main, /import \{ canImprove, roundEntry, roundHint, roundLine \} from "\.\/rounds\.js"/)
+  /* roundEntry moved behind js/testmode.js's settleAttempt, which decides whether a run is kept at all. */
+  assert.match(main, /import \{ canImprove, roundHint, roundLine \} from "\.\/rounds\.js"/)
+  assert.match(main, /import \{ TEST_MODE_BADGE, TEST_MODE_LINE, canStart, settleAttempt, testModeAfterReset \} from "\.\/testmode\.js"/)
   assert.doesNotMatch(main, /booth\.js|boothCoach/)
   for (const fn of ["scenarioCard", "rail", "ecoBar", "stepPanel", "reviewPanel", "coachLine", "targetLine", "improveIt"]) assert.match(main, new RegExp(`function ${fn}\\(`), fn)
   const coach = main.slice(main.indexOf("function coachLine("), main.indexOf("function feel("))
