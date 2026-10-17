@@ -64,14 +64,14 @@ test("money is shown in dollars, with no credit wording", () => {
 })
 
 test("the roster runs from the L40S to Vera Rubin and the halls differ in cooling, space, and power", () => {
-  assert.deepEqual(PLATFORMS.map((p) => p.id), ["l40s", "rtx6000", "h100", "h200", "b200", "b300", "b300n", "gb200", "gb300", "vr"])
+  assert.deepEqual(PLATFORMS.map((p) => p.id), ["spark", "l40s", "rtx6000", "h100", "h200", "b200", "b300", "b300n", "gb200", "gb300", "vr"])
   const rtx = byId(PLATFORMS, "rtx6000")
   assert.deepEqual([rtx.hbmGB, rtx.hbmTBs, rtx.pflops, rtx.precision, rtx.domain, rtx.cooling, rtx.gpusPerRack], [96, 1.6, 2, "FP4", 8, "air", 16], "RTX PRO 6000 Blackwell Server Edition: 96 GB GDDR7 at 1.6 TB/s, FP4, PCIe")
   const l40s = byId(PLATFORMS, "l40s")
   assert.deepEqual([l40s.hbmGB, l40s.hbmTBs, l40s.precision, l40s.cooling], [48, 0.864, "FP8", "air"], "L40S: 48 GB GDDR6 at 864 GB/s, no FP4")
   const node = byId(PLATFORMS, "b300n")
   assert.deepEqual([node.gpusPerRack, node.hbmGB, node.capex * 2, node.tokPerGpu], [8, 288, byId(PLATFORMS, "b300").capex, byId(PLATFORMS, "b300").tokPerGpu], "one HGX B300 node is half the rack")
-  assert.ok(PLATFORMS.every((p) => /^(L40S|RTX PRO|HGX|GB[23]00|Vera Rubin)/.test(p.name)), "NVIDIA only")
+  assert.ok(PLATFORMS.every((p) => /^(DGX Spark|L40S|RTX PRO|HGX|GB[23]00|Vera Rubin)/.test(p.name)), "NVIDIA only")
   const rubin = byId(PLATFORMS, "vr")
   assert.equal(rubin.name, "Vera Rubin NVL72")
   assert.equal(rubin.pflops, 35)
@@ -303,10 +303,11 @@ test("ORCA's price is charged in the back end but never counts against the visib
 
 test("price and lead-time table: realistic estimates, newest GPUs cost most and arrive last", () => {
   const capex = Object.fromEntries(PLATFORMS.map((p) => [p.id, p.capex]))
-  assert.deepEqual(capex, { l40s: 160000, rtx6000: 240000, h100: 600000, h200: 700000, b200: 950000, b300: 1150000, b300n: 575000, gb200: 3200000, gb300: 4200000, vr: 6500000 })
-  const lead = PLATFORMS.map((p) => p.leadWeeks)
+  assert.deepEqual(capex, { spark: 64000, l40s: 160000, rtx6000: 240000, h100: 600000, h200: 700000, b200: 950000, b300: 1150000, b300n: 575000, gb200: 3200000, gb300: 4200000, vr: 6500000 })
+  /* The racks arrive in price order; the DGX Spark shelf is a retail desktop box on its own 4-to-8-week wait. */
+  const lead = PLATFORMS.filter((p) => p.id !== "spark").map((p) => p.leadWeeks)
   assert.deepEqual(lead, [...lead].sort((a, b) => a - b))
-  const range = { l40s: [2, 4], rtx6000: [2, 6], h100: [6, 8], h200: [6, 8], b200: [10, 14], b300: [10, 14], b300n: [10, 14], gb200: [16, 24], gb300: [16, 24], vr: [26, 40] }
+  const range = { spark: [4, 8], l40s: [2, 4], rtx6000: [2, 6], h100: [6, 8], h200: [6, 8], b200: [10, 14], b300: [10, 14], b300n: [10, 14], gb200: [16, 24], gb300: [16, 24], vr: [26, 40] }
   for (const p of PLATFORMS) assert.ok(p.leadWeeks >= range[p.id][0] && p.leadWeeks <= range[p.id][1], p.id)
   assert.deepEqual(DATA_TIERS.map((t) => [t.id, t.capex, t.leadWeeks]), [["local", 0, 0], ["file", 400000, 6], ["vector", 550000, 6]])
   assert.deepEqual([KV_TIER.capex, KV_TIER.leadWeeks], [250000, 4])

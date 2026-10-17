@@ -36,7 +36,7 @@ const simpleScore = (id, combo) => evaluateBuild(id, choicesToBuild(id, combo, f
 const combo = (id, patch) => ({ ...simpleDefaults(id), ...patch })
 
 test("the simple view offers three tiles a step, six NVIDIA platforms for the GPUs, and Vera Rubin ×1 in every story", () => {
-  assert.deepEqual(PRESET_IDS.brains, ["rtx6000", "h100", "h200", "b300", "gb200", "vr"])
+  assert.deepEqual(PRESET_IDS.brains, ["spark", "rtx6000", "h200", "b300", "gb200", "vr"])
   assert.deepEqual(PRESET_IDS.legacyBrains, ["small", "medium", "big", "rubin"], "the old tile words are still understood")
   assert.deepEqual(PRESET_IDS.wires, ["cheap", "peer", "fast", "private", "combo"])
   assert.deepEqual(PRESET_IDS.homes, ["cool", "rear", "super"])

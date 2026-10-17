@@ -137,7 +137,7 @@ const RTX_NODES = [
     // https://docs.nvidia.com/enterprise-reference-architectures/rtx-pro-ai-factory/latest/components.html
     id: "rtx-a", letter: "A", form: "4U air MGX node", who: "the GPU maker's reference design", reference: true,
     kind: "node", gpusPerNode: 8, u: 4, cpu: "2× 64-core x86", memory: "up to 2 TB DDR5", nics: "8× 400G on a switched board", nvme: "8× E1.S NVMe",
-    nodeKW: 7, cooling: "air", leadDelta: 0, priceMult: 1,
+    nodeKW: 6.5, cooling: "air", leadDelta: 0, priceMult: 1,
   },
   {
     // A large OEM's 4U server for eight double-wide PCIe GPUs with 5th Gen AMD EPYC hosts: 24 DIMMs
@@ -145,7 +145,7 @@ const RTX_NODES = [
     // Dell PowerEdge XE7745: https://www.dell.com/en-us/shop/ipovw/poweredge-xe7745
     id: "rtx-b", letter: "B", form: "4U air PCIe node, AMD hosts", who: "a large OEM",
     kind: "node", gpusPerNode: 8, u: 4, cpu: "2× 128-core x86", memory: "up to 3 TB DDR5", nics: "up to 8× 400G", nvme: "8× E3.S NVMe",
-    nodeKW: 7.2, cooling: "air", leadDelta: -1, priceMult: 0.97,
+    nodeKW: 6.7, cooling: "air", leadDelta: -1, priceMult: 0.97,
   },
   {
     // A volume OEM's 4U PCIe GPU server with 5th Gen AMD EPYC: up to 8 double-width GPUs, 24 DIMMs
@@ -153,7 +153,7 @@ const RTX_NODES = [
     // Supermicro AS-4125GS-TNRT2: https://www.supermicro.com/en/products/system/gpu/4u/as-4125gs-tnrt2
     id: "rtx-c", letter: "C", form: "4U air PCIe node, 24 bays", who: "a volume OEM",
     kind: "node", gpusPerNode: 8, u: 4, cpu: "2× 96-core x86", memory: "up to 6 TB DDR5", nics: "up to 8× 400G", nvme: "up to 24× 2.5-in NVMe",
-    nodeKW: 7.4, cooling: "air", leadDelta: -2, priceMult: 0.95,
+    nodeKW: 6.9, cooling: "air", leadDelta: -2, priceMult: 0.95,
   },
   {
     // A large OEM's 3U server for up to eight double-wide GPUs, also sold with this card: 2× AMD EPYC,
@@ -161,7 +161,7 @@ const RTX_NODES = [
     // Lenovo ThinkSystem SR675 V3: https://lenovopress.lenovo.com/lp1611-thinksystem-sr675-v3-server
     id: "rtx-d", letter: "D", form: "3U air PCIe node", who: "a large OEM",
     kind: "node", gpusPerNode: 8, u: 3, cpu: "2× 96-core x86", memory: "up to 3 TB DDR5", nics: "up to 6× 400G", nvme: "8× E1.S NVMe",
-    nodeKW: 7.3, cooling: "air", leadDelta: 1, priceMult: 1.02,
+    nodeKW: 6.8, cooling: "air", leadDelta: 1, priceMult: 1.02,
   },
 ]
 

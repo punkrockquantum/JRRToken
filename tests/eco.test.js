@@ -285,7 +285,8 @@ test("every step offers three tiles on the simple board, a short list of metros,
       for (const tile of tiles) {
         assert.ok(tile.label.length > 0 && tile.label.length <= 32, `${id} ${stepId} label "${tile.label}"`)
         const words = tile.hint.split(/[\s,+]+/).filter(Boolean).length
-        assert.ok(words >= 3 && words <= 7, `${id} ${stepId} hint "${tile.hint}" has ${words} words`)
+        /* The DGX Spark tile carries its agreed ten-word hint; every other hint is three to seven words. */
+        assert.ok(words >= 3 && words <= (tile.id === "spark" ? 10 : 7), `${id} ${stepId} hint "${tile.hint}" has ${words} words`)
         assert.doesNotMatch(`${tile.label} ${tile.hint}`, /TB\/s|PFLOPS|\bPUE\b|\bms\b|\$/, `${id} ${tile.label}`)
         assert.ok(Array.isArray(tile.lines) && tile.lines.length >= 2, `${id} ${stepId} ${tile.id} learn lines`)
         assert.ok(tile.why.length > 0 && tile.why.length <= 120, `${id} ${stepId} ${tile.id} why "${tile.why}"`)
@@ -319,16 +320,17 @@ test("every step offers three tiles on the simple board, a short list of metros,
       assert.equal(qpu[0].label, "Not needed for this job")
     }
   }
-  assert.deepEqual(stepTiles("chat", "gpu").map((tile) => tile.label), ["NVIDIA RTX PRO 6000 Server ×8", "NVIDIA HGX H100 ×2", "NVIDIA HGX H200 ×2", "NVIDIA HGX B300 ×6", "NVIDIA GB200 NVL72 ×2", "NVIDIA Vera Rubin NVL72 ×1"])
-  assert.deepEqual(stepTiles("code", "gpu").map((tile) => tile.label), ["NVIDIA RTX PRO 6000 Server ×8", "NVIDIA HGX H200 ×2", "NVIDIA HGX B300 ×6", "NVIDIA GB200 NVL72 ×3", "NVIDIA GB300 NVL72 ×2", "NVIDIA Vera Rubin NVL72 ×1"])
-  assert.deepEqual(stepTiles("drug", "gpu").map((tile) => tile.label), ["NVIDIA L40S Server ×15", "NVIDIA RTX PRO 6000 Server ×8", "NVIDIA HGX H200 ×2", "NVIDIA HGX B300 ×4", "NVIDIA GB200 NVL72 ×2", "NVIDIA Vera Rubin NVL72 ×1"])
-  assert.deepEqual(stepTiles("robot", "gpu").map((tile) => tile.label), ["NVIDIA RTX PRO 6000 Server ×9", "NVIDIA HGX H100 ×8", "NVIDIA HGX H200 ×4", "NVIDIA HGX B200 ×2", "NVIDIA HGX B300 ×3", "NVIDIA Vera Rubin NVL72 ×1"])
+  /* The DGX Spark shelf opens every board, counted in boxes (8 shelves × 16); the H100 and GB300 live in nerd mode. */
+  assert.deepEqual(stepTiles("chat", "gpu").map((tile) => tile.label), ["NVIDIA DGX Spark ×128", "NVIDIA RTX PRO 6000 Server ×8", "NVIDIA HGX H200 ×2", "NVIDIA HGX B300 ×6", "NVIDIA GB200 NVL72 ×2", "NVIDIA Vera Rubin NVL72 ×1"])
+  assert.deepEqual(stepTiles("code", "gpu").map((tile) => tile.label), ["NVIDIA DGX Spark ×128", "NVIDIA RTX PRO 6000 Server ×8", "NVIDIA HGX H200 ×2", "NVIDIA HGX B300 ×6", "NVIDIA GB200 NVL72 ×3", "NVIDIA Vera Rubin NVL72 ×1"])
+  assert.deepEqual(stepTiles("drug", "gpu").map((tile) => tile.label), ["NVIDIA DGX Spark ×160", "NVIDIA L40S Server ×15", "NVIDIA RTX PRO 6000 Server ×8", "NVIDIA HGX H200 ×2", "NVIDIA HGX B300 ×4", "NVIDIA Vera Rubin NVL72 ×1"])
+  assert.deepEqual(stepTiles("robot", "gpu").map((tile) => tile.label), ["NVIDIA DGX Spark ×64", "NVIDIA RTX PRO 6000 Server ×9", "NVIDIA HGX H200 ×4", "NVIDIA HGX B200 ×2", "NVIDIA HGX B300 ×3", "NVIDIA Vera Rubin NVL72 ×1"])
   /* The crowd right-sizes the racks: a small shop gets one PCIe rack, the medium chat crowd six. */
-  assert.deepEqual(stepTiles("chat", "gpu", false, { users: "small" }).map((tile) => tile.label), ["NVIDIA RTX PRO 6000 Server ×1", "NVIDIA HGX H100 ×1", "NVIDIA HGX H200 ×1", "NVIDIA HGX B300 ×1", "NVIDIA GB200 NVL72 ×1", "NVIDIA Vera Rubin NVL72 ×1"])
-  assert.equal(stepTiles("chat", "gpu", false, { users: "medium" })[0].label, "NVIDIA RTX PRO 6000 Server ×6")
+  assert.deepEqual(stepTiles("chat", "gpu", false, { users: "small" }).map((tile) => tile.label), ["NVIDIA DGX Spark ×32", "NVIDIA RTX PRO 6000 Server ×1", "NVIDIA HGX H200 ×1", "NVIDIA HGX B300 ×1", "NVIDIA GB200 NVL72 ×1", "NVIDIA Vera Rubin NVL72 ×1"])
+  assert.equal(stepTiles("chat", "gpu", false, { users: "medium" })[1].label, "NVIDIA RTX PRO 6000 Server ×6")
   /* Nerd mode lists every platform the story can use, then the HUGE trap. */
   const nerdGpus = stepTiles("chat", "gpu", true)
-  assert.deepEqual(nerdGpus.map((tile) => tile.id), ["l40s", "rtx6000", "h100", "h200", "b200", "b300", "b300n", "gb200", "gb300", "vr", "huge"])
+  assert.deepEqual(nerdGpus.map((tile) => tile.id), ["spark", "l40s", "rtx6000", "h100", "h200", "b200", "b300", "b300n", "gb200", "gb300", "vr", "huge"])
   assert.equal(nerdGpus.at(-1).label, "NVIDIA Vera Rubin NVL72 ×4")
   assert.ok(nerdGpus.every((tile) => /TB\/s, [\d.]+ PFLOPS FP[48] dense, \d+ kW a rack/.test(tile.nerd)), "nerd specs carry memory bandwidth, maths and power")
   assert.match(nerdGpus.find((tile) => tile.id === "rtx6000").nerd, /^96 GB GDDR, 1\.6 TB\/s, 2 PFLOPS FP4 dense, 14 kW a rack; \$240k a rack and a 3-week lead \(estimates\)\. \d+ racks? = \d+ kW IT, \d+ kW at PUE 1\.38 in the air hall$/)

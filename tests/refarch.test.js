@@ -45,7 +45,10 @@ function withoutComments(source) {
 const nerdBuild = (id, patch = {}) => choicesToBuild(id, { ...expertChoices(id), ...patch }, true)
 
 test("every platform has three or four anonymised designs with the plan's fields, the platform's own design first", () => {
-  for (const platform of PLATFORMS) {
+  /* A shelf of desktop boxes has no OEM rack designs behind it: the panel stays away. */
+  assert.deepEqual(designsFor("spark"), [])
+  assert.equal(referenceDesign("spark"), null)
+  for (const platform of PLATFORMS.filter((item) => item.id !== "spark")) {
     const designs = designsFor(platform.id)
     assert.ok(designs.length >= 3 && designs.length <= 4, `${platform.id} offers ${designs.length} designs`)
     assert.equal(designs.filter((design) => design.reference).length, 1, `${platform.id} has one reference design`)
@@ -220,5 +223,5 @@ test("the simple board forgets a design, nerd mode carries it, and a new GPU til
   const dropped = applyTile("chat", "gpu", "gb200", { ...expertChoices("chat"), brains: "b300", refarch: "b300-b" })
   assert.equal(dropped.brains, "gb200")
   assert.equal("refarch" in dropped, false, "a GB200 tile drops a B300 design")
-  for (const tile of stepTiles("chat", "gpu", true)) assert.ok(designsFor(tile.platform.id).length >= 3, `${tile.id} has designs`)
+  for (const tile of stepTiles("chat", "gpu", true)) assert.ok(tile.id === "spark" || designsFor(tile.platform.id).length >= 3, `${tile.id} has designs`)
 })

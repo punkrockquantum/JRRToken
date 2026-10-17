@@ -28,30 +28,35 @@ export const STORIES = {
  * shoppers" lesson), the SMALL and MEDIUM counts are right-sized to the smaller crowd's demand
  * and budget, never below one rack. Vera Rubin ×1 is always offered; HUGE is the nerd-only
  * trap (several Vera Rubin racks). The coding agents' 64k contexts on two coasts need a third
- * NVL72 rack.
+ * NVL72 rack. The DGX Spark "rack" is a shelf of 16 desktop boxes: a few shelves at every
+ * crowd, always affordable, never enough (a dev box is not a crowd server).
  */
 const RACKS = {
-  chat: { l40s: [2, 10, 22], rtx6000: [1, 6, 8], h100: [1, 2, 2], h200: [1, 2, 2], b200: [1, 1, 8], b300: [1, 1, 6], b300n: [1, 2, 12], gb200: [1, 1, 2], gb300: [1, 1, 2], vr: [1, 1, 1] },
-  rag: { l40s: [1, 4, 16], rtx6000: [1, 3, 8], h100: [1, 2, 2], h200: [1, 1, 2], b200: [1, 1, 6], b300: [1, 1, 6], b300n: [1, 2, 12], gb200: [1, 1, 2], gb300: [1, 1, 1], vr: [1, 1, 1] },
-  code: { l40s: [1, 12, 12], rtx6000: [1, 8, 8], h100: [1, 3, 2], h200: [1, 2, 2], b200: [1, 2, 10], b300: [1, 1, 6], b300n: [1, 2, 17], gb200: [1, 1, 3], gb300: [1, 1, 2], vr: [1, 1, 1] },
-  research: { l40s: [1, 6, 8], rtx6000: [1, 4, 8], h100: [1, 2, 2], h200: [1, 1, 2], b200: [1, 1, 7], b300: [1, 1, 6], b300n: [1, 2, 10], gb200: [1, 1, 2], gb300: [1, 1, 1], vr: [1, 1, 1] },
-  drug: { l40s: [1, 3, 15], rtx6000: [1, 2, 8], h100: [1, 1, 2], h200: [1, 1, 2], b200: [1, 1, 4], b300: [1, 1, 4], b300n: [1, 1, 7], gb200: [1, 1, 2], gb300: [1, 1, 1], vr: [1, 1, 1] },
-  robot: { l40s: [1, 3, 30], rtx6000: [1, 2, 9], h100: [1, 2, 8], h200: [1, 2, 4], b200: [1, 1, 2], b300: [1, 1, 3], b300n: [1, 2, 3], gb200: [1, 1, 2], gb300: [1, 1, 2], vr: [1, 1, 1] },
+  chat: { spark: [2, 4, 8], l40s: [2, 10, 22], rtx6000: [1, 6, 8], h100: [1, 2, 2], h200: [1, 2, 2], b200: [1, 1, 8], b300: [1, 1, 6], b300n: [1, 2, 12], gb200: [1, 1, 2], gb300: [1, 1, 2], vr: [1, 1, 1] },
+  rag: { spark: [2, 4, 8], l40s: [1, 4, 16], rtx6000: [1, 3, 8], h100: [1, 2, 2], h200: [1, 1, 2], b200: [1, 1, 6], b300: [1, 1, 6], b300n: [1, 2, 12], gb200: [1, 1, 2], gb300: [1, 1, 1], vr: [1, 1, 1] },
+  code: { spark: [2, 4, 8], l40s: [1, 12, 12], rtx6000: [1, 8, 8], h100: [1, 3, 2], h200: [1, 2, 2], b200: [1, 2, 10], b300: [1, 1, 6], b300n: [1, 2, 17], gb200: [1, 1, 3], gb300: [1, 1, 2], vr: [1, 1, 1] },
+  research: { spark: [2, 4, 8], l40s: [1, 6, 8], rtx6000: [1, 4, 8], h100: [1, 2, 2], h200: [1, 1, 2], b200: [1, 1, 7], b300: [1, 1, 6], b300n: [1, 2, 10], gb200: [1, 1, 2], gb300: [1, 1, 1], vr: [1, 1, 1] },
+  drug: { spark: [2, 4, 10], l40s: [1, 3, 15], rtx6000: [1, 2, 8], h100: [1, 1, 2], h200: [1, 1, 2], b200: [1, 1, 4], b300: [1, 1, 4], b300n: [1, 1, 7], gb200: [1, 1, 2], gb300: [1, 1, 1], vr: [1, 1, 1] },
+  robot: { spark: [1, 2, 4], l40s: [1, 3, 30], rtx6000: [1, 2, 9], h100: [1, 2, 8], h200: [1, 2, 4], b200: [1, 1, 2], b300: [1, 1, 3], b300n: [1, 2, 3], gb200: [1, 1, 2], gb300: [1, 1, 2], vr: [1, 1, 1] },
 }
 
 /**
- * The six tiles of the simple GPU step, cheapest first: every NVIDIA platform the story can
- * use. The 650B stories swap the HGX H100 for the GB300 reasoning rack (a 650B model spills on
- * Hopper's 8-GPU islands); the drug lab's overnight batch gets the L40S instead of the H100;
- * robot fleets never need an NVL72 rack, so they get the HGX B200 instead.
+ * The six tiles of the simple GPU step, cheapest first: the DGX Spark shelf (the desktop box,
+ * so the memory-bandwidth lesson has a floor), a budget PCIe rack, the Hopper H200, the HGX
+ * B300 on air, a 72-GPU rack and Vera Rubin. The HGX H100 lives in nerd mode (the H200 is the
+ * same Hopper brain with more memory), and so does the GB300 reasoning rack (the GB200 NVL72
+ * teaches the same 72-GPU lesson at a lower price, and wins the 650B stories). The drug lab's
+ * overnight batch gets the L40S as its budget rack and no NVL72 at all (a batch job never needs
+ * a liquid rack, and Vera Rubin still shows one); robot fleets never need an NVL72 rack either,
+ * so they get the HGX B200.
  */
 const SIMPLE_BRAINS = {
-  chat: ["rtx6000", "h100", "h200", "b300", "gb200", "vr"],
-  rag: ["rtx6000", "h100", "h200", "b300", "gb200", "vr"],
-  code: ["rtx6000", "h200", "b300", "gb200", "gb300", "vr"],
-  research: ["rtx6000", "h200", "b300", "gb200", "gb300", "vr"],
-  drug: ["l40s", "rtx6000", "h200", "b300", "gb200", "vr"],
-  robot: ["rtx6000", "h100", "h200", "b200", "b300", "vr"],
+  chat: ["spark", "rtx6000", "h200", "b300", "gb200", "vr"],
+  rag: ["spark", "rtx6000", "h200", "b300", "gb200", "vr"],
+  code: ["spark", "rtx6000", "h200", "b300", "gb200", "vr"],
+  research: ["spark", "rtx6000", "h200", "b300", "gb200", "vr"],
+  drug: ["spark", "l40s", "rtx6000", "h200", "b300", "vr"],
+  robot: ["spark", "rtx6000", "h200", "b200", "b300", "vr"],
 }
 
 /** The opening GPU tile: the strongest air-cooled rack the story was tuned on. */

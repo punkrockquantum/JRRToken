@@ -40,12 +40,48 @@
  */
 export const PLATFORMS = [
   {
+    // NVIDIA DGX Spark: one GB10 Grace Blackwell Superchip, 128 GB of unified LPDDR5x at
+    // 273 GB/s, up to 1 PFLOP of FP4 AI compute with sparsity (about 0.5 dense), a 240 W power
+    // supply (about 170 W at full load, estimate), ConnectX-7 200G ports that pair two Sparks,
+    // $3,999. https://www.nvidia.com/en-us/products/workstations/dgx-spark/
+    // The game's unit is a "DGX Spark shelf": 16 boxes on one shelf behind a small switch,
+    // 16 × 0.17 + 0.3 kW = 3 kW, about $64k, 4 to 8 weeks (estimates). Unified memory is the
+    // GPU's memory, so there is no separate host pool to park context in.
+    id: "spark",
+    tag: "DESKTOP AI BOX",
+    name: "DGX Spark",
+    family: "Grace Blackwell (GB10)",
+    year: 2025,
+    gpu: "GB10 Grace Blackwell",
+    sprite: "rackAir",
+    gpusPerRack: 16,
+    hbmGB: 128,
+    hbmTBs: 0.273,
+    memKind: "LPDDR5x",
+    pflops: 0.5,
+    precision: "FP4",
+    domain: 2,
+    gpuW: 170,
+    nodeKW: 0.17,
+    nodesPerRack: 16,
+    torKW: 0.3,
+    rackKW: 3,
+    cooling: "air",
+    hostTB: 0,
+    tokPerGpu: 100,
+    supply: 40,
+    capex: 64000,
+    leadWeeks: 6,
+    learn:
+      "A desktop AI box: one GB10 chip with 128 GB of unified LPDDR5x at 273 GB/s and FP4 maths, $3,999 from NVIDIA. It loads a 70B or 100B model at FP4, but its memory is thirty times slower than an HGX node's HBM, so it streams a few tokens a second: a developer's machine, not a crowd server. Sixteen on a shelf is the game's unit (about 3 kW and $64k, estimates).",
+  },
+  {
     // NVIDIA L40S datasheet: 48 GB GDDR6 with ECC, 864 GB/s, FP8 tensor 1,466 TFLOPS with
     // sparsity (733 dense), 350 W, PCIe Gen4 x16, passive, no NVLink.
     // https://www.nvidia.com/en-us/data-center/l40s/
     // Two 8-GPU 4U PCIe servers per game rack: 8 × 350 W of cards plus two CPUs, memory,
-    // NICs and fans is about 4.5 kW a server at full load (estimate; the servers ship with
-    // 2 × 2.7 kW or larger supplies). 2 × 4.5 + 1 kW of top-of-rack switching = 10 kW.
+    // NICs and fans is about 4 kW a server at full load (estimate, the OVX reference node in
+    // js/refarch.js). 2 × 4 + 1 kW of top-of-rack switching = 9 kW.
     id: "l40s",
     tag: "BUDGET PCIE",
     name: "L40S Server",
@@ -60,10 +96,10 @@ export const PLATFORMS = [
     precision: "FP8",
     domain: 8,
     gpuW: 350,
-    nodeKW: 4.5,
+    nodeKW: 4,
     nodesPerRack: 2,
     torKW: 1,
-    rackKW: 10,
+    rackKW: 9,
     cooling: "air",
     hostTB: 4,
     tokPerGpu: 750,
@@ -80,8 +116,9 @@ export const PLATFORMS = [
     // https://www.nvidia.com/en-us/data-center/rtx-pro-6000-blackwell-server-edition/
     // The RTX PRO Server: an 8-GPU MGX air-cooled node, 768 GB and 12.8 TB/s aggregate.
     // https://docs.nvidia.com/enterprise-reference-architectures/rtx-pro-ai-factory/latest/components.html
-    // Two 8-GPU servers per game rack: 8 × 600 W of cards plus the host is about 6.5 kW a
-    // server at full load (estimate). 2 × 6.5 + 1 kW of top-of-rack switching = 14 kW.
+    // Two 8-GPU servers per game rack: 8 × 600 W of cards plus the hosts and NICs is about 6.5 kW
+    // a server at full load (estimate, the MGX reference node in js/refarch.js). 2 × 6.5 + 1 kW of
+    // top-of-rack switching = 14 kW.
     id: "rtx6000",
     tag: "BUDGET BLACKWELL",
     name: "RTX PRO 6000 Server",
@@ -1126,6 +1163,7 @@ export const EDGE_LATE = 0.05
 
 /** One plain sentence per choice: what it does for you. */
 export const DOES = {
+  spark: "Desktop AI boxes on a shelf: cheap and tiny, but memory thirty times slower than HBM, so a few tokens a second each.",
   l40s: "A budget PCIe card: in stock and cheap, but slow GDDR6 memory and no NVLink, so few tokens a GPU.",
   rtx6000: "Blackwell on a PCIe card: cheap FP4 tokens for small models, GDDR7 five times slower than HBM.",
   h100: "The classic: cheap and air-cooled, but slow memory and small NVLink islands.",

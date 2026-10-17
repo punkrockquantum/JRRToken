@@ -957,6 +957,8 @@ function refarchPanel(result, selected) {
   const hallId = state.plan.build.hall
   const gpus = brain.racks * platform.gpusPerRack
   const designs = designsFor(platform.id)
+  /* A desktop box has no OEM rack designs behind it. */
+  if (!designs.length) return null
   const current = designFor(platform.id, choices.refarch) || referenceDesign(platform.id)
   const cards = designs.map((design) => {
     const on = design.id === current?.id

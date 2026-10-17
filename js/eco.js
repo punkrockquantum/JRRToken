@@ -99,6 +99,7 @@ function coolingPart(r) {
 }
 
 function computePart(r) {
+  const useCase = r.useCase || {}
   // The racks at full speed against the crowd. Cooling, power and the wire have their own lights.
   const rackTok = Number.isFinite(r.rackTok) ? r.rackTok : r.throughput || 0
   const coverage = r.demand > 0 ? Math.min(1, rackTok / r.demand) : 0
@@ -114,6 +115,14 @@ function computePart(r) {
   }
   if (r.bottleneck === "fit") {
     return { state: "red", why: `The ${r.useCase?.model} does not fit on these GPUs, so nothing comes out.`, ask: `Would a rack with more memory per GPU, or an NVL72 rack, load the model?`, detail: `Group of ${r.gpus} GPUs cannot hold the weights.` }
+  }
+  if (r.slowStream) {
+    return {
+      state: "red",
+      why: `${r.platform?.name} streams each answer at about ${(r.streamTps || 0).toFixed(1)} tokens a second, below the ${useCase.tps || 0} people expect: a dev box, not a crowd server.`,
+      ask: `Would GPUs with HBM memory stream every answer at full speed?`,
+      detail: `${r.platform?.hbmTBs} TB/s of ${r.platform?.memKind || "memory"} against the ${r.useCase?.weightsGB || 0} GB model: ${tokens}.`,
+    }
   }
   const gpuLate = (r.leadParts || []).find((part) => part.id === "gpu")
   if (r.lateWeeks > 0 && gpuLate && gpuLate.weeks >= (r.liveWeeks || 0) - 1e-9) {

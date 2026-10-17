@@ -58,7 +58,7 @@ test("rack power is nodes × node kW + top-of-rack, from the datasheets, with a 
   assert.equal(byId(PLATFORMS, "gb300").rackKW, 142)
   assert.equal(byId(PLATFORMS, "vr").rackKW, 210)
   assert.ok(byId(PLATFORMS, "rtx6000").rackKW >= 13 && byId(PLATFORMS, "rtx6000").rackKW <= 15, "two 8-GPU RTX PRO 6000 nodes at 600 W a card")
-  assert.ok(byId(PLATFORMS, "l40s").rackKW >= 9 && byId(PLATFORMS, "l40s").rackKW <= 11, "two 8-GPU L40S nodes at 350 W a card")
+  assert.ok(byId(PLATFORMS, "l40s").rackKW >= 8 && byId(PLATFORMS, "l40s").rackKW <= 11, "two 8-GPU L40S nodes at 350 W a card")
   /* Hall caps per cooling type stay in the published bands and cover the air racks. */
   const cap = (id) => byId(HALLS, id).maxRackKW
   assert.ok(cap("A") >= 10 && cap("A") <= 40 && cap("I") >= 30 && cap("I") <= 60 && cap("R") >= 40 && cap("R") <= 70 && cap("B") >= 100 && cap("B") <= 240)

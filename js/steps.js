@@ -37,10 +37,11 @@ export function prevStep(stepId) {
   return STEP_IDS[Math.max(0, stepIndex(stepId) - 1)]
 }
 
-const RACK_ART = { l40s: "rackAir", rtx6000: "rackAir", h100: "rackAir", h200: "rackAir", b200: "rackAir", b300: "rackAir", b300n: "rackAir", gb200: "rackLiquid", gb300: "rackLiquid", vr: "rackRubin" }
+const RACK_ART = { spark: "rackAir", l40s: "rackAir", rtx6000: "rackAir", h100: "rackAir", h200: "rackAir", b200: "rackAir", b300: "rackAir", b300n: "rackAir", gb200: "rackLiquid", gb300: "rackLiquid", vr: "rackRubin" }
 
 /** Five words that tell a newcomer what each rack is good at. */
 const GPU_HINTS = {
+  spark: "Desktop AI boxes on a shelf: cheap, tiny, slow memory",
   l40s: "cheapest card, slow memory, air",
   rtx6000: "budget pick for small models",
   h100: "the classic, runs on air",
@@ -55,6 +56,7 @@ const GPU_HINTS = {
 
 /** The tag over the tile: what the player must know about the hall before picking it. */
 const GPU_TAG = {
+  spark: "INCLUDED · AIR",
   l40s: "INCLUDED · AIR",
   rtx6000: "INCLUDED · AIR",
   h100: "INCLUDED · AIR",
@@ -68,6 +70,11 @@ const GPU_TAG = {
 }
 
 const GPU_LEARN = {
+  spark: [
+    "NVIDIA's desktop AI box: one GB10 Grace Blackwell chip with 128 GB of unified memory, $3,999 (nvidia.com/dgx-spark). Sixteen on a shelf is the game's unit.",
+    "It loads a 70B or 100B model at FP4, but LPDDR5x at 273 GB/s is thirty times slower than an HGX node's HBM, so each box streams a few tokens a second and a 650B model does not fit even across a pair.",
+    "Spark is a dev box: great for one engineer, not for a crowd. Pick it to see what memory bandwidth does to tokens per second.",
+  ],
   l40s: [
     "A PCIe inference card from 2023 with 48 GB of GDDR6 memory and no NVLink.",
     "Its memory is four times slower than an H100's, so each GPU writes few tokens a second, and a 70B model needs all eight cards in the server.",
@@ -164,12 +171,12 @@ const USERS_ART = { small: "user", medium: "user", large: "hero" }
 
 /** One line per story and GPU tile: the reason that pops up for two seconds when it is picked. */
 const GPU_WHY = {
-  chat: { rtx6000: "Cheap FP4 tokens for a small crowd; a million shoppers need far more than eight PCIe racks.", h100: "Cheap and quick to get, but each rack answers few shoppers.", h200: "More memory than the H100, but the same slow maths for a million shoppers' prompts.", b300: "Six strong air racks: plenty of shoppers, no liquid hall needed.", gb200: "Two NVL72 racks answer the whole crowd, if the hall can cool them.", vr: "The fastest rack, but it lands after the 16-week deadline." },
-  rag: { rtx6000: "A budget rack for a small office; 16k-token prompts crawl on GDDR memory at scale.", h100: "Fits a 70B model, but slow on 16k-token prompts.", h200: "Fits a 70B model, but slow on 16k-token prompts.", b300: "Air-cooled Blackwell fits a small power room.", gb200: "One NVL72 rack would do; two blow the power room.", vr: "Scarce and late for a 20-week deadline." },
-  code: { rtx6000: "FP4 fits the 650B model across eight cards, but PCIe islands and GDDR make it crawl on 64k contexts.", h200: "Too little memory for 64k-token agent contexts.", b300: "Six air racks keep up until the contexts fill the memory.", gb200: "Three NVL72 racks hold a big model and its long contexts.", gb300: "Two reasoning racks hold the contexts, but the third rack's worth of developers waits.", vr: "Arrives too late for a 26-week launch." },
-  research: { rtx6000: "A 650B model on PCIe islands: it loads, but every long answer crawls.", h200: "A 650B model does not fit well on Hopper islands.", b300: "Works, but a big model spills across small NVLink islands.", gb200: "72 GPUs as one is how a 650B reasoning model wants to run.", gb300: "One reasoning rack: 72 GPUs as one, but one rack for ten thousand analysts.", vr: "Inside the 36-week deadline, but the priciest rack on the board." },
-  drug: { l40s: "The cheapest cards: an overnight batch forgives slow memory, but fifteen racks still miss the candidates.", rtx6000: "Cheap FP4 screening for a small lab; the big library needs HBM racks.", h200: "Cheap racks, but a 100B model screens slowly on them.", b300: "Four Blackwell Ultra racks screen the library fast on air.", gb200: "More rack than the lab's power room can feed.", vr: "The lab would pay for speed it cannot power." },
-  robot: { rtx6000: "Nine PCIe racks serve the fleet in time and cheaply; the plants' power rooms can feed them.", h100: "Cheap, but eight Hopper racks for what two Blackwell racks do.", h200: "Four Hopper racks still miss the fleet's 50 ms first word.", b200: "Two Blackwell racks on air serve the whole fleet from the plants.", b300: "Three racks is more than the fleet needs; the money shows in the token price.", vr: "A 210 kW rack far above what the fleet needs: power and money wasted." },
+  chat: { spark: "A shelf of dev boxes: each streams a few tokens a second, so a million shoppers wait on almost nothing.", rtx6000: "Cheap FP4 tokens for a small crowd; a million shoppers need far more than eight PCIe racks.", h100: "Cheap and quick to get, but each rack answers few shoppers.", h200: "More memory than the H100, but the same slow maths for a million shoppers' prompts.", b300: "Six strong air racks: plenty of shoppers, no liquid hall needed.", gb200: "Two NVL72 racks answer the whole crowd, if the hall can cool them.", vr: "The fastest rack, but it lands after the 16-week deadline." },
+  rag: { spark: "Dev boxes load the 70B model, but stream it too slowly for an office's questions.", rtx6000: "A budget rack for a small office; 16k-token prompts crawl on GDDR memory at scale.", h100: "Fits a 70B model, but slow on 16k-token prompts.", h200: "Fits a 70B model, but slow on 16k-token prompts.", b300: "Air-cooled Blackwell fits a small power room.", gb200: "One NVL72 rack would do; two blow the power room.", vr: "Scarce and late for a 20-week deadline." },
+  code: { spark: "Dev boxes cannot hold the 650B model, and stream a 70B one far too slowly for agents.", rtx6000: "FP4 fits the 650B model across eight cards, but PCIe islands and GDDR make it crawl on 64k contexts.", h200: "Too little memory for 64k-token agent contexts.", b300: "Six air racks keep up until the contexts fill the memory.", gb200: "Three NVL72 racks hold a big model and its long contexts.", gb300: "Two reasoning racks hold the contexts, but the third rack's worth of developers waits.", vr: "Arrives too late for a 26-week launch." },
+  research: { spark: "Dev boxes cannot hold the 650B model; long reports need HBM racks.", rtx6000: "A 650B model on PCIe islands: it loads, but every long answer crawls.", h200: "A 650B model does not fit well on Hopper islands.", b300: "Works, but a big model spills across small NVLink islands.", gb200: "72 GPUs as one is how a 650B reasoning model wants to run.", gb300: "One reasoning rack: 72 GPUs as one, but one rack for ten thousand analysts.", vr: "Inside the 36-week deadline, but the priciest rack on the board." },
+  drug: { spark: "Dev boxes load the 100B protein model, but screen a few candidates an hour: the library never finishes.", l40s: "The cheapest cards: an overnight batch forgives slow memory, but fifteen racks still miss the candidates.", rtx6000: "Cheap FP4 screening for a small lab; the big library needs HBM racks.", h200: "Cheap racks, but a 100B model screens slowly on them.", b300: "Four Blackwell Ultra racks screen the library fast on air.", gb200: "More rack than the lab's power room can feed.", vr: "The lab would pay for speed it cannot power." },
+  robot: { spark: "Dev boxes stream a few tokens a second: a robot waiting 50 ms for its first word gets nothing.", rtx6000: "Nine PCIe racks serve the fleet in time and cheaply; the plants' power rooms can feed them.", h100: "Cheap, but eight Hopper racks for what two Blackwell racks do.", h200: "Four Hopper racks still miss the fleet's 50 ms first word.", b200: "Two Blackwell racks on air serve the whole fleet from the plants.", b300: "Three racks is more than the fleet needs; the money shows in the token price.", vr: "A 210 kW rack far above what the fleet needs: power and money wasted." },
 }
 
 const HALL_META = {
@@ -515,7 +522,7 @@ export function stepTiles(useCaseId, stepId, nerd = false, choices = {}) {
     return (nerd ? nerdBrainIds(useCaseId) : simpleBrainIds(useCaseId)).map((id) => {
       const pick = brainPick(useCaseId, id, users)
       const platform = byId(PLATFORMS, pick.platform)
-      const memory = platform ? `${platform.hbmGB} GB ${platform.hbmTBs < 2 ? "GDDR" : "HBM"}` : ""
+      const memory = platform ? `${platform.hbmGB} GB ${platform.memKind || (platform.hbmTBs < 2 ? "GDDR" : "HBM")}` : ""
       /* Memory, bandwidth, dense PFLOPS and power are the public datasheet figures; the rack price and lead are game estimates. */
       const spec = platform ? `${memory}, ${platform.hbmTBs} TB/s, ${platform.pflops} PFLOPS ${platform.precision} dense, ${platform.rackKW} kW a rack; ${formatMoney(platform.capex)} a rack and a ${platform.leadWeeks}-week lead (estimates)` : ""
       /* The tile's racks as power: IT kW, and facility kW through the hall the board is on (cooling only changes the PUE). */
@@ -524,7 +531,8 @@ export function stepTiles(useCaseId, stepId, nerd = false, choices = {}) {
       const power = platform ? `. ${pick.racks} rack${pick.racks === 1 ? "" : "s"} = ${itKW} kW IT, ${Math.round(itKW * pue)} kW at PUE ${pue} in the ${hall.name.toLowerCase()}` : ""
       return {
         id,
-        label: `NVIDIA ${platform?.name || pick.platform} ×${pick.racks}`,
+        /* A Spark "rack" is a shelf of boxes: the tile counts the boxes. */
+        label: platform?.id === "spark" ? `NVIDIA DGX Spark ×${pick.racks * platform.gpusPerRack}` : `NVIDIA ${platform?.name || pick.platform} ×${pick.racks}`,
         hint: id === "huge" ? "more racks than the job needs" : GPU_HINTS[pick.platform] || "",
         tag: id === "huge" ? HUGE_TAG : GPU_TAG[pick.platform] || "",
         art: RACK_ART[pick.platform] || "rackAir",
@@ -622,10 +630,14 @@ export function applyTile(useCaseId, stepId, tileId, choices = {}, nerd = false)
   return stepId === "model" ? affordableChoices(useCaseId, next, nerd) : next
 }
 
-/** True when a choice set fits its scenario: inside the budget and the power offer, and the model loads. */
+/**
+ * True when a choice set fits its scenario: inside the budget and the power offer, the model
+ * loads, and the GPUs can stream an answer at the story's speed (a desktop box that cannot is
+ * never the hidden default).
+ */
 export function fitsChoices(useCaseId, choices = {}, nerd = false) {
   const result = evaluateBuild(useCaseId, choicesToBuild(useCaseId, choices, nerd))
-  return Boolean(result.ok) && !result.overBudget && !result.overPower && result.bottleneck !== "fit"
+  return Boolean(result.ok) && !result.overBudget && !result.overPower && result.bottleneck !== "fit" && !result.slowStream
 }
 
 function dropForeignDesign(useCaseId, choices) {

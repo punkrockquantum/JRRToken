@@ -453,6 +453,13 @@ export function decodeRoofline(useCase, platform, { group, instances, racks, kvO
   const bySpeed = Math.max(0, (bandwidthGBs / useCase.tps - readGB) / kvPerStreamGB)
   const streams = Math.min(byMemory, bySpeed)
   if (streams < 1) {
+    // The weights fit but the memory cannot stream even one answer at the story's speed (a
+    // desktop DGX Spark on a 70B model): one slow stream per copy, at the memory's own pace.
+    // `slow` tells the scorer the streams miss the speed people expect.
+    if (byMemory >= 1 && readGB > 0) {
+      const stepS = (readGB + kvPerStreamGB) / bandwidthGBs
+      return { tokens: instances / stepS, streamTps: 1 / stepS, streams: instances, parkedOnHost: false, slow: true }
+    }
     return { tokens: 0, streamTps: bandwidthGBs / readGB, streams: 0, parkedOnHost: false }
   }
   const stepS = (readGB + streams * kvPerStreamGB) / bandwidthGBs
@@ -464,9 +471,14 @@ export function decodeRoofline(useCase, platform, { group, instances, racks, kvO
   }
 }
 
+/**
+ * GPUs one copy of the model needs: the 8-GPU node is the unit on the HGX and PCIe platforms,
+ * doubling until the weights fit; a desktop box (DGX Spark, domain 2) starts at one box and
+ * pairs when it must. A group bigger than the NVLink domain is a spill (`fits` false).
+ */
 export function groupSize(useCase, platform) {
   const need = Math.ceil((useCase.weightsGB * weightScale(platform)) / (platform.hbmGB * HBM_HEADROOM))
-  let size = 8
+  let size = platform.domain < 8 ? 1 : 8
   while (size < need) size *= 2
   if (useCase.moe && platform.domain >= 72) return Math.max(size, platform.domain)
   return size
@@ -883,6 +895,8 @@ export function evaluateBuild(useCaseId, build = {}) {
   out.streamTps = decode.streamTps
   out.streams = decode.streams
   out.parkedOnHost = decode.parkedOnHost
+  out.slowStream = Boolean(decode.slow) && out.fits
+  if (out.slowStream) warnings.push(`${platform.name} streams the ${useCase.model} at about ${decode.streamTps.toFixed(1)} tokens a second per answer, below the ${useCase.tps} people expect here: the memory is too slow.`)
 
   const prefillRate = (group * platform.pflops * 1e15 * PREFILL_EFFICIENCY) / (2 * useCase.activeB * 1e9)
   const parked = hostParkShare(useCase, build?.hosts, kvOn)
@@ -973,7 +987,9 @@ export function evaluateBuild(useCaseId, build = {}) {
     plans: planned?.rows || null,
   })
   out.cohorts = cohorts
-  const farShare = MISSION_SITES[useCase.id]?.spread
+  // A desktop box that cannot stream at the story's speed misses everywhere: that is the GPU's
+  // doing, not the distance, so the "too far" share is not counted against it.
+  const farShare = MISSION_SITES[useCase.id]?.spread && !out.slowStream
     ? cohorts.filter((row) => row.miss && !row.edge).reduce((sum, row) => sum + row.share, 0)
     : 0
   const edgeShare = cohorts.filter((row) => row.edge).reduce((sum, row) => sum + row.share, 0)
@@ -994,7 +1010,8 @@ export function evaluateBuild(useCaseId, build = {}) {
   out.farShare = farShare
   out.ttft = ttft
   out.pMiss = pMiss
-  out.slaMet = pMiss < 0.5
+  // Streams below the speed people expect miss the target however quick the first token was.
+  out.slaMet = pMiss < 0.5 && !out.slowStream
   out.goodput = out.served * out.quality * (1 - pMiss * (1 - LATE_GOODPUT))
   if (build?.hosts === "dpu") out.goodput *= 1.03
   if (routed?.synergy?.goodputMult && routed.synergy.goodputMult !== 1) out.goodput *= routed.synergy.goodputMult
@@ -1005,6 +1022,7 @@ export function evaluateBuild(useCaseId, build = {}) {
 
 function bottleneck(result, useCase, data, delay) {
   if (!result.fits) return "fit"
+  if (result.slowStream) return "compute"
   if (!result.slaMet) {
     if (data.retrieval[useCase.data] >= 0.8) return "retrieval"
     if (delay.slaS >= 0.15) return "network"
