@@ -47,6 +47,16 @@ build over budget, and no build that runs scores zero.
   and a lead time. Private paths (cross connect, metro connect, dark fiber, ServiceFabric) are
   ordered ahead of IX peering, with public internet always slowest and the only option with
   loss. ServiceFabric MCP is the same fabric configured by an agent, never a faster pipe.
+- **Power.** Rack kW is IT power built from the node datasheets: nodes per rack × node kW plus a
+  top-of-rack switch (DGX H100/H200 10.2 kW, DGX B200 14.3 kW, DGX B300 ~14 kW, GB200 NVL72
+  132 kW, GB300 NVL72 142 kW, Vera Rubin NVL72 ~210 kW estimate; the 8-GPU RTX PRO 6000 and
+  L40S nodes ~6.5 and ~4.5 kW estimates). Cooling changes facility power only through the PUE
+  (air 1.38, Digital Realty's published portfolio figure; rear door, in-row and liquid are game
+  values). Every scenario, crowd and metro offers at least the **power floor**: one rack of the
+  least powerful platform through the air PUE, rounded up to a 100 kW suite on a
+  0.1 / 0.25 / 0.5 / 1 / 2 MW ladder. A smaller crowd scales the offer down to that floor and
+  never below it, and a board the player has not touched always fits its offer. Going over is a
+  soft consequence: the racks throttle, the overflow is billed and the POWER light says why.
 - **Money and time.** Budget, power cap, lead times (nothing earns until the slowest part is
   live), a late-launch penalty, power at a flat $/MWh, and an amortised capex horizon.
 - **Score.** Cost per million good tokens against a per-story par × demand coverage × SLA factor

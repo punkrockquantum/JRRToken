@@ -86,11 +86,12 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
       users → demand, cloud IaaS rates, 4.9 µs/km, haversine, PUE; every unpublished number says "estimate" or
       "game" (learn text or a sourced code comment); a test scans player-facing price strings for the label
       (commit 04a3f5a: tests/labels.test.js; cloud IaaS rates land with P4)
-- [ ] POWER (user: "always enough power providing the user gets the configuration right ... rack level power
-      draw is accurate"): per-metro power floor (70B on the least powerful rack at the smallest crowd fits every
-      metro offer; the middle crowd has a fitting GPU per metro with the right cooling), rack kW = nodes × node
-      max + ToR switching from the datasheets, cooling changes facility power via PUE only, nerd breakdown
-      "6 racks × 30 kW IT × PUE 1.38 = 248 kW facility", hall caps per cooling type, tests, balance re-run
+- [x] POWER (user: "always enough power providing the user gets the configuration right ... rack level power
+      draw is accurate"; "as soon as the user selects more users, the power goes red"): POWER_FLOOR_MW (one rack
+      of the least powerful platform through the air PUE, rounded up to a 100 kW suite) under every crowd and
+      metro share; the hidden GPU default follows the crowd both ways (brainsAuto); rack kW = nodes × node kW +
+      ToR from the DGX datasheets with a source beside each; facility = IT × PUE; nerd breakdown
+      "6 racks × 30 kW IT × PUE 1.38 = 248 kW facility"; tests/power.test.js; balance unchanged (commit 2e90911)
 - [ ] Standing rule: after every commit `git push origin cursor/token-quest-datacenter-game` (Pages deploys
       from the branch, the kiosk serves the tree); only that branch, never force
 
