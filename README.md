@@ -103,13 +103,14 @@ port SLA, Digital Realty's footprint) are cited in code comments next to the num
 
 | Where | What | How |
 |---|---|---|
-| **Cloudflare Worker** (team URL) | The game plus the `/api` that keeps a shared league and writes the player sheet; password-gated | `npm run deploy:worker` (see HOSTING.md) |
+| **Cloudflare Worker** (team URL) | The game plus the `/api` that keeps a shared league; every score, name and email goes to a Cloudflare D1 database (staff page `/staff`: CSV / PLAYERS.md downloads); password-gated | `npm run deploy:worker` (see HOSTING.md, "Scores database (D1)") |
 | **Booth laptop** | Full kiosk: the game, a local server, idle reset, staff tools, and an Excel leaderboard on the Desktop | double-click `start-token-quest.command` |
 | **GitHub Pages** | Static copy of the game only (per-browser league, nothing collected) | deploys from the game branch |
 
-Completed hosted games are written to `PLAYERS.md` in a separate **private** repository
-(`token-quest-players`): name, email, attempts, best and latest score, and an attempts log, updated
-on every game. Emails never appear in this public repo or on screen.
+Completed hosted games (from any browser on the team URL and from every kiosk laptop with write-through)
+are rows in the Worker's D1 database `tokenquest-players`: name, email, score, job and consent time, one
+row per game. Staff see players, attempts, best and latest scores at `/staff` and download the CSV or
+`PLAYERS.md` there. Emails never appear in this public repo or on screen.
 
 ## Repository layout
 

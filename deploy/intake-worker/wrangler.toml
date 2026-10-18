@@ -1,18 +1,20 @@
 # Token Quest on one URL: this Worker serves the game (static assets built into ../../dist by
 # `npm run build:worker`) and the /api/* JSON routes on the same origin,
-# https://tokenquest.tokenquest.workers.dev, behind a team password.
+# https://tokenquest.tokenquest.workers.dev, behind a team password. Every score, name and email
+# is kept in the D1 database below (Cloudflare's SQLite), away from the game and from any laptop.
 #
-# Deploy from the repo root. The first time, log in and set the secrets (never in files):
+# Deploy from the repo root. The first time, log in, set the secrets (never in files) and create
+# the scores table:
 #   cd deploy/intake-worker && npx wrangler login
 #   npx wrangler secret put ACCESS_PASSWORD        # the team password colleagues type to play
 #   openssl rand -hex 32 | npx wrangler secret put SESSION_SECRET   # signs the 14-day session cookie
 #   npx wrangler secret put INTAKE_KEY             # `openssl rand -hex 24`; kiosk laptops send it as X-Intake-Key
 #                                                  # (their UPSTREAM_KEY in .env; HOSTING.md "Many laptops, one league")
-#   npx wrangler secret put GITHUB_TOKEN           # fine-grained PAT for the private players repo
+#   npx wrangler d1 migrations apply tokenquest-players --remote   # migrations/*.sql, once per new migration
 #   cd ../.. && npm run deploy:worker              # = npm run build:worker && npx wrangler deploy -c deploy/intake-worker/wrangler.toml
 #
 # Everything here is a plain variable (no secrets in this file). Full steps: HOSTING.md, sections
-# "One URL on workers.dev" and "Team access". workers.dev names are always
+# "One URL on workers.dev", "Team access" and "Scores database (D1)". workers.dev names are always
 # <worker>.<account-subdomain>.workers.dev; a bare https://tokenquest.workers.dev is not something
 # Cloudflare hands out. To put the game on a domain you own instead, add (after the zone is on
 # Cloudflare):
@@ -21,6 +23,16 @@ name = "tokenquest"
 main = "src/worker.mjs"
 compatibility_date = "2026-10-01"
 workers_dev = true
+
+# The scores database: one table, `attempts` (migrations/0001_attempts.sql), one row per game with
+# the player's name, email and score. Created with `npx wrangler d1 create tokenquest-players`; the
+# id is not a secret. Staff read it at /staff, /api/export.csv and /api/export.md (team password),
+# or with `npx wrangler d1 execute tokenquest-players --remote --command "SELECT ..."`.
+[[d1_databases]]
+binding = "DB"
+database_name = "tokenquest-players"
+database_id = "1236b61c-bd33-4d69-94a5-b9b6cc28c33a"
+migrations_dir = "migrations"
 
 [assets]
 # dist/ as produced by `npm run build:worker` (index.html, 404.html, _headers, css/, js/, assets/).
@@ -35,7 +47,12 @@ not_found_handling = "404-page"
 run_worker_first = true
 
 [vars]
-# The PRIVATE repo that holds players.json and PLAYERS.md (names + emails live only there).
+# Optional mirror of the sheet to a PRIVATE GitHub repo (players.json + PLAYERS.md), off by default:
+# D1 above is the source of truth and nothing depends on a GitHub token any more. To turn the
+# mirror on, set MIRROR_MARKDOWN = "true" here and `npx wrangler secret put GITHUB_TOKEN` (a
+# fine-grained PAT with Contents: Read and write on that one repo). Mirror failures never fail a
+# game; health shows them under `mirror`.
+MIRROR_MARKDOWN = "false"
 PLAYERS_REPO = "punkrockquantum/token-quest-players"
 PLAYERS_BRANCH = "main"
 # The game on this Worker is same-origin and needs no CORS. These extra browser origins may also

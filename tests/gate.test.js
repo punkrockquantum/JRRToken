@@ -1,45 +1,21 @@
 /**
  * The team-access gate of the tokenquest Worker (deploy/intake-worker/src/gate.mjs + worker.mjs):
- * pure Node, a fake ASSETS binding, a tiny fake of the GitHub Contents API and Node's WebCrypto.
- * The password used here is a test fixture, never the real team password (that one is a Worker
- * secret and lives in no file).
+ * pure Node, a fake ASSETS binding, an in-memory D1 (tests/helpers/fake-d1.mjs) and Node's
+ * WebCrypto. The password used here is a test fixture, never the real team password (that one is a
+ * Worker secret and lives in no file).
  */
 import assert from "node:assert/strict"
 import test from "node:test"
 import { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, base64urlDecode, base64urlEncode, clearSessionCookie, constantTimeEqual, createSession, loginPage, parseCookies, sessionCookie, verifySession } from "../deploy/intake-worker/src/gate.mjs"
-import { PLAYERS_MD } from "../deploy/intake-worker/src/store.mjs"
-import { INTAKE_KEY_HEADER, SERVICE, WRONG_PASSWORD_DELAY_MS, createHandler, gateConfig, kioskLeague } from "../deploy/intake-worker/src/worker.mjs"
+import { INTAKE_KEY_HEADER, SERVICE, STAFF_PATH, WRONG_PASSWORD_DELAY_MS, createHandler, gateConfig, kioskLeague } from "../deploy/intake-worker/src/worker.mjs"
 import { aggregatePlayers } from "../deploy/intake-worker/src/players.mjs"
+import { fakeD1 } from "./helpers/fake-d1.mjs"
 
 const SITE = "https://tokenquest.example.workers.dev"
 const PASSWORD = "correct horse battery staple (test fixture)"
 const SECRET = "test-session-secret-not-used-anywhere-real"
 const INTAKE_KEY = "test-intake-key-0123456789abcdef-not-real"
-const TOKEN = "github_pat_TEST_ONLY_not_a_real_token"
-const REPO = "punkrockquantum/token-quest-players"
 const T0 = Date.parse("2026-10-16T16:00:00.000Z")
-
-/** Just enough of api.github.com for one attempt and one league read: files in a Map, no sha checks. */
-function fakeGitHub() {
-  const files = new Map()
-  const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } })
-  return {
-    files,
-    async fetch(url, init = {}) {
-      const { pathname } = new URL(url)
-      if (init.headers?.Authorization !== `Bearer ${TOKEN}`) return json(401, { message: "Bad credentials" })
-      if (pathname === `/repos/${REPO}`) return json(200, { full_name: REPO })
-      const file = decodeURIComponent(pathname.replace(`/repos/${REPO}/contents/`, ""))
-      if ((init.method || "GET") === "GET") {
-        if (!files.has(file)) return json(404, { message: "Not Found" })
-        return json(200, { type: "file", sha: `sha-${files.get(file).length}`, encoding: "base64", content: Buffer.from(files.get(file)).toString("base64") })
-      }
-      const body = JSON.parse(init.body)
-      files.set(file, Buffer.from(body.content, "base64").toString("utf8"))
-      return json(201, { content: { sha: `sha-${files.get(file).length}` }, commit: { sha: "c1" } })
-    },
-  }
-}
 
 function fakeAssets(served) {
   return {
@@ -55,10 +31,10 @@ function makeSite(envOverrides = {}) {
   const served = []
   const sleeps = []
   const logs = []
-  const gh = fakeGitHub()
+  const d1 = fakeD1()
   let clock = T0
   const handler = createHandler({
-    fetch: gh.fetch,
+    fetch: async () => new Response("{}", { status: 500 }), // nothing here may reach GitHub: the mirror is off
     now: () => new Date(clock),
     random: () => 0.5,
     sleep: async (ms) => {
@@ -68,11 +44,9 @@ function makeSite(envOverrides = {}) {
   })
   const env = {
     ASSETS: fakeAssets(served),
+    DB: d1,
     ACCESS_PASSWORD: PASSWORD,
     SESSION_SECRET: SECRET,
-    GITHUB_TOKEN: TOKEN,
-    PLAYERS_REPO: REPO,
-    PLAYERS_BRANCH: "main",
     ALLOWED_ORIGINS: "https://punkrockquantum.github.io",
     ...envOverrides,
   }
@@ -84,7 +58,7 @@ function makeSite(envOverrides = {}) {
       body: new URLSearchParams({ password }).toString(),
       ...init,
     })
-  return { handler, env, request, login, served, sleeps, logs, gh, tick: (ms) => (clock += ms) }
+  return { handler, env, request, login, served, sleeps, logs, d1, tick: (ms) => (clock += ms) }
 }
 
 const attempt = (overrides = {}) => ({ name: "Ada Lovelace", email: "ada@example.com", score: 900, consent: true, consentAt: "2026-10-16T15:00:00.000Z", playedAt: "2026-10-16T15:05:00.000Z", ...overrides })
@@ -154,13 +128,62 @@ test("no cookie: the game is the login page, nothing from dist/ leaks, /api need
   assert.equal(api.status, 401)
   assert.deepEqual(await api.json(), { ok: false, error: "unauthorised", message: "Log in to Token Quest first, then play again." })
   assert.equal((await site.request("/api/league")).status, 401)
-  assert.equal(site.gh.files.size, 0, "nothing reached the sheet")
+  assert.equal(site.d1.count(), 0, "nothing reached the database")
 
   const health = await site.request("/api/health")
   assert.equal(health.status, 200)
-  assert.deepEqual(await health.json(), { ok: true, service: SERVICE, gate: true, configured: true }, "public health: flags only, no repo name, no counts")
+  assert.deepEqual(await health.json(), { ok: true, service: SERVICE, gate: true, configured: true }, "public health: flags only, no counts")
   const posted = await site.request("/", { method: "POST" })
   assert.equal(posted.status, 401, "non-GET requests without a session get JSON, not a page")
+})
+
+test("staff access: the downloads and /staff need the cookie or the key; anonymous callers get 401 or the login page and no data", async () => {
+  const site = makeSite({ INTAKE_KEY })
+  const cookie = cookieFrom(await site.login(PASSWORD))
+  const posted = await site.request("/api/attempt", { method: "POST", headers: { "Content-Type": "application/json", Origin: SITE, Cookie: cookie }, body: JSON.stringify(attempt()) })
+  assert.equal(posted.status, 200)
+
+  // Anonymous: JSON 401 on the API downloads, the login page on /staff, and never an email address.
+  for (const route of ["/api/export.csv", "/api/export.md", "/api/players.json"]) {
+    const response = await site.request(route)
+    assert.equal(response.status, 401, route)
+    assert.deepEqual(await response.json(), { ok: false, error: "unauthorised", message: "Log in to Token Quest first, then play again." })
+  }
+  const anonymous = await site.request(STAFF_PATH)
+  assert.equal(anonymous.status, 200)
+  const page = await anonymous.text()
+  assert.ok(page.includes('action="/login"'), "/staff without a session is the login page")
+  assert.ok(!page.includes("@example.com") && !page.includes("Ada"), "nothing from the database on the login page")
+  assert.deepEqual(site.served, [], "/staff is never an asset")
+
+  // With the cookie: the page and all three downloads, with names and emails.
+  const staff = await site.request(STAFF_PATH, { headers: { Cookie: cookie } })
+  assert.equal(staff.status, 200)
+  const body = await staff.text()
+  assert.ok(body.includes("Ada Lovelace") && body.includes("ada@example.com") && body.includes("1 player · 1 game"), "the staff page lists the player")
+  assert.ok(body.includes('href="/logout"'), "staff can log out from the page")
+  const csv = await site.request("/api/export.csv", { headers: { Cookie: cookie } })
+  assert.equal(csv.status, 200)
+  assert.equal(csv.headers.get("Content-Type"), "text/csv; charset=utf-8")
+  assert.match(await csv.text(), /\r\n2026-10-16T15:05:00\.000Z,Ada Lovelace,ada@example\.com,900,/)
+  const md = await site.request("/api/export.md", { headers: { Cookie: cookie } })
+  assert.equal(md.status, 200)
+  assert.ok((await md.text()).includes("| ada@example.com |"))
+  const json = await site.request("/api/players.json", { headers: { Cookie: cookie } })
+  assert.equal(json.status, 200)
+  assert.equal((await json.json())[0].email, "ada@example.com")
+
+  // With the key (a kiosk or a script): the same, with the kiosk rate bucket.
+  const keyed = (route) => site.request(route, { headers: { [INTAKE_KEY_HEADER]: INTAKE_KEY } })
+  assert.equal((await keyed("/api/export.csv")).status, 200)
+  assert.ok((await (await keyed(STAFF_PATH)).text()).includes("ada@example.com"))
+  assert.equal((await site.request(STAFF_PATH, { headers: { [INTAKE_KEY_HEADER]: "wrong" } })).status, 401, "a wrong key is refused on /staff too")
+
+  // Expired cookie: back to the login page, no data.
+  site.tick(SESSION_MAX_AGE_SECONDS * 1000 + 1)
+  assert.ok((await (await site.request(STAFF_PATH, { headers: { Cookie: cookie } })).text()).includes('action="/login"'))
+  assert.equal((await site.request("/api/export.csv", { headers: { Cookie: cookie } })).status, 401)
+  assert.ok(!site.logs.join("\n").includes("@"), "downloads are logged as paths only")
 })
 
 test("the right password sets the session cookie and redirects; the wrong one is delayed and refused", async () => {
@@ -213,9 +236,18 @@ test("with a valid cookie the game and the API are served with the right cache h
   const posted = await site.request("/api/attempt", { method: "POST", headers: { "Content-Type": "application/json", Origin: SITE, Cookie: cookie }, body: JSON.stringify(attempt()) })
   assert.equal(posted.status, 200)
   assert.equal((await posted.json()).attempts, 1)
-  assert.ok(site.gh.files.has(PLAYERS_MD), "the sheet was written")
+  assert.equal(site.d1.count(), 1, "the game is in the database")
+  assert.equal(site.d1.rows()[0].source, "web", "a browser on the team URL")
   const health = await (await site.request("/api/health", { headers: { Cookie: cookie } })).json()
-  assert.deepEqual(health, { ok: true, service: SERVICE, gate: true, configured: true, session: "secret", repo: REPO, branch: "main", sheet: PLAYERS_MD, attempts: 1, players: 1, store: { ok: true, lastError: null, lastErrorAt: null, lastOkAt: new Date(T0).toISOString() } })
+  assert.deepEqual(health, {
+    ok: true,
+    service: SERVICE,
+    gate: true,
+    configured: true,
+    session: "secret",
+    store: { kind: "d1", ok: true, attempts: 1, players: 1, lastPlayedAt: "2026-10-16T15:05:00.000Z", lastError: null, lastErrorAt: null, lastOkAt: new Date(T0).toISOString() },
+    mirror: { enabled: false },
+  })
 
   const [name, value] = cookie.split("=")
   const [expiry, signature] = value.split(".")
@@ -281,7 +313,8 @@ test("kiosk laptops: X-Intake-Key opens the API (not the game), a wrong key is 4
   ], "with the key the rows carry what a kiosk needs to merge by player")
   const health = await (await withKey("/api/health")).json()
   assert.equal(health.gate, true)
-  assert.equal(health.attempts, 1, "the key gets the full health too")
+  assert.equal(health.store.attempts, 1, "the key gets the full health too")
+  assert.equal(site.d1.rows()[0].source, "kiosk", "a game that came through a laptop's write-through says so")
 
   // The key is for the API only: the game files still want the cookie.
   const page = await withKey("/")

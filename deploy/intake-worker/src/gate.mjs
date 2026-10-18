@@ -91,7 +91,7 @@ export function clearSessionCookie() {
   return `${SESSION_COOKIE}=; Max-Age=0; ${COOKIE_FLAGS}`
 }
 
-function escapeHtml(text) {
+export function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char])
 }
 
