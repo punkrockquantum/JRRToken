@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process"
 import { mkdirSync, writeFileSync } from "node:fs"
+import { refuseLiveUpstream } from "./smoke-guard.mjs"
 
 /**
  * Plays Token Quest in headless Chrome as a phone (390×844, 430×932) and a portrait iPad
@@ -31,6 +32,9 @@ const VIEWPORTS = (process.env.VIEWPORTS || "390x844,430x932,820x1180").split(",
   const device = DEVICES[tag] || { dpr: width >= 700 ? 2 : 3, ua: width >= 700 ? IPAD_UA : IPHONE_UA, platform: width >= 700 ? "iPad" : "iPhone" }
   return { tag, width, height, ...device }
 })
+/* Fixture games must never reach the team's live database: a server that forwards upstream is refused before Chrome starts. */
+await refuseLiveUpstream(base)
+
 const browser = spawn(chrome, ["--headless=new", "--disable-gpu", "--no-sandbox", "--autoplay-policy=no-user-gesture-required", `--remote-debugging-port=${port}`, "--window-size=1000,1400", "about:blank"], { stdio: "ignore" })
 
 const BUILD_STEPS = ["model", "location", "gpu", "cooling", "memory", "wires", "storage", "qpu"]
@@ -379,6 +383,11 @@ try {
     await waitFor(`document.querySelector('[data-key="step-panel"]').classList.contains('step-wires')`, "wires step")
     await click('[data-key="wires-cheap"]')
     await sleep(150)
+    /* The pick's reason floats over the tiles for seven seconds; a player taps it away, so the audit does too (round one audits before it picks). */
+    if (await has("#toast")) {
+      await click("#toast")
+      await waitFor(`!document.querySelector('#toast')`, "toast gone")
+    }
     await bothModes("8-round-2-wires", '[data-key="next"]')
     await click('[data-key="step-review"]')
     await waitFor(`!!document.querySelector('[data-key="run"]')`, "review two")
@@ -392,7 +401,8 @@ try {
     await layout("league")
     await shot("10-league")
     const board = await evaluate(`document.querySelector('.league').innerText`)
-    if (!board.includes("ADA LOVELACE")) throw new Error(`League missed the player: ${board}`)
+    /* The title board reads the name as entered (0003ad6), the way scripts/smoke.mjs checks it. */
+    if (!board.includes("Ada Lovelace")) throw new Error(`League missed the player: ${board}`)
     if (errors.length) throw new Error(`Page errors: ${errors.join(" | ")}`)
     console.log(`mobile smoke ok ${tag}: score ${score}, ${audited} screens passed the mobile audit`)
   }

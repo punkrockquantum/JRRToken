@@ -18,7 +18,7 @@ import { fetchLeague, recordAttempt } from "./sync.js"
 import { isMuted, loadMute, play, setMuted, unlock } from "./sound.js"
 import { spriteImg } from "./sprites.js"
 import { STORIES, brainPick, choicesToBuild, maxMetros, nerdChoices, simpleChoices } from "./presets.js"
-import { BUILD_STEP_IDS, STEPS, STEP_IDS, applyTile, audienceSummary, jobBrief, modelLabel, nextStep, prevStep, qpuRelevant, simpleDefaults, stepIndex, stepTiles, stepValue, tileGuard, tileOn, untouchedSteps } from "./steps.js"
+import { BUILD_STEP_IDS, STEPS, STEP_IDS, applyRacks, applyTile, audienceSummary, jobBrief, modelLabel, nextStep, prevStep, qpuRelevant, rackBounds, rackGuard, simpleDefaults, stepIndex, stepTiles, stepValue, tileGuard, tileOn, untouchedSteps } from "./steps.js"
 import { canImprove, roundHint, roundLine } from "./rounds.js"
 import { TEST_MODE_BADGE, TEST_MODE_LINE, canStart, settleAttempt, testModeAfterReset } from "./testmode.js"
 
@@ -775,7 +775,7 @@ function bindTile(tile, onPick, learn) {
   })
 }
 
-function picture({ key, art, tag = "", label, hint = "", rows = null, on, lines, nerd = "", onPick, scale = 2, locked = false, blocked = false, extra = null }) {
+function picture({ key, art, tag = "", label, hint = "", rows = null, fact = "", on, lines, nerd = "", onPick, scale = 2, locked = false, blocked = false, extra = null }) {
   const learn = { title: label, lines, nerd }
   /* A blocked tile keeps its tap (it explains itself) and its hold-to-learn, but reads as not selectable. */
   const tile = el("button", {
@@ -789,8 +789,10 @@ function picture({ key, art, tag = "", label, hint = "", rows = null, on, lines,
     el("span", { class: "tile-art" }, [spriteImg(art, scale)]),
     el("span", { class: "tile-copy" }, [
       tag ? el("span", { class: `tile-tag${blocked ? " over" : ""}`, text: tag }) : null,
-      el("span", { class: "tile-title", text: label }),
+      /* The maker's name is its own span, so the shortest nerd board can drop it and keep every rack's name and count whole. */
+      label.startsWith("NVIDIA ") ? el("span", { class: "tile-title" }, [el("span", { class: "tile-brand", text: "NVIDIA " }), label.slice(7)]) : el("span", { class: "tile-title", text: label }),
       hint ? el("span", { class: "tile-hint", text: hint }) : null,
+      fact ? el("span", { class: "tile-fact", "data-part": "fact" }, Array.isArray(fact) ? fact.flatMap((row, i) => [i ? " · " : null, el("span", { class: "fact-k", text: `${row.label.toLowerCase()} ` }), row.text]) : [fact]) : null,
       rows?.length
         ? el("span", { class: "tile-rows" }, rows.map((row) => el("span", { class: "tile-row" }, [el("span", { class: "row-label", text: row.label }), el("b", { text: row.text })])))
         : null,
@@ -946,7 +948,9 @@ function stepPanel(stepId, result) {
       tag: guard.blocked ? guard.tag : tile.tag || "",
       label: tile.label,
       hint: tile.hint,
-      rows: tile.rows || null,
+      /* GPU tiles carry their four engine numbers as one wrapped line; metro tiles keep their row grid. */
+      rows: stepId === "gpu" ? null : tile.rows || null,
+      fact: stepId === "gpu" && tile.rows?.length ? tile.rows : "", /* "serves 45% · power 0.12/0.6 MW · cost $6.9M · lead 12 wk"; narrow boards drop the labels */
       on: isOn(tile),
       lines: guard.blocked ? [guard.line, ...tile.lines] : tile.lines,
       nerd: impact ? detailLine(impact.detail) : tile.nerd || "",
@@ -1008,8 +1012,71 @@ function stepPanel(stepId, result) {
     stepId === "location" ? whoWhere(id) : null,
     ...grid,
     nerdLine ? el("p", { class: "row-nerd", "data-key": "step-nerd", text: nerdLine }) : null,
+    stepId === "gpu" ? rackStepper(result, selected) : null,
     stepId === "gpu" && state.nerd ? refarchPanel(result, selected) : null,
     stepNav(stepId),
+  ])
+}
+
+/**
+ * HOW MANY RACKS, under the GPU tiles on both boards. User: "Allow users to choose how many racks, so the
+ * solution could be lower power / older chips but more racks." Minus and plus (nerd adds ±5) move the
+ * count one rack at a time inside the hall's rack positions; a count the budget cannot pay for is refused
+ * and tagged OVER BUDGET; a count past the power offer is allowed and browns out, and the line says so.
+ * Every press re-scores the build, so the tiles' numbers and the panel on the right follow.
+ */
+function rackStepper(result, selected) {
+  const id = state.plan.useCase
+  const choices = state.plan.choices
+  const platform = result.platform
+  if (!platform) return null
+  const racks = result.racks || selected?.racks || 1
+  const bounds = rackBounds(id, choices, state.nerd)
+  const noun = platform.id === "spark" ? (racks === 1 ? "shelf" : "shelves") : racks === 1 ? "rack" : "racks"
+  const button = (delta) => {
+    const guard = rackGuard(id, choices, delta, state.nerd)
+    const key = `racks-${delta < 0 ? "minus" : "plus"}${Math.abs(delta) > 1 ? Math.abs(delta) : ""}`
+    const node = el("button", {
+      type: "button",
+      class: `step rack-step${guard.blocked && !guard.atEnd ? " over" : ""}`,
+      "data-key": key,
+      text: delta < 0 ? (delta === -1 ? "−" : `−${Math.abs(delta)}`) : delta === 1 ? "+" : `+${delta}`,
+      "aria-label": `${delta < 0 ? "Fewer" : "More"} racks (${delta > 0 ? "+" : ""}${delta})`,
+      "aria-disabled": guard.blocked ? "true" : null,
+      title: guard.blocked && guard.tag ? guard.tag : null,
+      disabled: Boolean(guard.atEnd),
+    })
+    node.addEventListener("pointerdown", (event) => event.stopPropagation())
+    node.addEventListener("click", (event) => {
+      event.stopPropagation()
+      if (guard.blocked) {
+        if (guard.line) {
+          play("error")
+          flashWhy(guard.line)
+          render()
+        }
+        return
+      }
+      play("select")
+      state.plan.choices = applyRacks(id, choices, delta, state.nerd)
+      syncBuild()
+      render()
+    })
+    return node
+  }
+  const served = Math.round((result.coverage || 0) * 100)
+  /* Short on purpose: beside the buttons it has about thirty characters a line on a 1024px board. */
+  const line = result.overPower
+    ? `Over the ${result.powerMW} MW on offer: racks brown out, the overflow is billed.`
+    : `${platform.name} ×${racks}: serves ${served}% · ${(result.powerUsedMW || 0).toFixed(2)}/${result.powerMW} MW · ${formatMoney(result.budgetSpend || 0)}`
+  return el("div", { class: "rack-stepper", "data-key": "rack-stepper" }, [
+    el("div", { class: "rack-row", title: `1 to ${bounds.max} racks in this hall` }, [
+      el("b", { class: "rack-title", text: "HOW MANY RACKS" }),
+      ...bounds.steps.filter((delta) => delta < 0).sort((a, b) => a - b).map(button),
+      el("span", { class: "rack-count", "data-key": "racks-count", "aria-live": "polite", text: `${racks} ${noun.toUpperCase()}` }),
+      ...bounds.steps.filter((delta) => delta > 0).map(button),
+    ]),
+    el("p", { class: `fine rack-line${result.overPower ? " warn" : ""}`, "data-key": "rack-line", text: line }),
   ])
 }
 
@@ -1020,7 +1087,7 @@ function stepPanel(stepId, result) {
 function refarchPanel(result, selected) {
   const id = state.plan.useCase
   const choices = state.plan.choices
-  const brain = brainPick(id, choices.brains, choices.users)
+  const brain = brainPick(id, choices.brains, choices.users, choices.racks)
   const platform = byId(PLATFORMS, brain.platform)
   if (!platform) return null
   const hallId = state.plan.build.hall
@@ -1236,7 +1303,7 @@ const SITE_ROLES = [
 
 function currentPlans(result) {
   const sites = result.sites || []
-  const brain = brainPick(state.plan.useCase, state.plan.choices.brains, state.plan.choices.users)
+  const brain = brainPick(state.plan.useCase, state.plan.choices.brains, state.plan.choices.users, state.plan.choices.racks)
   const defaults = defaultSitePlans(result.platform, brain.racks, sites)
   const saved = state.plan.choices.sitePlans
   if (!saved?.length) return defaults

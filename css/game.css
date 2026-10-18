@@ -938,6 +938,20 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-tag, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile-tag { white-space: normal; overflow: visible; }
 .screen.game .step-panel .tile-tag { display: block; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .screen.game .step-panel.step-cooling .tile-tag { white-space: normal; overflow: visible; } /* four big tiles: the kW band, overhead and lead wrap rather than clip */
+/* GPU tiles: four live numbers (served, power, cost, lead) as one wrapped line under a one-line hint. */
+.screen.game .step-panel.step-gpu .tile-fact { font-size: 9px; line-height: 1.3; color: var(--pale); }
+.screen.game .step-panel.step-gpu .tiles .tile { gap: 4px; min-height: 0; }
+.screen.game .step-panel.step-gpu .tiles.count-6 .tile-hint, .screen.game .step-panel.step-gpu .tiles .tile-hint { -webkit-line-clamp: 1; }
+/* HOW MANY RACKS: the stepper under the GPU tiles, both boards, one wrapping row. */
+.rack-stepper { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 4px; flex: 0 0 auto; }
+.rack-stepper .rack-row { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.rack-stepper .rack-title { font-size: 10px; color: var(--yellow); margin-right: 2px; }
+.rack-stepper .rack-step { position: relative; min-width: 40px; min-height: 32px; font-size: 14px; }
+.rack-stepper .rack-step::after { content: ""; position: absolute; inset: -6px -2px; } /* a 44×44 finger target around the 40×32 face, like the dots and the "?" */
+.rack-stepper .rack-step.over { opacity: 0.6; border-style: dashed; cursor: not-allowed; }
+.rack-stepper .rack-count { min-width: 84px; text-align: center; font-size: 12px; color: var(--line); }
+.rack-stepper .rack-line { flex: 1 1 240px; margin: 0; font-size: 10px; line-height: 1.35; color: var(--pale); }
+.rack-stepper .rack-line.warn { color: #ffb0b0; }
 .screen.game .step-panel .tile-copy { max-width: 100%; }
 /* TOKEN IMPACT strip on connectivity tiles: three coloured chips, one plain sentence, nerd detail. */
 .impact { display: flex; flex-direction: column; gap: 4px; min-width: 0; width: 100%; flex: 0 0 auto; margin-top: 2px; }
@@ -1165,17 +1179,27 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
   .screen.game.nerd .step-gpu .tile { min-height: 72px; }
   /* Six GPU tiles keep two rows of three here; the sprite goes so the rack's full name and the tag fit the narrow tile. */
   .screen.game .step-panel.step-gpu .tiles.count-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-  .screen.game .step-panel.step-gpu .tiles.count-6 .tile { min-height: 80px; gap: 6px; padding: 6px 36px 6px 8px; align-items: flex-start; }
+  .screen.game .step-panel.step-gpu .tiles.count-6 .tile { min-height: 80px; gap: 4px; padding: 6px 36px 6px 8px; align-items: flex-start; }
   .screen.game .step-panel.step-gpu .tiles.count-6 .tile-art { display: none; }
   .screen.game .step-panel.step-gpu .tiles.count-6 .tile-tag { white-space: normal; overflow: visible; }
   .screen.game .step-panel.step-gpu .tiles.count-6 .tile-title { -webkit-line-clamp: 3; }
-  .screen.game .step-panel.step-gpu .tiles.count-6 .tile-hint { -webkit-line-clamp: 3; }
+  /* The hint keeps one line and the engine numbers two, so two rows of tiles and the rack stepper fit a 768px-tall screen. */
+  .screen.game .step-panel.step-gpu .tiles.count-6 .tile-hint { -webkit-line-clamp: 1; }
+  .screen.game .step-panel.step-gpu .tile-fact { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 8px; margin-right: -28px; } /* runs under the "?" column; the labels go, the units say the rest */
+  .screen.game .step-panel.step-gpu .tile-fact .fact-k { display: none; }
+  .rack-stepper { margin-top: 0; }
+  .rack-stepper .rack-line { font-size: 9px; }
+  .rack-stepper .rack-step { min-height: 28px; }
+  .rack-stepper .rack-step::after { inset: -8px -2px; }
+  /* The nerd board's four tile rows and the reference designs leave no line for the stepper: the POWER gauge, HOW WE THINK and the "?" carry the numbers. */
+  .screen.game.nerd .rack-stepper .rack-line { display: none; }
   /* Eleven nerd GPU tiles: three a row, four rows, no sprite, the name only; the "?" and the design panel carry the specs. */
   .screen.game.nerd .step-panel.step-gpu .tiles.count-11, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
-  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile { min-height: 56px; gap: 4px; padding: 4px 34px 4px 8px; }
+  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile { min-height: 52px; gap: 4px; padding: 4px 34px 4px 8px; } /* four rows plus the rack stepper fit an 820px-tall board */
   .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-art, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile-art { display: none; }
   .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-title, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile-title { -webkit-line-clamp: 3; }
   .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-hint, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile-hint { display: none; }
+  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-fact, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile-fact { display: none; } /* the "?" popover carries the four numbers here */
   .ra-card .ra-line:nth-of-type(2) { display: none; } /* the spec line lives in the "?" popover here */
   .refarch { gap: 2px; }
   .workers { max-width: 48px; }
@@ -1221,6 +1245,9 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
   .screen.game.nerd .step-panel.step-gpu { gap: 6px; }
   .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile { min-height: 52px; }
   .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-title, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile-title { -webkit-line-clamp: 4; }
+  /* With the rack stepper under them, four rows of four-line names ran 30px past the panel: the maker's name goes
+     (every rack here is NVIDIA's; the "?" says so), so each name and its count fit three lines. */
+  .screen.game.nerd .step-panel.step-gpu .tiles.count-11 .tile-brand, .screen.game.nerd .step-panel.step-gpu .tiles.count-12 .tile-brand { display: none; }
   .screen.game.nerd .step-gpu .step-head .fine { display: none; }
   .ra-title .fine { display: none; }
   /* Location: the job paragraph goes (the "?" and the brief's numbers keep the lesson); tiles get a little shorter. */

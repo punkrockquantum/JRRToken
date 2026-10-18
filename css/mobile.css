@@ -282,6 +282,17 @@ button, .tile, .story-card, .rail-btn, .learn-btn, .eco-part, .ra-card, .dot, a 
 #stage .imp-nerd { -webkit-line-clamp: 4; }
 #stage .screen.game .step-wires .tile-title, #stage .screen.game .step-wires .tile-hint { -webkit-line-clamp: 3; }
 
+/* GPU step: the four engine numbers under every tile's hint, with their labels (a phone has the room), and the
+   HOW MANY RACKS stepper with finger-sized buttons; the kiosk's halo goes because the face itself is 44px. */
+#stage .screen.game .step-panel.step-gpu .tile-fact { display: block; font-size: 12px; line-height: 1.4; margin-right: 0; overflow: visible; }
+#stage .screen.game .step-panel.step-gpu .tile-fact .fact-k { display: inline; }
+#stage .screen.game .step-panel.step-gpu .tile-hint { -webkit-line-clamp: 2; }
+#stage .rack-stepper { gap: 6px 10px; margin-top: 6px; }
+#stage .rack-stepper .rack-title, #stage .rack-stepper .rack-count, #stage .rack-stepper .rack-line { font-size: 12px; }
+#stage .rack-stepper .rack-step { min-width: 44px; min-height: 44px; font-size: 16px; }
+#stage .rack-stepper .rack-step::after { content: none; }
+#stage .rack-stepper .rack-line { flex: 1 1 100%; line-height: 1.4; }
+
 /* Nerd GPU step: reference architectures one a row (two from 480px), every line readable. */
 #stage .refarch { gap: 6px; }
 #stage .ra-title h3, #stage .ra-title .fine { font-size: 12px; white-space: normal; overflow: visible; }
@@ -374,7 +385,8 @@ button, .tile, .story-card, .rail-btn, .learn-btn, .eco-part, .ra-card, .dot, a 
 .learn-pop b { font-size: 14px; }
 .learn-pop p { font-size: 14px; line-height: 1.5; }
 .learn-pop .nerd { font-size: 14px; }
-.learn-pop .learn-close { width: 100%; min-height: 44px; }
+/* A long card (the DGX Spark shelf with its four engine numbers) scrolls inside the popover; CLOSE stays pinned at its foot. */
+.learn-pop .learn-close { position: sticky; bottom: 0; width: 100%; min-height: 44px; background: #14142c; box-shadow: 0 -10px 10px #14142c; }
 
 /* ---------- Dialogs: the results are a full-screen sheet that scrolls as one; buttons full width at the end ---------- */
 .dialog-back { padding: 0; display: block; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }

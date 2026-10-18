@@ -122,7 +122,7 @@ js/steps.js, js/presets.js       the stepped build and the simple/nerd tile sets
 js/explain.js, js/drhelp.js      results copy: what you built, how Digital Realty would have helped
 js/refarch.js                    anonymised OEM reference architectures (nerd mode)
 server/, scripts/serve.mjs       the kiosk server: attempts log, league API, Excel export
-deploy/intake-worker/            the Cloudflare Worker: static assets, API, player sheet, gate
+deploy/intake-worker/            the Cloudflare Worker: static assets, API, the scores in its D1 database (readable at /staff with the team password), gate
 scripts/balance.mjs              enumerates builds per story and checks the balance
 scripts/smoke.mjs                plays the whole game in headless Chrome at four viewports
 tests/                           node --test suites for the model, copy, server, worker
@@ -141,6 +141,11 @@ npm run build:worker && npm run deploy:worker   # publish to the team URL
 
 Node 18+ and Google Chrome (for the smoke test). No npm dependencies.
 
+The smokes play fixture games and press the staff reset, so never point them at a kiosk whose `.env` forwards
+games to the team server: start a throwaway server first (`ENV_FILE=off DATA_DIR=/tmp/tq-smoke-data
+EXPORT_PATH=/tmp/tq-smoke-board.xlsx PORT=8091 node scripts/serve.mjs`, then `GAME_URL=http://127.0.0.1:8091/
+node scripts/smoke.mjs`). Both smokes refuse a server whose `/api/health` reports `upstream.configured: true`.
+
 Works on phones and tablets in portrait: the page scrolls and the main action stays pinned at the bottom.
 The phone rules live in `css/mobile.css`, loaded only below 900px wide or in portrait under 1100px, so the
 kiosk layout is untouched; `SHOTS=.shots node scripts/smoke-mobile.mjs` plays the game as an iPhone (390×844,
@@ -148,6 +153,7 @@ kiosk layout is untouched; `SHOTS=.shots node scripts/smoke-mobile.mjs` plays th
 
 ## Privacy
 
-The booth laptop's `data/` folder and Desktop workbook, and the private players repository, hold
-names and emails collected under the on-screen consent text. Export what you need after the event
-and delete the rest. The staff tools are PIN-protected; the hosted game is password-protected.
+The booth laptop's `data/` folder and Desktop workbook, and the Worker's D1 database (the shared
+scores, readable at `/staff` with the team password), hold names and emails collected under the
+on-screen consent text. Export what you need after the event and delete the rest. The staff tools
+are PIN-protected; the hosted game is password-protected.

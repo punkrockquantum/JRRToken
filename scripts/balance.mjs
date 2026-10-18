@@ -1,7 +1,7 @@
 import { PLATFORMS, SITES, USE_CASES, byId } from "../js/data.js"
 import { ecosystem } from "../js/eco.js"
 import { evaluateBuild, formatMoney } from "../js/model.js"
-import { allPresets, choicesToBuild, defaultChoices, expertChoices, metroSets } from "../js/presets.js"
+import { allPresets, brainPick, choicesToBuild, defaultChoices, expertChoices, metroSets, simpleBrainIds } from "../js/presets.js"
 import { allSimple, describeChoices, metroShortList, stepTiles, stepValue } from "../js/steps.js"
 
 const money = (value) => formatMoney(value, 0)
@@ -36,6 +36,37 @@ for (const useCase of USE_CASES) {
   const locationMisses = [...byMetros.values()].filter((item) => item !== best).map((item) => `${metros(item.choices)} ${item.result.score}`).join(", ")
   bests[id] = choicesToBuild(id, best.choices, false)
   console.log(`| ${useCase.name} | ${scored.length} | ${naive} | ${maxed} | ${typical} | ${best.result.score} | ${describeChoices(id, best.choices)} | ${near.length} | ${locationMisses} |`)
+}
+
+/* ---------- HOW MANY RACKS: the tile space × every rack count the budget affords (user: "Allow users to choose how many racks") ---------- */
+
+console.log("\nRack counts (simple board × racks 1..N until the budget refuses): the best build when the player sets the count, and the best count per GPU tile at that build")
+console.log("\n| Story | Builds | Best with racks | Score | Tile default best | Best count per tile (score) |")
+console.log("|---|---:|---|---:|---:|---|")
+for (const useCase of USE_CASES) {
+  const id = useCase.id
+  const simple = (choices) => evaluateBuild(id, choicesToBuild(id, choices, false))
+  const tileBest = allSimple(id).map((choices) => ({ choices, result: simple(choices) })).sort((a, b) => b.result.score - a.result.score)[0]
+  let count = 0
+  let best = null
+  for (const choices of allSimple(id)) {
+    for (let racks = 1; racks <= 24; racks += 1) {
+      const result = simple({ ...choices, racks })
+      if (result.overBudget) break
+      count += 1
+      if (!best || result.score > best.result.score) best = { choices: { ...choices, racks }, result }
+    }
+  }
+  const perTile = simpleBrainIds(id).map((brains) => {
+    let top = null
+    for (let racks = 1; racks <= 24; racks += 1) {
+      const result = simple({ ...best.choices, brains, racks })
+      if (result.overBudget) break
+      if (!top || result.score > top.result.score) top = { racks, result }
+    }
+    return `${byId(PLATFORMS, brainPick(id, brains).platform)?.name || brains} ×${top?.racks ?? "—"} (${top?.result.score ?? "—"})`
+  })
+  console.log(`| ${useCase.name} | ${count} | ${describeChoices(id, best.choices)} | ${best.result.score} | ${tileBest.result.score} | ${perTile.join(", ")} |`)
 }
 
 console.log("\nChecks: best 1,400 and 1-2 within 2%; maxed and naive in the 100–450 floor band (no build scores 0); a near-miss in 700–1,100; optima differ in ≥ 2 of 5 decisions between any two stories")

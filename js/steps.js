@@ -7,7 +7,7 @@
 import { AUDIENCES, DATA_HOMES, DOES, HALLS, JOBS, KV_TIER, MODELS, ORCA, PLATFORMS, SITES, USER_BASES, USER_TIER_IDS, USE_CASES, byId, dataHomeFor, resolveUseCase, usersTier } from "./data.js"
 import { dataTrips } from "./latency.js"
 import { effectivePue, evaluateBuild, formatMoney, formatTokens, metroOffers, scenarioFor } from "./model.js"
-import { COMBO, NERD_IDS, SIMPLE_IDS, brainPick, brainsId, choicesToBuild, cleanMetros, defaultChoices, maxMetros, memoryChoices, memoryTile, metroSets, modelPicks, nerdBrainIds, simpleBrainIds, wireIds } from "./presets.js"
+import { COMBO, NERD_IDS, SIMPLE_IDS, brainPick, brainsId, choicesToBuild, cleanMetros, defaultChoices, maxMetros, memoryChoices, memoryTile, metroSets, modelPicks, nerdBrainIds, rackCount, simpleBrainIds, wireIds } from "./presets.js"
 import { designFor } from "./refarch.js"
 
 /**
@@ -543,8 +543,14 @@ export function stepTiles(useCaseId, stepId, nerd = false, choices = {}) {
     const { users } = modelPicks(useCaseId, choices)
     const hall = byId(HALLS, HALL_META[choices.home]?.hallId || "A") || HALLS[0]
     return (nerd ? nerdBrainIds(useCaseId) : simpleBrainIds(useCaseId)).map((id) => {
-      const pick = brainPick(useCaseId, id, users)
+      /* The tile shows the rack count it would land on: the chosen tile carries the count the player set, every other
+         tile its own right-sized default (a count that suits one rack misreads every other). Its numbers come from the
+         scoring engine for exactly that build (user: "ensure that is factored in to the maths that calculates the
+         resulting performance and displayed on the right"). */
+      const landing = landingRacks(useCaseId, id, choices, nerd)
+      const pick = brainPick(useCaseId, id, users, landing.racks)
       const platform = byId(PLATFORMS, pick.platform)
+      const result = evaluateBuild(useCaseId, choicesToBuild(useCaseId, { ...choices, brains: id, racks: landing.explicit ? landing.racks : undefined }, nerd))
       const memory = platform ? `${platform.hbmGB} GB ${platform.memKind || (platform.hbmTBs < 2 ? "GDDR" : "HBM")}` : ""
       /* Memory, bandwidth, dense PFLOPS and power are the public datasheet figures; the rack price and lead are game estimates. */
       const spec = platform ? `${memory}, ${platform.hbmTBs} TB/s, ${platform.pflops} PFLOPS ${platform.precision} dense, ${platform.rackKW} kW a rack; ${formatMoney(platform.capex)} a rack and a ${platform.leadWeeks}-week lead (estimates)` : ""
@@ -559,12 +565,15 @@ export function stepTiles(useCaseId, stepId, nerd = false, choices = {}) {
         hint: id === "huge" ? "more racks than the job needs" : GPU_HINTS[pick.platform] || "",
         tag: id === "huge" ? HUGE_TAG : GPU_TAG[pick.platform] || "",
         art: RACK_ART[pick.platform] || "rackAir",
-        lines: GPU_LEARN[pick.platform] || ["A rack of GPUs."],
+        /* The hold-to-learn card ends with the engine's four numbers for this count, for the boards too narrow to show them on the tile. */
+        lines: [...(GPU_LEARN[pick.platform] || ["A rack of GPUs."]), `At ${pick.racks} ${platform?.id === "spark" ? (pick.racks === 1 ? "shelf" : "shelves") : pick.racks === 1 ? "rack" : "racks"} on this board: serves ${Math.round((result.coverage || 0) * 100)}% of the crowd, ${(result.powerUsedMW || 0).toFixed(2)} of ${result.powerMW} MW, ${formatMoney(result.budgetSpend || 0)}, ${platform?.leadWeeks ?? 0}-week lead (game numbers).`],
         nerd: platform?.id === "vr" ? `${spec}${power}. Announced as NVL144.` : `${spec}${power}`,
         why: id === "huge" ? "Several Vera Rubin racks: the money runs out before the hall pays off." : GPU_WHY[useCaseId]?.[pick.platform] || DOES[pick.platform] || "",
-        patch: { brains: id },
+        patch: { brains: id, racks: landing.explicit ? landing.racks : undefined },
         platform,
         racks: pick.racks,
+        rows: gpuRows(result, platform),
+        result,
       }
     })
   }
@@ -578,7 +587,7 @@ export function stepTiles(useCaseId, stepId, nerd = false, choices = {}) {
       const band = id === "aisle" ? `15–${hall.maxRackKW} kW` : id === "rear" ? `40–${hall.maxRackKW} kW` : `up to ${hall.maxRackKW} kW`
       const overhead = nerd ? `PUE ${hall.pue.toFixed(2)}` : `${Math.round((hall.pue - 1) * 100)}% on cooling`
       const lead = hall.fitOutWeeks ? `${hall.fitOutWeeks} wk` : "ready now"
-      const picked = byId(PLATFORMS, brainPick(useCaseId, choices.brains, modelPicks(useCaseId, choices).users).platform)
+      const picked = byId(PLATFORMS, brainPick(useCaseId, choices.brains, modelPicks(useCaseId, choices).users, choices.racks).platform)
       const liquidNeeded = picked?.cooling === "liquid" && hall.cooling !== "liquid"
       const plainHint = id === "cool" ? "fans, ready now, small racks only" : id === "aisle" ? "doors keep hot and cold air apart" : id === "super" ? "water to the chip, faster" : id === "rear" ? "radiator door: dense air racks" : "coolers between the racks"
       return {
@@ -623,6 +632,73 @@ export function stepTiles(useCaseId, stepId, nerd = false, choices = {}) {
   return []
 }
 
+/**
+ * The four numbers on a GPU tile for the build it would make: the share of the crowd served, the busiest
+ * site's facility MW against the metro's offer, the spend against the budget (ORCA's price stays out of
+ * it, as everywhere on the game screen), and the platform's lead. All from evaluateBuild.
+ */
+export function gpuRows(result, platform) {
+  if (!result || !platform) return []
+  return [
+    { label: "SERVES", text: `${Math.round((result.coverage || 0) * 100)}%` },
+    { label: "POWER", text: `${(result.powerUsedMW || 0).toFixed(2)}/${result.powerMW} MW` },
+    { label: "COST", text: formatMoney(result.budgetSpend || 0) },
+    { label: "LEAD", text: `${platform.leadWeeks} wk` },
+  ]
+}
+
+/**
+ * The rack count a GPU tile lands on: the chosen tile keeps the count the player set; any other tile lands
+ * on its own default for the crowd, so the count belongs to the rack it was set for (HUGE always brings its
+ * own count). `nerd` is accepted for symmetry with the other guards.
+ */
+export function landingRacks(useCaseId, brains, choices = {}, nerd = false) {
+  const { users } = modelPicks(useCaseId, choices)
+  const explicit = rackCount(choices)
+  const id = brainsId(useCaseId, brains)
+  const current = brainsId(useCaseId, choices.brains)
+  void nerd
+  if (explicit && id !== "huge" && id === current) return { racks: explicit, explicit: true }
+  return { racks: brainPick(useCaseId, brains, users).racks, explicit: false }
+}
+
+/**
+ * The rack stepper's range: one rack up to the hall's rack positions at every site (a count past the power
+ * offer is allowed and browns out; a count past the budget is refused by `rackGuard`). Nerd mode steps by
+ * five as well as by one.
+ */
+export function rackBounds(useCaseId, choices = {}, nerd = false) {
+  const hall = byId(HALLS, HALL_META[choices.home]?.hallId || "C") || HALLS[0]
+  const sites = cleanMetros(useCaseId, choices.metros).length || 1
+  return { min: 1, max: Math.max(1, (hall.rackSpace || 12) * sites), steps: nerd ? [-5, -1, 1, 5] : [-1, 1] }
+}
+
+/** The choice set with the rack count moved by `delta`, clamped to the stepper's range; the count becomes the player's. */
+export function applyRacks(useCaseId, choices = {}, delta = 0, nerd = false) {
+  const { users } = modelPicks(useCaseId, choices)
+  const current = rackCount(choices) || brainPick(useCaseId, choices.brains, users).racks
+  const bounds = rackBounds(useCaseId, choices, nerd)
+  const racks = Math.min(bounds.max, Math.max(bounds.min, current + delta))
+  return { ...choices, racks, brainsAuto: false }
+}
+
+/**
+ * The budget guard on one stepper button: more racks the scenario budget cannot pay for are refused, tagged
+ * OVER BUDGET by the shortfall; fewer racks are always allowed; a step that cannot move (at the range's end)
+ * is disabled.
+ */
+export function rackGuard(useCaseId, choices = {}, delta = 0, nerd = false) {
+  const { users } = modelPicks(useCaseId, choices)
+  const current = rackCount(choices) || brainPick(useCaseId, choices.brains, users).racks
+  const bounds = rackBounds(useCaseId, choices, nerd)
+  const next = Math.min(bounds.max, Math.max(bounds.min, current + delta))
+  if (next === current) return { blocked: true, atEnd: true, racks: current }
+  if (delta < 0) return { blocked: false, racks: next }
+  const money = budgetOf(useCaseId, applyRacks(useCaseId, choices, delta, nerd), nerd)
+  if (money.over) return { blocked: true, racks: next, tag: `OVER BUDGET by ${formatMoney(money.overBy)}`, line: `${next} racks would be over the ${formatMoney(money.budget)} budget by ${formatMoney(money.overBy)} (game prices). Fewer racks, or a cheaper rack, first.`, ...money }
+  return { blocked: false, racks: next, ...money }
+}
+
 /** The tile id (or metro list, or the model and users pair) a choice set is on for one step. */
 export function stepValue(useCaseId, stepId, choices = {}) {
   if (stepId === "model") return modelPicks(useCaseId, choices)
@@ -660,6 +736,8 @@ export function applyTile(useCaseId, stepId, tileId, choices = {}, nerd = false)
   if (stepId === "gpu") {
     dropForeignDesign(useCaseId, next)
     next.brainsAuto = false
+    /* A new rack starts at its own default count: the tile said so. */
+    if (next.racks == null) delete next.racks
   }
   return stepId === "model" ? affordableChoices(useCaseId, next, nerd) : next
 }
@@ -677,6 +755,12 @@ export function fitsChoices(useCaseId, choices = {}, nerd = false) {
 function dropForeignDesign(useCaseId, choices) {
   if (choices.refarch && !designFor(brainPick(useCaseId, choices.brains).platform, choices.refarch)) delete choices.refarch
   return choices
+}
+
+/** A choice set without the player's rack count: the platform default. */
+function defaultRackChoices(choices) {
+  const { racks, ...rest } = choices
+  return rest
 }
 
 /** The spend one choice set makes against its scenario budget, on the simple or the nerd board. */
@@ -706,8 +790,10 @@ export function affordableChoices(useCaseId, choices = {}, nerd = false) {
     }
   }
   if (!budgetOf(useCaseId, choices, nerd).over) return choices
+  /* A rack count the player set that the new budget cannot pay for goes first, then the GPU tile. */
+  if (rackCount(choices) && !budgetOf(useCaseId, defaultRackChoices(choices), nerd).over) return defaultRackChoices(choices)
   for (const id of brains) {
-    const next = dropForeignDesign(useCaseId, { ...choices, brains: id })
+    const next = dropForeignDesign(useCaseId, { ...defaultRackChoices(choices), brains: id })
     if (!budgetOf(useCaseId, next, nerd).over) return next
   }
   const opening = { ...defaultChoices(useCaseId), ...modelPicks(useCaseId, choices) }

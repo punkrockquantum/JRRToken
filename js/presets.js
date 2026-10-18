@@ -344,17 +344,33 @@ export function comboMcp(useCaseId, wires) {
 }
 
 /**
- * The computers behind one GPU tile: the platform and the rack count for the crowd the build
- * serves (SMALL, MEDIUM or LARGE). HUGE is several Vera Rubin racks at every tier, never fewer
- * than two, so it always out-spends the Vera Rubin tile.
+ * The rack count a choice set names, or null when the player has not set one. User: "Allow users
+ * to choose how many racks, so the solution could be lower power / older chips but more racks."
  */
-export function brainPick(useCaseId, brains, users = "large") {
+export function rackCount(choices = {}) {
+  const racks = Number(choices?.racks)
+  return Number.isInteger(racks) && racks >= 1 ? racks : null
+}
+
+/**
+ * The computers behind one GPU tile: the platform, and the rack count the player set, else the
+ * platform's sensible default for the crowd the build serves (SMALL, MEDIUM or LARGE). HUGE is
+ * several Vera Rubin racks at every tier, never fewer than two, so it always out-spends the Vera
+ * Rubin tile.
+ */
+export function brainPick(useCaseId, brains, users = "large", racks = null) {
   const story = RACKS[useCaseId] ? useCaseId : "chat"
   const id = brainsId(story, brains)
   const tier = usersTier(story, users)
   const column = Math.max(0, USER_TIER_IDS.indexOf(tier.id))
   if (id === "huge") return { platform: "vr", racks: Math.max(2, Math.round(4 * tier.mult)) }
-  return { platform: id, racks: RACKS[story][id][column] }
+  const count = rackCount({ racks })
+  return { platform: id, racks: count || RACKS[story][id][column] }
+}
+
+/** The default rack count a GPU tile lands on for a story and crowd, before the player touches the stepper. */
+export function defaultRacks(useCaseId, brains, users = "large") {
+  return brainPick(useCaseId, brains, users).racks
 }
 
 /**
@@ -365,7 +381,7 @@ export function brainPick(useCaseId, brains, users = "large") {
 export function choicesToBuild(useCaseId, choices, nerd = false) {
   const useCase = byId(USE_CASES, useCaseId)
   const picked = nerd ? nerdChoices(useCaseId, choices) : simpleChoices(useCaseId, choices)
-  const { platform, racks } = brainPick(useCaseId, picked.brains, picked.users)
+  const { platform, racks } = brainPick(useCaseId, picked.brains, picked.users, picked.racks)
   const sites = cleanMetros(useCaseId, picked.metros)
   const helper = Boolean(useCase?.orca && picked.helper)
   const routes = assignRoutes(useCase, sites, helper, picked.wires, Boolean(picked.mcp))

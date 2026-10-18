@@ -181,4 +181,41 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
       multi-select of products; a router puts the lowest-latency legal product on every leg; two private products on
       a critical leg = REDUNDANT (no outage haircut); MCP with ServiceFabric = agent-routed; the CONNECTIONS light is
       relative to `bestConnectivity(storyId, metros)` (green within 10%, amber within 35%); nerd mode keeps the
-      per-leg board with manual override; rebalance
+      per-leg board with manual override; rebalance — see P-C below
+
+## V5 — Game-model phases (Oct 18): one phase each, `node --test`, commit, push, `npm run deploy:worker`
+
+Owned here: `css/game.css`, `css/mobile.css`, `js/**` except `js/sync.js`, `scripts/balance.mjs`, `scripts/smoke*.mjs`,
+`scripts/stamp.mjs`, the game tests, this plan and the README's game sections. Never `deploy/**`, `server/**`,
+`scripts/serve.mjs`, `js/sync.js`.
+
+- [x] P-A GPU STEP = platform tile + RACK STEPPER (user: "Allow users to choose how many racks, so the solution could
+      be lower power / older chips but more racks - ensure that is factored in to the maths"): HOW MANY RACKS under the
+      GPU tiles on both boards (`data-key="racks-minus"` / `"racks-plus"`, nerd adds ±5), 1 rack up to the hall's rack
+      positions × sites; every tile shows SERVES · POWER · COST · LEAD from `evaluateBuild` for the count it would land
+      on (the chosen tile carries the player's count, the others their own default); the budget guard refuses a count the
+      budget cannot pay for (`rackGuard`, tagged OVER BUDGET by $X); past the power offer is allowed and browns out; the
+      Scouter and HOW WE THINK re-render from `evaluateBuild` on every press; `scripts/balance.mjs` enumerates racks 1..N;
+      tests/racks.test.js (twenty H100 racks ≈ one NVL72 rack on coverage; the stepper never steps over the budget; the
+      tiles' and the Scouter's numbers equal `evaluateBuild`); smoke presses plus and minus at every viewport
+- [ ] P-B COACH = one-step neighbour search (`js/coach.js`): every tile alternative on every step, racks ±1 / ±5, one
+      connectivity product added or removed, one metro added or removed; the biggest score gain inside the budget guard;
+      plain in simple mode, with the gain in nerd mode; "This is the best build for this job" when nothing improves;
+      reused for the round-1 hint and the results' "what would have scored higher"; test: 50 random builds a story,
+      following the advice raises the score or no neighbour does
+- [ ] P-C NET = MULTI-SELECT with a best-path ROUTER: Public internet, Cross Connect, ServiceFabric, ServiceFabric MCP
+      (agentic routing, only with ServiceFabric), Dark Fiber (nerd adds Pathway, Metro Connect, Peering, Digital Internet,
+      cloud on-ramps); the router assigns each leg the lowest-latency legal product among those selected; per-leg route on
+      the step, the review and the results; ≥ 2 private products on a critical leg = REDUNDANT (no outage haircut); every
+      product adds NRC / MRC / lead; tiles show FIRST TOKEN and COST PER 1M TOKENS for "only this product" and the delta
+      against the selection; CONNECTIONS light relative to `bestConnectivity(storyId, metros)` (green within 10%, amber
+      within 35%); public internet shows GPU idle and a stutters stream for live-user stories; tests + smoke at two viewports
+- [ ] P-D POWER STEP (after QPU, before REVIEW): need = Σ racks × rack kW (+ gear) × PUE live; contracted-power tiles in
+      metro-realistic steps (0.1 / 0.25 / 0.5 / 1 / 2 / 3 MW; nerd 50 kW stepper) priced as reservation + energy
+      (estimate); too little → power-capped throttling + trip-risk haircut; too much → stranded-capacity opex; green at
+      10–20% headroom, amber 0–10% or ≤ 10% short, red otherwise; green only on a deliberate pick; floor ≥ 100; review
+      row, results and DR-help lines; tests + smoke (desktop + mobile)
+- [ ] P-E MEMORY + STORAGE EXPANSION per P3/P5 above
+- [ ] P-F CLOUD IaaS BASELINE per P4 above (both sides on the public internet for the users' leg; "cloud would cost $X,
+      your factory $Y, you save $Z")
+- [ ] P-G balance + four-viewport smoke + mobile smoke + README

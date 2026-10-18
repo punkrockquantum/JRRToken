@@ -1,6 +1,7 @@
 import { execFileSync, spawn } from "node:child_process"
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
+import { refuseLiveUpstream } from "./smoke-guard.mjs"
 
 /**
  * Walks the booth flow in headless Chrome at the kiosk viewports and the two iPad landscape
@@ -17,6 +18,8 @@ const base = process.env.GAME_URL || "http://127.0.0.1:8080/"
 const shots = process.env.SHOTS || ""
 const port = 9333
 const VIEWPORTS = (process.env.VIEWPORTS || "1920x1080,1600x1000,1180x820,1024x768").split(",").map((v) => v.split("x").map(Number))
+/* Fixture games must never reach the team's live database: a server that forwards upstream is refused before Chrome starts. */
+await refuseLiveUpstream(base)
 const browser = spawn(chrome, ["--headless=new", "--disable-gpu", "--no-sandbox", "--autoplay-policy=no-user-gesture-required", `--remote-debugging-port=${port}`, "--window-size=1920,1080", "about:blank"], { stdio: "ignore" })
 
 const SIMPLE_COPY = [
@@ -230,9 +233,16 @@ try {
       await sleep(150)
       await evaluate(`document.fonts.ready.then(() => true)`)
       const problems = await evaluate(FITS)
-      if (problems) throw new Error(`${tag} ${label}: ${problems}`)
+      /* A failing screen is captured first (as <label>-FAIL.png when SHOTS is set), so the clip can be seen, not guessed. */
+      if (problems) {
+        await shot(`${label.replace(/\s+/g, "-")}-FAIL`)
+        throw new Error(`${tag} ${label}: ${problems}`)
+      }
       const overlaps = await evaluate(OVERLAP)
-      if (overlaps) throw new Error(`${tag} ${label}: layout overlaps: ${overlaps}`)
+      if (overlaps) {
+        await shot(`${label.replace(/\s+/g, "-")}-FAIL`)
+        throw new Error(`${tag} ${label}: layout overlaps: ${overlaps}`)
+      }
       audited += 1
     }
     const nerdOn = () => evaluate(`document.getElementById('nerd-bar').getAttribute('aria-pressed') === 'true'`)
@@ -386,6 +396,28 @@ try {
           return { rows: rows.size, perRow: boxes.filter((b) => Math.round(b.top) === Math.round(boxes[0].top)).length }
         })()`)
         if (grid.rows !== 2 || grid.perRow !== 3) throw new Error(`The GPU tiles should sit on two rows of three, saw ${grid.rows} rows of ${grid.perRow}`)
+        /* Every tile carries four live numbers from the engine: the share served, power against the offer, the spend and the lead. */
+        const facts = await evaluate(`[...document.querySelectorAll('.step-gpu .tile [data-part="fact"]')].map((t) => t.textContent.trim())`)
+        if (facts.length !== 6 || facts.some((fact) => !/^serves \d+% · power [\d.]+\/[\d.]+ MW · cost \$[\d.,]+[kM]? · lead \d+ wk$/.test(fact))) throw new Error(`Every GPU tile should show serves · power · cost · lead: ${JSON.stringify(facts)}`)
+        /* HOW MANY RACKS: plus adds a rack to the title and the line, the panel re-scores, minus takes it back. */
+        if (!(await has('[data-key="rack-stepper"]'))) throw new Error("The GPU step should show the rack stepper")
+        const countBefore = await text('[data-key="racks-count"]')
+        const titleBefore = await text('.step-gpu .tile[aria-pressed="true"] .tile-title')
+        const moneyBefore = await evaluate(`document.querySelector('.feel [data-gauge="budget"] .meter-bar').getAttribute('aria-valuenow')`)
+        if (!/^\d+ RACKS?$/.test(countBefore)) throw new Error(`The stepper should count racks: ${countBefore}`)
+        const racksBefore = Number(countBefore.split(" ")[0])
+        await click('[data-key="racks-plus"]')
+        await waitFor(`document.querySelector('[data-key="racks-count"]').textContent.startsWith('${racksBefore + 1} ')`, "one more rack")
+        const titleAfter = await text('.step-gpu .tile[aria-pressed="true"] .tile-title')
+        if (!titleAfter.endsWith(`×${racksBefore + 1}`) || titleAfter === titleBefore) throw new Error(`The chosen tile should count the new racks: ${titleBefore} → ${titleAfter}`)
+        const rackLine = await text('[data-key="rack-line"]')
+        /* "HGX B300 ×7: serves 52% · 0.15/0.6 MW · $8.05M" (or the brown-out warning when the count passes the power offer). */
+        if (!new RegExp(`^.+ ×${racksBefore + 1}: serves \\d+% · [\\d.]+/[\\d.]+ MW · \\$[\\d.,]+[kM]?$`).test(rackLine) && !/^Over the [\d.]+ MW on offer/.test(rackLine)) throw new Error(`The rack line should say what the racks do: ${rackLine}`)
+        const moneyAfter = await evaluate(`document.querySelector('.feel [data-gauge="budget"] .meter-bar').getAttribute('aria-valuenow')`)
+        if (Number(moneyAfter) <= Number(moneyBefore)) throw new Error(`The MONEY gauge on the right should rise with a rack: ${moneyBefore} → ${moneyAfter}`)
+        await click('[data-key="racks-minus"]')
+        await waitFor(`document.querySelector('[data-key="racks-count"]').textContent === ${JSON.stringify(countBefore)}`, "the rack back off")
+        if ((await text('.step-gpu .tile[aria-pressed="true"] .tile-title')) !== titleBefore) throw new Error("Minus should restore the tile's count")
       } else if (step === "cooling") {
         /* Air, cold aisle containment, rear door heat exchanger, direct liquid: four tiles, each with a kW band, overhead and lead. */
         if (tiles !== 4) throw new Error(`cooling: the simple board shows 4 tiles, saw ${tiles}`)
