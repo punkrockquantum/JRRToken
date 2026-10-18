@@ -1,7 +1,8 @@
 /**
- * PLAYERS.md: the staff "sheet" kept in the private players repo. Pure functions, no I/O, so Node
- * can unit test them (tests/intake.test.js). The Worker regenerates the whole file from players.json
- * after every recorded game, so the file never drifts from the source of truth for long.
+ * PLAYERS.md: the staff "sheet" as Markdown, rendered on request from the D1 rows (GET /api/export.md,
+ * the "Download PLAYERS.md" button on /staff) and, when the optional GitHub mirror is on, rewritten
+ * into the private repo after every game. Pure functions, no I/O, so Node can unit test them
+ * (tests/intake.test.js).
  *
  * Layout:
  *   # Token Quest players
@@ -90,8 +91,8 @@ export function attemptsRows(attempts) {
 }
 
 /**
- * Renders the whole sheet. `attempts` is the players.json array (validated attempts in the order
- * they were recorded); `now` stamps the "Updated" line.
+ * Renders the whole sheet. `attempts` is the list of validated attempts in the order they were
+ * recorded (the D1 rows, d1store.mjs fromRow()); `now` stamps the "Updated" line.
  */
 export function renderPlayersMarkdown(attempts, { now = new Date() } = {}) {
   const list = Array.isArray(attempts) ? attempts : []
@@ -101,9 +102,10 @@ export function renderPlayersMarkdown(attempts, { now = new Date() } = {}) {
     "",
     statusLine(list, now),
     "",
-    "Private sheet for the Token Quest booth. The intake Worker rewrites this file after every game;",
-    "`players.json` next to it is the source of truth. Names and email addresses live only here: delete",
-    "the repo once the event is over and the leads have been handed on.",
+    "Private sheet for the Token Quest booth, rendered from the scores database (Cloudflare D1, table",
+    "`attempts`) at the time above; the database is the source of truth and a newer copy is one click",
+    "away on /staff. It carries names and email addresses: keep it with the leads and delete it, and",
+    "the database rows, once the event is over and the leads have been handed on.",
     "",
     "## Players",
     "",
