@@ -986,12 +986,59 @@ export const IN_METRO_KM = 60
 export const EGRESS_PER_GB = 0.05
 
 /**
+ * Power for sale in each metro (user: "There should be different power amounts and costs
+ * available at every location."). `blocksMW` is the ladder of contracted-power blocks a customer
+ * can sign for in that metro; `power.mwh` is the energy price in dollars per MWh and
+ * `power.kwMonth` the capacity reservation in dollars per kW a month (what it costs to hold the
+ * block whether or not the racks draw it). All labelled estimates, shaped by the regional tariffs:
+ * - Europe: Eurostat non-household electricity prices, band ID/IE (dataset nrg_pc_205,
+ *   https://ec.europa.eu/eurostat/databrowser/view/nrg_pc_205/default/table): Germany and the
+ *   Netherlands among the dearest, France the cheapest big market (nuclear), with the UK above
+ *   all of them (DESNZ industrial electricity prices, https://www.gov.uk/government/statistical-data-sets/international-industrial-energy-prices).
+ * - United States: EIA Electric Power Monthly, Table 5.6.A, average industrial price by state
+ *   (https://www.eia.gov/electricity/monthly/epm_table_grapher.php?t=epmt_5_6_a): Texas about
+ *   6 ¢/kWh, Virginia and Illinois about 8 ¢, California about 20 ¢.
+ * Data-center bulk tariffs sit a little under retail industrial rates, so the $/MWh here are
+ * rounded game estimates in that spirit, not quotes. The reservation is the share of a wholesale
+ * colocation charge that pays for reserved electrical capacity (wholesale all-in rates, space and
+ * cooling included, run higher); scarce markets (London, Silicon Valley, Ashburn) reserve dearer.
+ * The block ladders are game values: a metro with tight grid capacity sells small blocks only
+ * (London, Silicon Valley), a hyperscale market sells big ones (Dallas, Ashburn). No two metros
+ * are alike, so where the racks sit changes the bill.
+ */
+export const METRO_POWER = {
+  lon: { blocksMW: [0.25, 0.5, 1], power: { mwh: 165, kwMonth: 60 } },
+  ams: { blocksMW: [0.5, 1, 2], power: { mwh: 115, kwMonth: 48 } },
+  fra: { blocksMW: [0.25, 0.5, 1, 2], power: { mwh: 140, kwMonth: 52 } },
+  par: { blocksMW: [0.5, 1, 2, 3], power: { mwh: 95, kwMonth: 45 } },
+  iad: { blocksMW: [1, 2, 3], power: { mwh: 78, kwMonth: 55 } },
+  dfw: { blocksMW: [1, 2, 3, 5], power: { mwh: 62, kwMonth: 38 } },
+  chi: { blocksMW: [0.5, 1, 2], power: { mwh: 82, kwMonth: 46 } },
+  sjc: { blocksMW: [0.25, 0.5], power: { mwh: 195, kwMonth: 70 } },
+}
+
+/** The $/MWh the game's older `priceMult` was written against: ×1 means $100/MWh. */
+export const POWER_BASE_MWH = 100
+
+/** The power offer in one metro: its block ladder and prices, with a plain 1× fallback for an unknown metro. */
+export function metroPower(metroId) {
+  return METRO_POWER[metroId] || { blocksMW: [...POWER_OFFERS_MW], power: { mwh: POWER_BASE_MWH, kwMonth: 50 } }
+}
+
+/** A metro offer with the metro's power ladder and prices folded in. */
+function withPower(offer) {
+  const { blocksMW, power } = metroPower(offer.id)
+  return { ...offer, blocksMW: [...blocksMW], power: { ...power } }
+}
+
+/**
  * What Digital Realty can offer this customer in each metro right now: the metros on the
  * short list, how much of the scenario's power is really available there (`powerMult`),
- * the local power price (`priceMult`), and how many extra weeks a liquid hall takes to fit out.
+ * the local power price (`priceMult`), how many extra weeks a liquid hall takes to fit out,
+ * and the metro's power ladder and prices (`blocksMW`, `power`, from METRO_POWER above).
  * Game values that stand in for real capacity availability; the metros are real markets.
  */
-export const METRO_OFFERS = {
+const METRO_OFFER_TABLE = {
   chat: [
     { id: "lon", powerMult: 1, priceMult: 1, liquidWeeks: 0, note: "near 60% of shoppers" },
     { id: "fra", powerMult: 1, priceMult: 1, liquidWeeks: 0, note: "near 40% of shoppers" },
@@ -1031,6 +1078,8 @@ export const METRO_OFFERS = {
     { id: "lon", powerMult: 1, priceMult: 1, liquidWeeks: 0, note: "across the sea from both plants" },
   ],
 }
+
+export const METRO_OFFERS = Object.fromEntries(Object.entries(METRO_OFFER_TABLE).map(([story, offers]) => [story, offers.map(withPower)]))
 
 export const HORIZON_WEEKS = 52
 

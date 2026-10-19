@@ -210,11 +210,19 @@ Owned here: `css/game.css`, `css/mobile.css`, `js/**` except `js/sync.js`, `scri
       product adds NRC / MRC / lead; tiles show FIRST TOKEN and COST PER 1M TOKENS for "only this product" and the delta
       against the selection; CONNECTIONS light relative to `bestConnectivity(storyId, metros)` (green within 10%, amber
       within 35%); public internet shows GPU idle and a stutters stream for live-user stories; tests + smoke at two viewports
-- [ ] P-D POWER STEP (after QPU, before REVIEW): need = Σ racks × rack kW (+ gear) × PUE live; contracted-power tiles in
+- [~] P-D POWER STEP (after QPU, before REVIEW): need = Σ racks × rack kW (+ gear) × PUE live; contracted-power tiles in
       metro-realistic steps (0.1 / 0.25 / 0.5 / 1 / 2 / 3 MW; nerd 50 kW stepper) priced as reservation + energy
       (estimate); too little → power-capped throttling + trip-risk haircut; too much → stranded-capacity opex; green at
       10–20% headroom, amber 0–10% or ≤ 10% short, red otherwise; green only on a deliberate pick; floor ≥ 100; review
       row, results and DR-help lines; tests + smoke (desktop + mobile)
+  - [x] P-D1 PER-METRO POWER OFFERS (user: "different power amounts and costs available at every location"):
+        `METRO_POWER` in `js/data.js` (block ladder `blocksMW` + `power: { mwh, kwMonth }` per metro, labelled estimates
+        shaped by Eurostat nrg_pc_205 / DESNZ / EIA Table 5.6.A, no two metros alike: London 0.25/0.5/1 MW at $165,
+        Amsterdam 0.5/1/2 at $115, Frankfurt 0.25/0.5/1/2 at $140, Paris 0.5/1/2/3 at $95, Ashburn 1/2/3 at $78,
+        Dallas 1/2/3/5 at $62, Chicago 0.5/1/2 at $82, Silicon Valley 0.25/0.5 at $195) folded into every story's
+        `METRO_OFFERS`; LOCATION tiles show "Power: up to X MW · $Y/MWh (est.)" with the ladder in the learn lines;
+        tests/offers.test.js (pairwise distinct, power floor rule per story, tile text)
+  - [ ] P-D2 POWER STEP (engine per-site power, light, review row, results + DR-help, balance, smoke)
 - [ ] P-E MEMORY + STORAGE EXPANSION per P3/P5 above
 - [ ] P-F CLOUD IaaS BASELINE per P4 above (both sides on the public internet for the users' leg; "cloud would cost $X,
       your factory $Y, you save $Z")

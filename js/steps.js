@@ -487,22 +487,36 @@ function metroHint(offer) {
   return `Users: ${km(offer.usersKm)} · Data: ${km(offer.dataKm)}`
 }
 
-/** Nerd line: the farthest user region, then the metro's power, price and fit-out terms. */
+/** "0.25, 0.5 or 1 MW": a metro's block ladder in words. */
+export function blocksWords(blocksMW = []) {
+  const list = blocksMW.map((mw) => `${mw} MW`)
+  return list.length > 1 ? `${list.slice(0, -1).join(", ")} or ${list[list.length - 1]}` : list[0] || ""
+}
+
+/**
+ * One line on every metro tile under the trips: the biggest power block for sale there and its
+ * energy price (user: "different power amounts and costs available at every location").
+ */
+export function metroPowerFact(offer) {
+  const top = Math.max(...(offer.blocksMW || [0]))
+  return `Power: up to ${top} MW · $${offer.power?.mwh ?? 0}/MWh (est.)`
+}
+
+/** Nerd line: the farthest user region, then the metro's power ladder, prices and fit-out terms. */
 function metroNerd(offer) {
   const farthest = offer.worstCity ? `Farthest users: ${offer.worstCity} ${km(offer.worstKm)}. ` : ""
-  return `${farthest}Power ×${offer.powerMult}, price ×${offer.priceMult}, liquid fit-out +${offer.liquidWeeks} wk (game values).`
+  return `${farthest}Blocks ${(offer.blocksMW || []).join("/")} MW · $${offer.power?.mwh}/MWh · $${offer.power?.kwMonth}/kW-month to reserve · liquid fit-out +${offer.liquidWeeks} wk (estimates).`
 }
 
 function metroLines(useCaseId, offer) {
   const home = DATA_HOMES[useCaseId]
   const liquid = offer.liquidWeeks > 0 ? `A liquid hall here takes ${offer.liquidWeeks} extra weeks to fit out.` : "A liquid hall here is ready to fit out now."
-  const power = offer.powerMult === 1 ? "The full power allocation is available." : offer.powerMult > 1 ? `About ${Math.round((offer.powerMult - 1) * 100)}% more power than the scenario asks for is available.` : `Only about ${Math.round(offer.powerMult * 100)}% of the scenario's power is available this year.`
-  const price = offer.priceMult === 1 ? "" : offer.priceMult < 1 ? ` Power is about ${Math.round((1 - offer.priceMult) * 100)}% cheaper.` : ` Power is about ${Math.round((offer.priceMult - 1) * 100)}% dearer.`
+  const power = `Power comes in blocks of ${blocksWords(offer.blocksMW)} at about $${offer.power?.mwh}/MWh, plus $${offer.power?.kwMonth} per kW a month to reserve the block (estimates): buy too little and the racks throttle, too much and you pay for power nobody uses.`
   const trips = metroRows(useCaseId, offer).map((row) => `${row.text} from the ${row.label.toLowerCase()}`).join(", ")
   return [
     `${offer.site?.metro || offer.id}: ${offer.note}.`,
     `${trips.charAt(0).toUpperCase()}${trips.slice(1)}; the model and data live in ${home?.label || "the cloud"}. Requests pay the trip to whoever asks; every retrieval pays the trip to the data.`,
-    `${power}${price} ${liquid}`,
+    `${power} ${liquid}`,
   ]
 }
 
@@ -529,6 +543,7 @@ export function stepTiles(useCaseId, stepId, nerd = false, choices = {}) {
       hint: metroPitch(useCaseId, offer, offers),
       rows: metroRows(useCaseId, offer),
       tag: metroHint(offer).toUpperCase(),
+      fact: metroPowerFact(offer),
       art: "user",
       lines: metroLines(useCaseId, offer),
       nerd: metroNerd(offer),
