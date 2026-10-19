@@ -204,7 +204,33 @@ function dataPart(r) {
   return { state: "green", why: words, ask: "", detail: `Quality ${r.quality}, hit ${pct(r.hit)}${home ? `, ${Math.round(r.dataNearKm || 0)} km from ${home.city}` : ""}.` }
 }
 
+/**
+ * After OPTIMISE ROUTING the light is relative to that optimum: the route the optimiser found for
+ * these metros is green by construction, and a leg the player then pins to something worse is
+ * amber (or red when it costs more than a tenth of the score).
+ */
+function routedPart(r) {
+  const routed = r.build?.choices?.routed
+  if (!routed || !routed.key) return null
+  const key = `${r.useCase?.id}|${(r.sites || []).map((site) => site.id || site).slice().sort().join("+")}`
+  if (routed.key !== key) return null
+  const gap = (routed.score || 0) - (r.score || 0)
+  const name = r.network?.name || "private links"
+  if (gap <= 0.5) {
+    const far = (r.farShare || 0) >= 0.2 ? ` ${pct(r.farShare)} of the people are far from ${metros(r.sites)}: a LOCATION question, not a wire.` : ""
+    return { state: "green", why: `${routed.agent ? "Agent-routed" : "Optimised"}: the best route for ${metros(r.sites)} on ${name}.${far}`, ask: "", detail: `Score ${Math.round(r.score || 0).toLocaleString("en-GB")} at the optimum. TTFT ${ms(r.ttft)}, network ${ms(r.netDelayS)}.` }
+  }
+  return {
+    state: gap > (routed.score || 0) * 0.1 ? "red" : "amber",
+    why: `This route scores ${Math.round(gap).toLocaleString("en-GB")} below the optimised one for ${metros(r.sites)}.`,
+    ask: "Would OPTIMISE ROUTING get it back?",
+    detail: `Optimum ${Math.round(routed.score || 0).toLocaleString("en-GB")}, now ${Math.round(r.score || 0).toLocaleString("en-GB")}.`,
+  }
+}
+
 function connectionsPart(r) {
+  const relative = routedPart(r)
+  if (relative) return relative
   const useCase = r.useCase || {}
   const batch = (useCase.legs || []).some((leg) => leg.slaExempt)
   const publicTrips = r.publicTrips || 0

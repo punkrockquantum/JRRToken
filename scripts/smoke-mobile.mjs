@@ -304,7 +304,7 @@ try {
 
     /* ---------- Build: one step at a time, NEXT pinned to the bottom ---------- */
     await waitFor(`!!document.querySelector('[data-key="step-panel"]')`, "game screen")
-    const picks = { model: ["model-70b", "users-large"], location: ["location-lon", "location-fra"], gpu: ["gpu-gb200"], cooling: ["cooling-super"], memory: ["memory-on"], wires: ["wires-fast"], storage: ["storage-none"], qpu: [] }
+    const picks = { model: ["model-70b", "users-large"], location: ["location-lon", "location-fra"], gpu: ["gpu-gb200"], cooling: ["cooling-super"], memory: ["memory-on"], wires: ["wires-fabric"], storage: ["storage-none"], qpu: [] }
     for (const step of BUILD_STEPS) {
       await click(`[data-key="step-${step}"]`)
       await waitFor(`document.querySelector('[data-key="step-panel"]').classList.contains('step-${step}')`, `${step} step`)
@@ -324,6 +324,27 @@ try {
         await shot(`4-step-${step}-learn`)
         await click(".learn-pop .learn-close")
         await waitFor(`!document.querySelector('.learn-pop')`, "popover closed")
+      }
+      if (step === "wires") {
+        /* Five product tiles with ServiceFabric MCP among them; one tap on OPTIMISE ROUTING turns the CONNECTIONS light green. */
+        const products = await evaluate(`[...document.querySelectorAll('.step-wires .tile .tile-title')].map((t) => t.textContent.trim()).join(',')`)
+        if (products !== "Public internet,Cross Connect,ServiceFabric,ServiceFabric MCP,Dark Fiber") throw new Error(`${tag}: the NET products should be the five the brief names: ${products}`)
+        const buttonWhere = await evaluate(inView('[data-key="net-optimise"]'))
+        if (buttonWhere === "missing") throw new Error(`${tag}: the NET step should offer OPTIMISE ROUTING`)
+        await evaluate(`document.querySelector('[data-key="net-optimise"]').scrollIntoView({ block: 'center' })`)
+        await click('[data-key="net-optimise"]')
+        await waitFor(`/^(OPTIMISED|AGENT-ROUTED)/.test(document.querySelector('[data-key="route-line"]').textContent)`, "optimised route line")
+        const connections = await evaluate(`document.querySelector('[data-key="eco-bar"] .eco-part[data-part="connections"]').dataset.state`)
+        if (connections !== "green") throw new Error(`${tag}: OPTIMISE ROUTING should turn the CONNECTIONS light green, saw ${connections}`)
+        const toastWhere = await evaluate(inView("#toast"))
+        if (toastWhere && toastWhere !== "missing") throw new Error(`${tag} ${step}: the optimise toast is off screen: ${toastWhere}`)
+        if (await has("#toast")) {
+          await click("#toast")
+          await waitFor(`!document.querySelector('#toast')`, "toast gone")
+        }
+        await layout(`${step} optimised`)
+        await shot(`4-step-${step}-optimised`)
+        console.log(`optimise ${tag}: ${await text('[data-key="route-line"]')}`)
       }
       for (const key of picks[step]) {
         const pressed = await evaluate(`document.querySelector('[data-key="${key}"]')?.getAttribute('aria-pressed')`)
@@ -381,7 +402,10 @@ try {
     await waitFor(`document.getElementById('result').hidden && !!document.querySelector('[data-key="step-panel"]')`, "round two")
     await click('[data-key="step-wires"]')
     await waitFor(`document.querySelector('[data-key="step-panel"]').classList.contains('step-wires')`, "wires step")
-    await click('[data-key="wires-cheap"]')
+    /* Products multi-select: add the public internet, then drop ServiceFabric, so the shoppers ride the open road. */
+    await click('[data-key="wires-public"]')
+    await sleep(120)
+    await click('[data-key="wires-fabric"]')
     await sleep(150)
     /* The pick's reason floats over the tiles for seven seconds; a player taps it away, so the audit does too (round one audits before it picks). */
     if (await has("#toast")) {

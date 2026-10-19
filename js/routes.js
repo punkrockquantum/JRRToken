@@ -198,7 +198,8 @@ export function detectCombos(assigned, useCase, reach) {
   const on = []
   const push = (id) => on.push(COMBOS.find((combo) => combo.id === id))
   if (sensitive.length > 0 && sensitive.every((row) => isPrivate(row.kind))) push("private")
-  const dataFabric = live.some((row) => (row.leg.role === "data" || row.leg.role === "tools") && row.kind === "fabric")
+  /* A product set with ServiceFabric MCP routes its fabric legs as "mcp" (same wire, agent-configured): still the fabric. */
+  const dataFabric = live.some((row) => (row.leg.role === "data" || row.leg.role === "tools") && (row.kind === "fabric" || row.kind === "mcp"))
   const controlMcp = live.some((row) => row.leg.role === "control" && row.kind === "mcp")
   if (dataFabric && controlMcp) push("fabricMcp")
   const dataCross = live.some((row) => row.leg.role === "data" && row.kind === "cross")

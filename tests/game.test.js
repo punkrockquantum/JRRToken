@@ -157,14 +157,6 @@ test("picture presets map onto builds, and the preset board stays in the scoring
     "Liquid-cooled hall",
     "Direct liquid cooling",
     "Rear door heat exchanger",
-    "Public internet",
-    "cheap, busy, slow at peaks",
-    "Peering",
-    "straight into home networks",
-    "ServiceFabric",
-    "private lane, fast and steady",
-    "Cross connect + Dark fiber",
-    "your own glass in the building and between sites",
     "Users: ${km(offer.usersKm)} · Data: ${km(offer.dataKm)}",
     "Farthest users: ",
     "ORCA PT-3",
@@ -172,7 +164,9 @@ test("picture presets map onto builds, and the preset board stays in the scoring
     "72 GPUs joined by NVLink act as one giant GPU.",
     "finds strong binders about twice as often",
   ]) assert.ok(steps.includes(line), line)
-  for (const line of ["Let an agent configure it", "MCP ON", "USERS ", "MODEL & DATA ", "NEW STORY", "Game numbers are estimates."]) assert.ok(main.includes(line), line)
+  for (const line of ["OPTIMISE ROUTING", "OPTIMISE ROUTING (agent)", "USERS ", "MODEL & DATA ", "NEW STORY", "Game numbers are estimates."]) assert.ok(main.includes(line), line)
+  const netplan = readFileSync(join(root, "js", "netplan.js"), "utf8")
+  for (const line of ["Public internet", "cheap, busy, slow at peaks", "Cross Connect", "ServiceFabric", "private lane, fast and steady", "ServiceFabric MCP", "an AI agent configures the fabric", "Dark Fiber", "Peering", "Digital Internet", "Cloud on-ramp", "Metro Connect", "Pathway"]) assert.ok(netplan.includes(line), line)
   const page = readFileSync(join(root, "index.html"), "utf8")
   assert.match(page, /id="nerd-bar"/)
   assert.match(page, /aria-pressed="false"/)

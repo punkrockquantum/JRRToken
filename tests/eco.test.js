@@ -281,8 +281,8 @@ test("every step offers three tiles on the simple board, a short list of metros,
     }
     for (const stepId of ["gpu", "cooling", "memory", "wires", "storage"]) {
       const tiles = stepTiles(id, stepId)
-      /* CONNECTIVITY adds a fourth tile, COMBO, only where a mixture pays (RAG, coding, research, robots); the GPU step offers six NVIDIA platforms. */
-      assert.equal(tiles.length, stepId === "gpu" ? 6 : stepId === "cooling" ? 4 : stepId === "wires" && hasCombo(id) ? 4 : 3, `${id} ${stepId}`)
+      /* CONNECTIVITY offers five Digital Realty products (any number on); the GPU step offers six NVIDIA platforms; cooling four halls. */
+      assert.equal(tiles.length, stepId === "gpu" ? 6 : stepId === "cooling" ? 4 : stepId === "wires" ? 5 : 3, `${id} ${stepId}`)
       assert.ok(stepTiles(id, stepId, true).length >= tiles.length, `${id} ${stepId} nerd offers at least the simple tiles`)
       for (const tile of tiles) {
         assert.ok(tile.label.length > 0 && tile.label.length <= 32, `${id} ${stepId} label "${tile.label}"`)
@@ -295,14 +295,11 @@ test("every step offers three tiles on the simple board, a short list of metros,
         assert.ok(tile.patch && Object.keys(tile.patch).length > 0, `${id} ${stepId} ${tile.id} sets something`)
       }
     }
-    assert.deepEqual(stepTiles(id, "wires").map((tile) => tile.label), ["Public internet", "Peering", "ServiceFabric", ...(hasCombo(id) ? ["COMBO"] : [])], id)
-    if (hasCombo(id)) {
-      const comboTile = stepTiles(id, "wires").find((tile) => tile.id === "combo")
-      assert.deepEqual(comboTile.parts, COMBO[id].parts, `${id} COMBO names its legs`)
-      assert.ok(comboTile.lines.length === COMBO[id].parts.length + 1, `${id} COMBO learn lines list every leg`)
-      assert.ok(comboTile.why.length > 0, `${id} COMBO why`)
-    }
-    assert.deepEqual(hasCombo(id), ["rag", "code", "research", "robot"].includes(id), `${id}: COMBO only where mixing pays`)
+    /* CONNECTIVITY is a product set: five Digital Realty products on the simple board (ServiceFabric MCP among them), the catalogue in nerd mode. */
+    assert.deepEqual(stepTiles(id, "wires").map((tile) => tile.label), ["Public internet", "Cross Connect", "ServiceFabric", "ServiceFabric MCP", "Dark Fiber"], id)
+    assert.equal(stepTiles(id, "wires", true).length, 10, `${id} nerd offers the catalogue`)
+    assert.deepEqual(hasCombo(id), ["rag", "code", "research", "robot"].includes(id), `${id}: the legacy COMBO tile only where mixing pays`)
+    if (hasCombo(id)) assert.ok(COMBO[id].parts.length >= 3, `${id} COMBO names its legs`)
     assert.deepEqual(stepTiles(id, "cooling").map((tile) => tile.label), ["Air-cooled hall", "Cold aisle containment", "Rear door heat exchanger", "Liquid-cooled hall"], id)
     assert.deepEqual(stepTiles(id, "memory").map((tile) => tile.label), ["KV cache OFF", "KV cache ON", "KV cache ON + CPU host memory"], id)
     assert.deepEqual(stepTiles(id, "storage").map((tile) => tile.label), ["Local only", "File & object", "Vector index"], id)
@@ -343,13 +340,15 @@ test("every step offers three tiles on the simple board, a short list of metros,
 test("picking a tile patches the choice set; metros toggle up to the story's maximum and the last one stays", () => {
   for (const { id } of USE_CASES) {
     const defaults = simpleDefaults(id)
-    assert.deepEqual([defaults.brains, defaults.home, defaults.wires, defaults.library, defaults.memory, defaults.helper, defaults.hosts, defaults.mcp], [id === "robot" ? "b200" : "b300", "aisle", "peer", "none", false, false, "standard", false], id)
+    assert.deepEqual([defaults.brains, defaults.home, defaults.wires, defaults.library, defaults.memory, defaults.helper, defaults.hosts, defaults.mcp], [id === "robot" ? "b200" : "b300", "aisle", "cheap", "none", false, false, "standard", false], id)
     assert.equal(defaults.metros.length, 1, `${id} opens on one metro`)
     assert.deepEqual(untouchedSteps(id, defaults), BUILD_STEP_IDS.filter((stepId) => stepId !== "qpu" || qpuRelevant(id)), id)
     for (const stepId of ["gpu", "cooling", "memory", "wires", "storage"]) {
       for (const tile of stepTiles(id, stepId)) {
         const next = applyTile(id, stepId, tile.id, defaults)
-        assert.equal(stepValue(id, stepId, next), tile.id, `${id} ${stepId} ${tile.id}`)
+        /* Connectivity tiles toggle in a set: the tap adds the product beside the opening public internet (or takes it off). */
+        if (stepId === "wires") assert.deepEqual(stepValue(id, stepId, next), tile.id === "public" ? ["public"] : ["public", tile.id], `${id} ${stepId} ${tile.id}`)
+        else assert.equal(stepValue(id, stepId, next), tile.id, `${id} ${stepId} ${tile.id}`)
       }
     }
     assert.equal(stepValue(id, "qpu", applyTile(id, "qpu", "orca", defaults)), qpuRelevant(id) ? "orca" : "none", id)
@@ -368,7 +367,7 @@ test("picking a tile patches the choice set; metros toggle up to the story's max
   assert.deepEqual([memoryOn.memory, memoryOn.hosts], [true, "grace"])
   assert.deepEqual(untouchedSteps("chat", memoryOn), ["location", "model", "gpu", "cooling", "wires", "storage"])
   assert.deepEqual(untouchedSteps("chat", applyTile("chat", "model", "medium", chat)), ["location", "gpu", "cooling", "memory", "wires", "storage"], "a smaller crowd counts as a touched first step")
-  assert.equal(describeChoices("chat", chat), "NVIDIA HGX B300 ×6, cold aisle containment in London, with the KV cache off, on Peering, local only storage")
+  assert.equal(describeChoices("chat", chat), "NVIDIA HGX B300 ×6, cold aisle containment in London, with the KV cache off, on Public internet, local only storage")
   assert.match(describeChoices("drug", applyTile("drug", "qpu", "orca", simpleDefaults("drug"))), /, with ORCA PT-3$/)
 })
 

@@ -7,6 +7,7 @@
 import { AUDIENCES, DATA_HOMES, DOES, HALLS, JOBS, KV_TIER, MODELS, ORCA, PLATFORMS, SITES, USER_BASES, USER_TIER_IDS, USE_CASES, byId, dataHomeFor, resolveUseCase, usersTier } from "./data.js"
 import { dataTrips } from "./latency.js"
 import { effectivePue, evaluateBuild, formatMoney, formatTokens, metroOffers, scenarioFor } from "./model.js"
+import { PRODUCTS, legacyWires, netHint, netIds, netOf, toggleProduct } from "./netplan.js"
 import { COMBO, NERD_IDS, SIMPLE_IDS, brainPick, brainsId, choicesToBuild, cleanMetros, defaultChoices, maxMetros, memoryChoices, memoryTile, metroSets, modelPicks, nerdBrainIds, rackCount, simpleBrainIds, wireIds } from "./presets.js"
 import { designFor } from "./refarch.js"
 
@@ -244,21 +245,17 @@ const MEMORY_WHY = {
   robot: { off: "Robots repeat similar prompts; a tiny re-read, done millions of times.", on: "Parked prompts shave the first-token time robots live by.", plus: "512-token prompts never reach CPU memory.", dpu: "Isolation does not shorten a 50 ms deadline." },
 }
 
-const WIRE_TILES = {
-  cheap: { label: "Public internet", hint: "cheap, busy, slow at peaks", art: "gremlin", lines: ["The public internet is transit: the shared road everyone uses, crossing several networks.", "It is the slowest of the three: at least twice ServiceFabric's round trip, with jitter and a little packet loss.", "Fine for batch jobs that can wait; slow and jittery for live users."] },
-  /* User: "Change Peering + Eyeballs just to peering." The eyeball-network explanation stays inside the learn text. */
-  peer: { label: "Peering", hint: "straight into home networks", art: "user", lines: ["Peering swaps traffic directly with other networks at an internet exchange, so the path is shorter than transit.", "Eyeball networks are the ISPs your users are already on, so peering with them makes the last hop short.", "The middle option: faster than the open internet, but still a shared path with some jitter; ServiceFabric is quicker and steadier."] },
-  fast: { label: "ServiceFabric", hint: "private lane, fast and steady", art: "token", lines: ["ServiceFabric is Digital Realty's private, software-defined interconnection to clouds, partners, your other metros and Digital Internet.", "It is the fastest and steadiest of the three: lower delay than peering, less than half the public internet's, almost no jitter and no loss.", "A connection goes live in minutes once the port exists; documents and tools in the same building ride a cross connect, so that hop is tiny."] },
-  private: { label: "Cross connect + Dark fiber", hint: "your own glass in the building and between sites", art: "chest", lines: ["A cross connect is your own fibre to a partner in the same building, so the delay is tiny.", "Dark fiber is your own glass between nearby metros, so it pays off with two or three sites.", "Users still reach you over ServiceFabric. Too far for fibre, and the link between sites uses ServiceFabric too."] },
-  combo: { label: "COMBO", hint: "the right product on each leg", art: "gem", lines: ["Traffic has legs: people arriving, data being fetched, your sites talking to each other.", "A combo puts the right product on each leg instead of one product everywhere.", "You pay every product's set-up and monthly fee, and dark fiber waits out its lead time."] },
-}
+/** The legacy tile whose one-line reason a product tile borrows when it has none of its own. */
+const LEGACY_OF = { public: "cheap", ix: "peer", fabric: "fast", dinet: "fast", mcp: "fast", cross: "private", onramp: "private", fiber: "private", metro: "private", pathway: "private" }
 
-/** The COMBO tile's hint and learn lines name the legs for this story. */
-const COMBO_HINT = {
-  rag: "on-ramp cross connect + ServiceFabric",
-  code: "on-ramp cross connect + ServiceFabric + MCP",
-  research: "on-ramp cross connect + ServiceFabric",
-  robot: "plant cross connects + ServiceFabric",
+/** One-line reasons for the product tiles that the legacy lines do not cover. */
+const PRODUCT_WHY = {
+  chat: { mcp: "An agent right-sizes the shoppers' links through the evening peak.", cross: "Nothing in this building to cross-connect to: shoppers arrive from the internet.", fiber: "Dark fiber joins your metros; shoppers still need another road in." },
+  rag: { mcp: "An agent sizes the staff and document links by intent, in minutes.", cross: "A cross connect to the cloud on-ramp in this building: the shortest retrieval hop.", fiber: "No second site and no named partner: nothing for dark fiber to join." },
+  code: { mcp: "An agent re-sizes the repo link as the coders' day peaks: −10% network opex (game).", cross: "Cross connect to the repos' on-ramp in the building.", fiber: "Dark fiber joins the two coasts where they are close enough; otherwise ServiceFabric." },
+  research: { mcp: "An agent re-sizes the paper link through the day: −10% network opex (game).", cross: "A cross connect to the cloud on-ramp makes the paper lookups tiny.", fiber: "No second site: nothing for dark fiber to join." },
+  drug: { mcp: "An agent sizes the lab feed up when the night's batch arrives.", cross: "ORCA's same-hall hand-off rides a cross connect.", fiber: "Dark fiber from the lab: the fattest feed, if the lab is close enough." },
+  robot: { mcp: "An agent keeps each plant's link right-sized; the wire is no faster.", cross: "Each plant's carrier lands in the building on a cross connect: the steadiest 50 ms loop.", fiber: "Dark fiber to a plant is possible; ServiceFabric does it without the dig." },
 }
 
 const WIRE_WHY = {
@@ -609,15 +606,21 @@ export function stepTiles(useCaseId, stepId, nerd = false, choices = {}) {
     return ids.memory.map((id) => ({ id, ...MEMORY_TILES[id], why: MEMORY_WHY[useCaseId]?.[id] || DOES.kv, patch: memoryChoices(id) }))
   }
   if (stepId === "wires") {
-    return wireIds(useCaseId, nerd).map((id) => {
-      const tile = { id, ...WIRE_TILES[id], why: WIRE_WHY[useCaseId]?.[id] || "", patch: { wires: id } }
-      if (id === "combo") {
-        const combo = COMBO[useCaseId]
-        tile.hint = COMBO_HINT[useCaseId] || tile.hint
-        tile.lines = [...combo.parts.map((part) => `${part}.`), WIRE_TILES.combo.lines[2]]
-        tile.parts = combo.parts
+    /* Product tiles: any number may be on; the router puts the best eligible one on each leg (js/netplan.js). */
+    const net = netOf(useCaseId, choices, COMBO[useCaseId])
+    return netIds(useCaseId, nerd).map((id) => {
+      const product = PRODUCTS.find((item) => item.id === id)
+      const next = toggleProduct(net, id)
+      return {
+        id,
+        label: product.label,
+        hint: product.hint,
+        art: product.art,
+        lines: product.lines,
+        why: PRODUCT_WHY[useCaseId]?.[id] || WIRE_WHY[useCaseId]?.[LEGACY_OF[id]] || product.lines[0],
+        patch: { net: next, wires: legacyWires(next, COMBO[useCaseId]?.legs), routed: undefined },
+        product,
       }
-      return tile
     })
   }
   if (stepId === "storage") {
@@ -706,7 +709,8 @@ export function stepValue(useCaseId, stepId, choices = {}) {
   if (stepId === "gpu") return brainsId(useCaseId, choices.brains)
   if (stepId === "cooling") return choices.home || "cool"
   if (stepId === "memory") return memoryTile(choices)
-  if (stepId === "wires") return choices.wires || "peer"
+  /* CONNECTIVITY is a product set: the products on, in catalogue order. */
+  if (stepId === "wires") return netOf(useCaseId, choices, COMBO[useCaseId]).slice().sort((a, b) => PRODUCTS.findIndex((p) => p.id === a) - PRODUCTS.findIndex((p) => p.id === b))
   if (stepId === "storage") return choices.library || "none"
   if (stepId === "qpu") return choices.helper && qpuRelevant(useCaseId) ? "orca" : "none"
   return null
@@ -843,9 +847,14 @@ function dropLine(useCaseId, stepId, next, money, nerd) {
 /** True when a tile is the one a choice set is on: metros toggle, MODEL & USERS has two rows. */
 export function tileOn(useCaseId, stepId, tile, choices = {}) {
   const value = stepValue(useCaseId, stepId, choices)
-  if (stepId === "location") return value.includes(tile.id)
+  if (stepId === "location" || stepId === "wires") return value.includes(tile.id)
   if (stepId === "model") return value[tile.row] === tile.id
   return value === tile.id
+}
+
+/** The one-line hint under the CONNECTIVITY tiles when the set needs a partner product (MCP without ServiceFabric). */
+export function wiresHint(useCaseId, choices = {}) {
+  return netHint(netOf(useCaseId, choices, COMBO[useCaseId]))
 }
 
 /** One line naming the MODEL & USERS picks: the model size and the crowd. */
@@ -896,11 +905,12 @@ export function describeChoices(useCaseId, choices = {}) {
     return stepTiles(useCaseId, stepId, true, choices).find((item) => item.id === value) || stepTiles(useCaseId, stepId, false, choices).find((item) => item.id === value)
   }
   const metros = cleanMetros(useCaseId, choices.metros).map((id) => byId(SITES, id)?.metro || id)
+  const net = stepValue(useCaseId, "wires", choices).map((id) => PRODUCTS.find((item) => item.id === id)?.label || id)
   const parts = [
     tile("gpu")?.label,
     `${tile("cooling")?.label?.toLowerCase()} in ${metros.join(" + ")}`,
     tile("memory")?.inWords,
-    `on ${tile("wires")?.label}`,
+    `on ${net.join(" + ")}`,
     `${tile("storage")?.label?.toLowerCase()} storage`,
   ]
   if (qpuRelevant(useCaseId)) parts.push(choices.helper ? "with ORCA PT-3" : "without a QPU")

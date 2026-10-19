@@ -153,7 +153,7 @@ test("budget guard: shrinking the crowd snaps an unaffordable GPU back to the ch
 test("the board wires the guard in: blocked tiles are tagged, refuse the tap, and the designer clamps", () => {
   const main = readFileSync(join(root, "js/main.js"), "utf8")
   assert.match(main, /const guard = tileGuard\(id, stepId, tile, choices, state\.nerd\)/)
-  assert.match(main, /tag: guard\.blocked \? guard\.tag : tile\.tag \|\| ""/)
+  assert.match(main, /tag: guard\.blocked \? guard\.tag : .*tile\.tag \|\| ""/, "a blocked tile shows the guard's tag ahead of its own")
   assert.match(main, /if \(guard\.blocked\) \{\s*play\("error"\)\s*flashWhy\(guard\.line\)/)
   assert.match(main, /"aria-disabled": blocked \? "true" : null/)
   assert.match(main, /applyTile\(state\.plan\.useCase, stepId, tile\.id, state\.plan\.choices, state\.nerd\)/)

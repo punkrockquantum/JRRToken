@@ -507,8 +507,10 @@ test("each combo fires only for its exact mixture", () => {
   assert.ok(rag({ all: "fabric", control: "off" }).includes("private"))
   assert.ok(!rag({ users: "public", store: "cross", control: "off" }).includes("private"))
   assert.ok(rag({ users: "fabric", store: "fabric", control: "mcp" }).includes("fabricMcp"))
-  assert.ok(!rag({ users: "fabric", store: "mcp", control: "mcp" }).includes("fabricMcp"))
-  assert.ok(!rag({ users: "fabric", store: "fabric", control: "fabric" }).includes("fabricMcp"))
+  // MCP is ServiceFabric configured by an agent, so a data leg routed over MCP is a fabric leg too: the combo still fires.
+  assert.ok(rag({ users: "fabric", store: "mcp", control: "mcp" }).includes("fabricMcp"))
+  assert.ok(!rag({ users: "fabric", store: "fabric", control: "fabric" }).includes("fabricMcp"), "ServiceFabric without the agent is not the combo")
+  assert.ok(!rag({ users: "public", store: "public", control: "mcp" }).includes("fabricMcp"), "the agent needs a fabric to configure")
 
   const chatFiber = evaluateBuild("chat", { ...routedHw, data: "local", sites: ["lon", "fra"], racks: 2, routes: routed("chat", { users: "fabric", inter: "fiber", control: "off" }) })
   assert.ok(chatFiber.combos.some((combo) => combo.id === "backbone"))

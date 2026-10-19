@@ -810,6 +810,45 @@ test("write-through: games recorded before UPSTREAM_URL was set are sent on star
   assert.equal(upstream.state.hits.attempt, 3, "the replay is not even forwarded again")
 })
 
+test("write-through: a laptop that played offline and was shut down sends every queued game by itself when it next starts connected", async (t) => {
+  const upstream = await fakeUpstream()
+  t.after(() => upstream.close())
+
+  // Day one: no venue Wi-Fi. Three games are played, then the laptop is shut down with all three unsent.
+  upstream.state.mode = "down"
+  const dir = await mkdtemp(path.join(os.tmpdir(), "token-quest-offline-"))
+  const dataDir = path.join(dir, "data")
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const dayOne = await new AttemptStore(dataDir, { log: () => {} }).init()
+  const sync = await createUpstream({ url: upstream.url, key: UPSTREAM_KEY, dataDir, retryMs: 100, maxRetryMs: 300, postTimeoutMs: 500 }).init()
+  const played = [
+    attempt({ score: 700, playedAt: "2026-10-08T09:01:00.000Z" }),
+    attempt({ score: 1100, playedAt: "2026-10-08T09:02:00.000Z" }),
+    attempt({ score: 900, playedAt: "2026-10-08T09:03:00.000Z" }),
+  ]
+  for (const game of played) {
+    const record = validateAttempt(game).attempt
+    await dayOne.add(record)
+    await sync.enqueue(record)
+  }
+  await waitFor(() => sync.status().lastError !== null, "the first failed send")
+  assert.equal(sync.status().queued, 3)
+  assert.equal(upstream.received.length, 0, "nothing reached the team server while offline")
+  await sync.close() // the laptop is shut down
+
+  // Day two: the same data directory, the network is back, nobody plays. The queue drains on start-up.
+  upstream.state.mode = "ok"
+  const dayTwo = await new AttemptStore(dataDir, { log: () => {} }).init()
+  const reconnected = await createUpstream({ url: upstream.url, key: UPSTREAM_KEY, dataDir, retryMs: 100, maxRetryMs: 300, postTimeoutMs: 500 }).init()
+  t.after(() => reconnected.close())
+  assert.equal(await reconnected.backfill(dayTwo.attempts), 0, "the journal already holds all three; nothing is queued twice")
+  assert.equal(reconnected.status().queued, 3, "the journal brought the three unsent games back")
+  await waitFor(() => reconnected.status().queued === 0, "the start-up flush")
+  assert.deepEqual(upstream.received.map((item) => item.attempt.score), [700, 1100, 900], "all three arrive, oldest first")
+  assert.deepEqual([reconnected.status().queued, reconnected.status().sent], [0, 3])
+  assert.equal((await parseQueueLog(await readFile(path.join(dataDir, QUEUE_FILE), "utf8"))).pending.size, 0, "the journal agrees")
+})
+
 test("mergeLeague: best is the higher score, attempts add the unconfirmed local games, players from either side are kept", () => {
   const local = [
     validateAttempt(attempt({ score: 800, useCase: "Chat", playedAt: "2026-10-08T09:00:00.000Z" })).attempt, // confirmed upstream

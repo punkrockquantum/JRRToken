@@ -9,6 +9,7 @@
  */
 import { MISSION_SITES, MODEL_IDS, PLATFORMS, SITES, USER_TIER_IDS, USE_CASES, byId, usersTier } from "./data.js"
 import { FIBER_MAX_KM, kmBetween } from "./model.js"
+import { cleanNet, legacyWires, routeProducts, simpleNet } from "./netplan.js"
 import { blankFabric } from "./network.js"
 import { routeNetworkId } from "./routes.js"
 
@@ -205,7 +206,8 @@ export function defaultChoices(useCaseId) {
     library: "none",
     /* Every story opens on an HGX rack (22 to 30 kW), which open air at 15 kW cannot cool: containment is the opening hall. */
     home: "aisle",
-    wires: "peer",
+    /* The opening wire is the public internet: the first product tile, and the one OPTIMISE ROUTING teaches away from. */
+    wires: "cheap",
     mcp: false,
     helper: false,
     hosts: "standard",
@@ -250,15 +252,18 @@ export function simpleChoices(useCaseId, choices = {}) {
     : picked.wires === "private" || picked.wires === "mix" || picked.wires === "combo" ? (hasCombo(useCaseId) ? "combo" : "fast") : "peer"
   const memory = memoryTile(picked) === "dpu" ? "plus" : memoryTile(picked)
   const library = SIMPLE_IDS.library.includes(picked.library) ? picked.library : "none"
-  /* Site plans and reference architectures are nerd-only; the simple board forgets them. */
-  const { sitePlans, refarch, ...rest } = picked
+  /* Site plans, reference architectures and pinned legs are nerd-only; the simple board forgets them. */
+  const { sitePlans, refarch, legs, ...rest } = picked
+  /* A product set stays a product set: the nerd-only products snap onto the simple ones they refine. */
+  const net = cleanNet(picked.net) ? simpleNet(picked.net) : undefined
   return {
     ...rest,
     ...modelPicks(useCaseId, picked),
     metros: cleanMetros(useCaseId, picked.metros),
     brains,
     home,
-    wires,
+    wires: net ? legacyWires(net, COMBO[useCaseId]?.legs) : wires,
+    ...(net ? { net } : {}),
     library,
     ...memoryChoices(memory),
     mcp: false,
@@ -271,6 +276,11 @@ export function nerdChoices(useCaseId, choices) {
   const next = { ...defaultChoices(useCaseId), ...choices, ...modelPicks(useCaseId, choices) }
   next.metros = cleanMetros(useCaseId, next.metros)
   next.brains = brainsId(useCaseId, next.brains)
+  const net = cleanNet(next.net)
+  if (net) {
+    next.net = net
+    next.wires = legacyWires(net, COMBO[useCaseId]?.legs)
+  } else delete next.net
   return next
 }
 
@@ -384,7 +394,10 @@ export function choicesToBuild(useCaseId, choices, nerd = false) {
   const { platform, racks } = brainPick(useCaseId, picked.brains, picked.users, picked.racks)
   const sites = cleanMetros(useCaseId, picked.metros)
   const helper = Boolean(useCase?.orca && picked.helper)
-  const routes = assignRoutes(useCase, sites, helper, picked.wires, Boolean(picked.mcp))
+  const net = cleanNet(picked.net)
+  const routed = net ? routeProducts(useCase, sites, helper, net, picked.legs || {}) : null
+  const routes = routed ? routed.routes : assignRoutes(useCase, sites, helper, picked.wires, Boolean(picked.mcp))
+  const fabricOn = net ? net.includes("fabric") || net.includes("mcp") || net.includes("dinet") : picked.wires === "fast" || picked.wires === "private" || picked.wires === "combo"
   const build = {
     model: picked.model,
     users: picked.users,
@@ -399,11 +412,12 @@ export function choicesToBuild(useCaseId, choices, nerd = false) {
     network: routeNetworkId(routes),
     fabric: { ...blankFabric(), dest: useCase?.netDest?.user || "internet" },
     routes,
-    bwTier: picked.wires === "fast" || picked.wires === "private" || picked.wires === "combo" ? 1 : 0,
-    fabricRedundant: ["mix", "private", "fast", "combo"].includes(picked.wires),
+    bwTier: fabricOn ? 1 : 0,
+    fabricRedundant: net ? fabricOn : ["mix", "private", "fast", "combo"].includes(picked.wires),
     sites,
     choices: picked,
   }
+  if (routed) build.netRouting = { carried: routed.carried, unused: routed.unused, agent: routed.agent }
   if (nerd && picked.refarch) build.refarch = picked.refarch
   if (nerd && sites.length > 1 && Array.isArray(picked.sitePlans) && picked.sitePlans.length) {
     build.sitePlans = picked.sitePlans.map((plan) => ({

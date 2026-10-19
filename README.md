@@ -99,6 +99,61 @@ All prices, lead times, cloud rates and multipliers are labelled game estimates.
 (GPU memory and bandwidth, NVLink domains, ServiceFabric ports and connection tiers, the 15-day
 port SLA, Digital Realty's footprint) are cited in code comments next to the numbers.
 
+## How to run it
+
+There are two ways to play. Both feed the same shared scoreboard.
+
+### 1. On any laptop, tablet or phone: the team URL
+
+Open **https://tokenquest.tokenquest.workers.dev** in Chrome, Safari or Edge, enter the team password
+once (ask the team; it is not written anywhere in this repository), and play. Nothing to install.
+
+- The page remembers the login for 14 days per browser.
+- Phones and portrait tablets get a scrolling single-column layout; laptops and landscape tablets get
+  the kiosk layout. Add it to the home screen on an iPad for a full-screen feel.
+- Every finished game is stored centrally the moment the results appear, from whichever device played it.
+- For a booth with a steady connection this is the simplest setup: on each laptop, open the URL and press
+  **FULLSCREEN** (or run Chrome in kiosk mode: `open -na "Google Chrome" --args --kiosk --app=https://tokenquest.tokenquest.workers.dev`).
+
+### 2. Installed on a booth laptop (works offline)
+
+Use this when the venue network is unreliable. The laptop runs its own copy of the game and a small local
+server; games are saved on the laptop first and synced to the shared scoreboard whenever a connection exists.
+
+**Install once per laptop (macOS; needs Node 18 or newer from https://nodejs.org):**
+
+1. `git clone https://github.com/punkrockquantum/JRRToken.git` and `cd JRRToken`
+   (`git checkout cursor/token-quest-datacenter-game` until the branch is merged).
+2. Create a file named `.env` in that folder with three lines:
+   ```
+   UPSTREAM_URL=https://tokenquest.tokenquest.workers.dev
+   UPSTREAM_KEY=<the team server's intake key; copy it from a laptop that already has it, or ask the team>
+   STAFF_PIN=<a PIN that protects the laptop server's Excel export and reset>
+   ```
+   `.env` is git-ignored and never leaves the laptop. Without `UPSTREAM_URL` the laptop keeps its own
+   scores only.
+3. Double-click **`start-token-quest.command`**. The first run asks macOS for permission to open it
+   (right-click → Open). It starts the local server and opens the game in Chrome kiosk mode. Keep the
+   Terminal window open while the booth runs; closing it stops the game.
+
+**Every day at the booth:** double-click `start-token-quest.command`. That is all.
+
+**How the sync works:** each game is written to the laptop's `data/attempts.jsonl` and to the Desktop
+workbook `Token Quest Leaderboard.xlsx` immediately, then sent to the shared scoreboard. If the network is
+down the game is queued on disk and re-sent automatically every 30 seconds, on the next game, and on the next
+start-up, so a laptop that was offline all day and shut down catches up by itself the moment it starts
+connected. Nothing is ever dropped, and re-sends never duplicate. The laptop's HIGH SCORES board merges its
+own games with the shared totals, so every laptop shows the same leaders once synced.
+`http://127.0.0.1:8080/api/health` shows `upstream.queued` (games waiting) and `lastSyncAt`.
+
+**Staff tools on the laptop:** click the TOKEN QUEST logo five times and enter the on-screen staff PIN
+(default `8462`; change it per laptop from the browser console with
+`localStorage.setItem("token-quest-staff-pin", "your-pin")`) to download or clear the local league and
+fetch the Excel file. The shared scoreboard for all devices is https://tokenquest.tokenquest.workers.dev/staff.
+
+**Test mode:** the switch on the title screen plays a full game without saving anything, for demos and
+rehearsals.
+
 ## Hosting
 
 | Where | What | How |

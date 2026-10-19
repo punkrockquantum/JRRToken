@@ -70,14 +70,14 @@ test("COMBO routes each leg as the tile says, bills every product, and lights da
   assert.ok(nearResult.leadParts.find((part) => part.id === "network").weeks >= 10, "dark fiber waits out its lead time")
 })
 
-test("the COMBO tile reads as a plain mix on the board and own-fibre picks snap onto it", () => {
+test("the legacy COMBO reads as a plain mix and own-fibre picks snap onto it; the board itself shows product tiles", () => {
   for (const id of ["rag", "code", "research", "robot"]) {
-    const tile = stepTiles(id, "wires").find((item) => item.id === "combo")
-    assert.equal(tile.label, "COMBO")
-    assert.ok(tile.parts.length >= 3 && tile.parts.every((part) => /→/.test(part)), `${id} parts name a leg and a product`)
-    assert.doesNotMatch(tile.parts.join(" "), /\bms\b|Gbps|\$/, `${id} the tile stays plain`)
+    const parts = COMBO[id].parts
+    assert.ok(parts.length >= 3 && parts.every((part) => /→/.test(part)), `${id} parts name a leg and a product`)
+    assert.doesNotMatch(parts.join(" "), /\bms\b|Gbps|\$/, `${id} the combo stays plain`)
     assert.equal(simpleChoices(id, { ...expertChoices(id), wires: "private" }).wires, "combo", `${id} own fibre snaps onto COMBO`)
   }
   assert.equal(simpleChoices("chat", { ...expertChoices("chat"), wires: "private" }).wires, "fast", "a chatbot has no COMBO: own fibre snaps onto ServiceFabric")
   assert.equal(stepTiles("chat", "wires").find((item) => item.id === "combo"), undefined)
+  assert.ok(stepTiles("chat", "wires").some((item) => item.id === "mcp"), "ServiceFabric MCP is a product tile")
 })

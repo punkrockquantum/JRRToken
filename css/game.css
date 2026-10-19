@@ -543,22 +543,20 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .screen.game.nerd .choices { gap: 4px; }
 .screen.game.nerd .feel { grid-column: 3; }
 .screen.game.nerd .choice-row { grid-template-columns: 120px minmax(0, 1fr); }
-.mcp-toggle {
-  position: absolute;
-  z-index: 1;
-  right: 3px;
-  bottom: 3px;
-  min-width: 44px;
-  height: 30px;
-  padding: 0 6px;
-  font-family: var(--pixel);
-  font-size: 9px;
-  color: var(--cyan);
-  background: var(--ink);
-  border: 2px solid var(--cyan);
-}
-.mcp-toggle::after { content: ""; position: absolute; inset: -7px; }
-.mcp-toggle.on { color: var(--ink); background: var(--yellow); border-color: var(--yellow); }
+/* OPTIMISE ROUTING under the connectivity tiles: the button, the route leg by leg, the before/after line, the nerd leg table. */
+.net-panel { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; flex: 0 0 auto; min-width: 0; }
+.net-panel .net-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.net-panel .btn.big { font-size: 11px; padding: 8px 12px; }
+.net-panel .route-line { flex: 1 1 240px; margin: 0; font-size: 10px; line-height: 1.35; color: var(--pale); overflow-wrap: anywhere; }
+.net-panel .route-line b { color: var(--yellow); }
+.net-panel .route-line[data-routed="agent"] b { color: var(--cyan); }
+.net-panel .net-hint { margin: 0; font-size: 10px; color: #ffd36b; }
+.net-panel .net-result { margin: 0; font-size: 10px; color: var(--line); }
+.leg-table { border-collapse: collapse; font-size: 10px; color: var(--pale); }
+.leg-table th, .leg-table td { text-align: left; padding: 2px 8px 2px 0; white-space: nowrap; }
+.leg-table thead th { font-size: 8px; color: var(--muted); }
+.leg-table tbody th { color: var(--line); font-weight: normal; }
+.leg-pick { font: inherit; font-size: 10px; min-height: 24px; color: var(--pale); background: var(--ink); border: 1px solid var(--muted); }
 .stories {
   height: 100%;
   min-height: 0;
@@ -925,6 +923,12 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
 .screen.game.nerd .step-panel .tile-title { font-size: 12px; }
 .screen.game.nerd .step-panel .tile-hint { font-size: 12px; -webkit-line-clamp: 2; }
 .screen.game.nerd .step-panel .tiles.count-5, .screen.game.nerd .step-panel .tiles.count-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Connectivity: five product tiles on one row; nerd mode's ten on two rows of five, compact, the strip's sentence in the toast. */
+.screen.game .step-panel.step-wires .tiles.count-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.screen.game.nerd .step-panel.step-wires .tiles.count-10 { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.screen.game.nerd .step-panel.step-wires .tiles.count-10 .tile { min-height: 72px; gap: 4px; padding: 6px 34px 6px 8px; }
+.screen.game.nerd .step-panel.step-wires .tiles.count-10 .tile-hint, .screen.game.nerd .step-panel.step-wires .tiles.count-10 .tile-art { display: none; }
+.screen.game.nerd .step-panel.step-wires .tiles.count-10 .imp-why, .screen.game.nerd .step-panel.step-wires .tiles.count-10 .imp-nerd { display: none; }
 /* GPUs: six real NVIDIA racks on two rows of three, in a shorter tile so both rows sit above NEXT without a scroll. */
 .screen.game .step-panel.step-gpu .tiles.count-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .screen.game .step-panel.step-gpu .tiles.count-6 .tile { min-height: 92px; gap: 6px; padding-top: 8px; padding-bottom: 8px; }
@@ -1168,6 +1172,11 @@ button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
   .screen.game .step-wires .tile-hint, .screen.game.nerd .step-wires .tile-hint { -webkit-line-clamp: 1; }
   .screen.game .step-wires .tile-title { -webkit-line-clamp: 1; }
   .screen.game.nerd .step-wires .tiles.count-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .screen.game.nerd .step-wires .tiles.count-10 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .screen.game .step-wires .imp-why { display: none; } /* the toast and the route line carry the sentence on a narrow board */
+  .net-panel { margin-top: 2px; gap: 3px; }
+  .net-panel .route-line, .net-panel .net-result, .net-panel .net-hint { font-size: 9px; }
+  .leg-table { font-size: 9px; }
   .screen.game.nerd .step-wires .tile-title { -webkit-line-clamp: 2; }
   .screen.game.nerd .step-wires .tile-hint, .screen.game.nerd .step-wires .tile-art { display: none; } /* the title names the product; the strip says what it does */
   .screen.game.nerd .step-wires .tile-title { overflow-wrap: normal; }

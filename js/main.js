@@ -10,15 +10,17 @@ import { createFloor } from "./floor.js"
 import { createAdvanceGate, createIntro, matchingScene, sceneCaption, scenesFor, setIntroDetail } from "./intro.js"
 import { TITLE_ROWS, leagueCsv, leagueJson, ordinal, sharedScoresHint, sortLeague, titleBoard } from "./league.js"
 import { fetchHealth } from "./health.js"
-import { STAR_POINTS, defaultSitePlans, evaluateBuild, formatMoney, formatScore, formatTokens, scenarioFor, stars } from "./model.js"
+import { STAR_POINTS, defaultSitePlans, evaluateBuild, formatMoney, formatScore, formatTokens, scenarioFor, siteReach, stars } from "./model.js"
 import { blockedReason, peopleCount, peopleLead, savingsLine } from "./results.js"
 import { syncStatusLine } from "./attempt.js"
 import { validateEmail, validateName } from "./names.js"
 import { fetchLeague, recordAttempt } from "./sync.js"
 import { isMuted, loadMute, play, setMuted, unlock } from "./sound.js"
 import { spriteImg } from "./sprites.js"
-import { STORIES, brainPick, choicesToBuild, maxMetros, nerdChoices, simpleChoices } from "./presets.js"
-import { BUILD_STEP_IDS, STEPS, STEP_IDS, applyRacks, applyTile, audienceSummary, jobBrief, modelLabel, nextStep, prevStep, qpuRelevant, rackBounds, rackGuard, simpleDefaults, stepIndex, stepTiles, stepValue, tileGuard, tileOn, untouchedSteps } from "./steps.js"
+import { COMBO, STORIES, brainPick, choicesToBuild, cleanMetros, maxMetros, nerdChoices, simpleChoices } from "./presets.js"
+import { PRODUCTS, activeLegsFor, netOf, productOnLeg } from "./netplan.js"
+import { bestConnectivity, legWord, routeKey, routeSummary } from "./optimise.js"
+import { BUILD_STEP_IDS, STEPS, STEP_IDS, applyRacks, applyTile, audienceSummary, jobBrief, modelLabel, nextStep, prevStep, qpuRelevant, rackBounds, rackGuard, simpleDefaults, stepIndex, stepTiles, stepValue, tileGuard, tileOn, untouchedSteps, wiresHint } from "./steps.js"
 import { canImprove, roundHint, roundLine } from "./rounds.js"
 import { TEST_MODE_BADGE, TEST_MODE_LINE, canStart, settleAttempt, testModeAfterReset } from "./testmode.js"
 
@@ -938,6 +940,8 @@ function stepPanel(stepId, result) {
   if (stepId === "review") return reviewPanel(result)
   const tiles = stepTiles(id, stepId, state.nerd, choices)
   const isOn = (tile) => tileOn(id, stepId, tile, choices)
+  /* CONNECTIVITY: a product on that no leg uses says so on its tag (MCP without ServiceFabric, dark fiber with one site). */
+  const unused = stepId === "wires" ? state.plan.build?.netRouting?.unused || [] : []
   const wraps = tiles.map((tile) => {
     const impact = stepId === "wires" ? wireImpact(id, choices, tile.id, state.nerd) : null
     /* The budget guard: a tile the budget cannot pay for stays on the board, greyed, tagged with the shortfall. */
@@ -945,7 +949,7 @@ function stepPanel(stepId, result) {
     const wrap = picture({
       key: `${tile.row || stepId}-${tile.id}`,
       art: tile.art,
-      tag: guard.blocked ? guard.tag : tile.tag || "",
+      tag: guard.blocked ? guard.tag : isOn(tile) && unused.includes(tile.id) ? "ON · NOT USED BY ANY LEG" : tile.tag || "",
       label: tile.label,
       hint: tile.hint,
       /* GPU tiles carry their four engine numbers as one wrapped line; metro tiles keep their row grid. */
@@ -960,22 +964,6 @@ function stepPanel(stepId, result) {
       blocked: guard.blocked,
       extra: impact ? impactStrip(impact, tile.id) : null,
     })
-    if (stepId === "wires" && tile.id === "fast" && state.nerd && isOn(tile)) {
-      const toggle = el("button", {
-        type: "button",
-        class: `mcp-toggle${choices.mcp ? " on" : ""}`,
-        "data-key": "wires-mcp",
-        "aria-pressed": choices.mcp ? "true" : "false",
-        title: "Let an agent configure it",
-        text: choices.mcp ? "MCP ON" : "MCP",
-      })
-      toggle.addEventListener("pointerdown", (event) => event.stopPropagation())
-      toggle.addEventListener("click", (event) => {
-        event.stopPropagation()
-        pick({ mcp: !choices.mcp })
-      })
-      wrap.append(toggle)
-    }
     return wrap
   })
   const selected = tiles.find(isOn)
@@ -989,7 +977,9 @@ function stepPanel(stepId, result) {
       ? `${step.hint}. Chosen: ${modelLabel(id, choices)}.`
       : stepId === "qpu" && !qpuRelevant(id)
         ? "No choice here. Read why, then NEXT."
-        : step.hint
+        : stepId === "wires"
+          ? `${step.hint}: pick any products, the router puts the best one on each leg, or press OPTIMISE ROUTING.`
+          : step.hint
   /* MODEL & USERS: MODEL SIZE tiles on one row, USERS tiles on the next, each row with its own heading. */
   const grid = stepId === "model"
     ? ["model", "users"].map((row) => {
@@ -1012,9 +1002,89 @@ function stepPanel(stepId, result) {
     stepId === "location" ? whoWhere(id) : null,
     ...grid,
     nerdLine ? el("p", { class: "row-nerd", "data-key": "step-nerd", text: nerdLine }) : null,
+    stepId === "wires" ? netPanel(result) : null,
     stepId === "gpu" ? rackStepper(result, selected) : null,
     stepId === "gpu" && state.nerd ? refarchPanel(result, selected) : null,
     stepNav(stepId),
+  ])
+}
+
+/**
+ * OPTIMISE ROUTING, under the CONNECTIVITY tiles on both boards. User: "there should be an option to configure
+ * optimised routing (single click)." One press scores every legal product set for the player's metros and the
+ * rest of the board, applies the best one the budget pays for, shows the route leg by leg with the first-token
+ * time and cost per million tokens before and after, and makes the CONNECTIONS light relative to that optimum.
+ * With ServiceFabric MCP in the set the agent keeps the routing ("agent-routed"). Nerd mode adds a per-leg
+ * table where one leg can be pinned to another product afterwards; the light goes amber or red when that is worse.
+ */
+function netPanel(result) {
+  const id = state.plan.useCase
+  const choices = state.plan.choices
+  const summary = routeSummary(id, choices, state.nerd, result)
+  const net = netOf(id, choices, COMBO[id])
+  const agent = net.includes("mcp")
+  const hint = wiresHint(id, choices)
+  const key = routeKey(id, choices.metros)
+  const routedNow = choices.routed?.key === key
+  const last = state.plan.netResult?.key === key ? state.plan.netResult : null
+  const optimise = () => {
+    const out = bestConnectivity(id, null, null, choices, state.nerd)
+    play(out.changed ? "select" : "blip")
+    state.plan.choices = out.choices
+    state.plan.netResult = { key: out.choices.routed?.key, text: `${out.label.toUpperCase()}: ${out.summary}.` }
+    syncBuild()
+    flashWhy(out.lines.join(" · "))
+    render()
+  }
+  return el("div", { class: "net-panel", "data-key": "net-panel" }, [
+    el("div", { class: "net-row" }, [
+      btn(agent ? "OPTIMISE ROUTING (agent)" : "OPTIMISE ROUTING", optimise, { kind: "big", key: "net-optimise", title: "One click: the best product on every leg for these metros, inside the budget" }),
+      el("p", { class: "route-line", "data-key": "route-line", "data-routed": routedNow ? (choices.routed.agent ? "agent" : "optimised") : "" }, [
+        el("b", { text: routedNow ? (choices.routed.agent ? "AGENT-ROUTED · " : "OPTIMISED · ") : "ROUTE · " }),
+        summary.line || "no leg carries traffic yet",
+      ]),
+    ]),
+    hint ? el("p", { class: "net-hint", "data-key": "net-hint", text: hint }) : null,
+    last ? el("p", { class: "net-result fine", "data-key": "net-result", text: last.text }) : null,
+    state.nerd ? legTable(summary) : null,
+  ])
+}
+
+/** Nerd mode: one row per leg with the product carrying it, its round trip, and a selector to pin another product from the set. */
+function legTable(summary) {
+  const id = state.plan.useCase
+  const choices = state.plan.choices
+  const useCase = byId(USE_CASES, id)
+  const sites = cleanMetros(id, choices.metros)
+  const reach = siteReach(id, sites)
+  const net = netOf(id, choices, COMBO[id])
+  const specs = activeLegsFor(useCase, sites, Boolean(useCase?.orca && choices.helper)).filter((leg) => leg.role !== "control")
+  const rows = specs.map((spec) => {
+    const leg = summary.legs.find((item) => item.id === spec.id)
+    const options = net.map((pid) => PRODUCTS.find((item) => item.id === pid)).filter((product) => product && productOnLeg(product, spec, reach).ok)
+    const select = el("select", { class: "leg-pick", "data-key": `leg-${spec.id}`, "aria-label": `${legWord(spec)} leg product` }, [
+      el("option", { value: "", text: "best in set" }),
+      ...options.map((product) => el("option", { value: product.id, text: product.label })),
+    ])
+    select.value = choices.legs?.[spec.id] && options.some((product) => product.id === choices.legs[spec.id]) ? choices.legs[spec.id] : ""
+    select.addEventListener("pointerdown", (event) => event.stopPropagation())
+    select.addEventListener("change", (event) => {
+      event.stopPropagation()
+      const legs = { ...(choices.legs || {}) }
+      if (select.value) legs[spec.id] = select.value
+      else delete legs[spec.id]
+      pick({ legs })
+    })
+    return el("tr", { "data-key": `leg-row-${spec.id}` }, [
+      el("th", { scope: "row", text: legWord(spec) }),
+      el("td", { text: leg ? leg.label : "—" }),
+      el("td", { text: leg ? `${leg.rttMs < 1 ? leg.rttMs.toFixed(1) : Math.round(leg.rttMs)} ms` : "—" }),
+      el("td", {}, [select]),
+    ])
+  })
+  return el("table", { class: "leg-table", "data-key": "leg-table" }, [
+    el("thead", {}, [el("tr", {}, [el("th", { text: "LEG" }), el("th", { text: "PRODUCT" }), el("th", { text: "RTT" }), el("th", { text: "PIN" })])]),
+    el("tbody", {}, rows),
   ])
 }
 

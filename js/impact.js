@@ -6,6 +6,7 @@
 import { USE_CASES, byId } from "./data.js"
 import { streamFeel } from "./latency.js"
 import { evaluateBuild, formatMoney, formatSeconds } from "./model.js"
+import { PRODUCT_IDS, legacyWires } from "./netplan.js"
 import { choicesToBuild } from "./presets.js"
 
 const KIND_NAMES = {
@@ -74,7 +75,11 @@ export function whyLine(useCase, result, { ingress, batch }) {
  */
 export function wireImpact(useCaseId, choices, wires, nerd = false) {
   const useCase = byId(USE_CASES, useCaseId)
-  const build = choicesToBuild(useCaseId, { ...choices, wires }, nerd)
+  /* A product id reads as "this product on its own" (MCP brings the fabric it configures); a legacy tile id reads as before. */
+  const product = PRODUCT_IDS.includes(wires)
+  const solo = wires === "mcp" ? ["fabric", "mcp"] : [wires]
+  const patch = product ? { net: solo, legs: {}, wires: legacyWires(solo), routed: undefined } : { wires }
+  const build = choicesToBuild(useCaseId, { ...choices, ...patch }, nerd)
   const result = evaluateBuild(useCaseId, build)
   const batch = (useCase.legs || []).some((leg) => leg.slaExempt)
   const legs = (result.legResults || []).filter((leg) => leg.kind && leg.kind !== "off")

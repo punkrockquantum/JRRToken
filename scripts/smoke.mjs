@@ -348,7 +348,26 @@ try {
     for (const part of ["Shoppers want quick answers", "USERS", "MODEL & DATA", "NEW STORY"]) if (!scenario.includes(part)) throw new Error(`Scenario card lacks ${part}: ${scenario}`)
     const lights = await evaluate(`[...document.querySelectorAll('[data-key="eco-bar"] .eco-part')].map((p) => p.dataset.part + ':' + p.dataset.state).join(',')`)
     if (!/^power:\w+,cooling:\w+,compute:\w+,data:\w+,connections:\w+$/.test(lights)) throw new Error(`Ecosystem bar: ${lights}`)
-    const picks = { model: ["model-70b", "users-large"], location: ["location-lon", "location-fra"], gpu: ["gpu-gb200"], cooling: ["cooling-super"], memory: ["memory-on"], wires: ["wires-fast"], storage: ["storage-none"], qpu: [] }
+    const picks = { model: ["model-70b", "users-large"], location: ["location-lon", "location-fra"], gpu: ["gpu-gb200"], cooling: ["cooling-super"], memory: ["memory-on"], wires: ["wires-fabric"], storage: ["storage-none"], qpu: [] }
+    /* OPTIMISE ROUTING: one click, the route line reads OPTIMISED, the before/after line names the first token and the cost per 1M tokens, the light is green. */
+    const checkOptimise = async (label) => {
+      if (!(await has('[data-key="net-optimise"]'))) throw new Error(`${label}: the NET step should offer OPTIMISE ROUTING`)
+      await click('[data-key="net-optimise"]')
+      await waitFor(`/^(OPTIMISED|AGENT-ROUTED)/.test(document.querySelector('[data-key="route-line"]').textContent)`, "optimised route line")
+      const routeLine = await text('[data-key="route-line"]')
+      if (!/Users → (ServiceFabric|Cross Connect|Dark Fiber)/.test(routeLine)) throw new Error(`${label}: the route line should name the users' product: ${routeLine}`)
+      const netResult = await text('[data-key="net-result"]')
+      if (!/^(OPTIMISED|AGENT-ROUTED): First token .+ → .+ · \$[\d.,]+[kM]? → \$[\d.,]+[kM]? per 1M tokens\.$/.test(netResult)) throw new Error(`${label}: the result line should show first token and cost per 1M tokens before and after: ${netResult}`)
+      const connections = await evaluate(`document.querySelector('[data-key="eco-bar"] .eco-part[data-part="connections"]').dataset.state`)
+      if (connections !== "green") throw new Error(`${label}: OPTIMISE ROUTING should turn the CONNECTIONS light green, saw ${connections}`)
+      if (await has("#toast")) {
+        const toast = await text("#toast")
+        if (!/→/.test(toast)) throw new Error(`${label}: the learn toast should explain the route leg by leg: ${toast}`)
+        await click("#toast")
+        await waitFor(`!document.querySelector('#toast')`, "toast gone")
+      }
+      console.log(`optimise ${label}: ${routeLine}`)
+    }
     for (const step of BUILD_STEPS) {
       await click(`[data-key="step-${step}"]`)
       await waitFor(`document.querySelector('[data-key="step-panel"]').classList.contains('step-${step}')`, `${step} step`)
@@ -423,6 +442,12 @@ try {
         if (tiles !== 4) throw new Error(`cooling: the simple board shows 4 tiles, saw ${tiles}`)
         const coolTags = await evaluate(`[...document.querySelectorAll('.step-cooling .tile .tile-tag')].map((t) => t.textContent.trim())`)
         if (coolTags.length !== 4 || coolTags.some((tag) => !/^(UP TO |15–|40–)\d+ KW · \d+% ON COOLING · (\d+ WK|READY NOW)$/i.test(tag))) throw new Error(`Every cooling tile should carry its kW band, overhead and lead: ${coolTags.join(" | ")}`)
+      } else if (step === "wires") {
+        /* Five product tiles (ServiceFabric MCP among them) and one-click OPTIMISE ROUTING, which turns the CONNECTIONS light green. */
+        if (tiles !== 5) throw new Error(`wires: the simple board shows five product tiles, saw ${tiles}`)
+        const products = await evaluate(`[...document.querySelectorAll('.step-wires .tile .tile-title')].map((t) => t.textContent.trim()).join(',')`)
+        if (products !== "Public internet,Cross Connect,ServiceFabric,ServiceFabric MCP,Dark Fiber") throw new Error(`The NET products should be the five the brief names: ${products}`)
+        await checkOptimise(`${tag} simple`)
       } else if (step !== "qpu" && tiles !== 3 && step !== "location" && step !== "model") throw new Error(`${step}: the simple board shows 3 tiles, saw ${tiles}`)
       const simpleText = await text(".screen.game")
       const jargon = ["TB/s", "PFLOPS", "PUE"].filter((word) => simpleText.includes(word))
@@ -492,11 +517,34 @@ try {
     if (!/ROUND 2 OF 2/.test(roundBadge)) throw new Error(`Round two should be announced: ${roundBadge}`)
     await click('[data-key="step-wires"]')
     await waitFor(`document.querySelector('[data-key="step-panel"]').classList.contains('step-wires')`, "wires step")
-    await click('[data-key="wires-cheap"]')
+    /* Products multi-select: add the public internet, then drop ServiceFabric, so the shoppers ride the open road. */
+    await click('[data-key="wires-public"]')
+    await sleep(120)
+    await click('[data-key="wires-fabric"]')
     await sleep(150)
+    const onNow = await evaluate(`[...document.querySelectorAll('.step-wires .tile[aria-pressed="true"]')].map((t) => t.dataset.key).join(',')`)
+    if (onNow !== "wires-public") throw new Error(`Dropping ServiceFabric should leave the public internet alone: ${onNow}`)
     const cheapCoach = await text('[data-key="coach"]')
     if (!/\?\s*$/.test(cheapCoach)) throw new Error(`The coach should question the public internet: ${cheapCoach}`)
+    if (await has("#toast")) {
+      await click("#toast")
+      await waitFor(`!document.querySelector('#toast')`, "toast gone")
+    }
     await bothModes("8-round-2-wires")
+    /* Nerd mode: ten product tiles, the per-leg table, and OPTIMISE ROUTING works there too. */
+    await setNerd(true)
+    await waitFor(`document.querySelectorAll('.step-wires .tile').length === 10`, "ten nerd product tiles")
+    if (!(await has('[data-key="leg-table"]'))) throw new Error("Nerd mode should show the per-leg table on the NET step")
+    await checkOptimise(`${tag} nerd`)
+    await setNerd(false)
+    await click('[data-key="wires-public"]')
+    await sleep(120)
+    await click('[data-key="wires-fabric"]')
+    await sleep(150)
+    if (await has("#toast")) {
+      await click("#toast")
+      await waitFor(`!document.querySelector('#toast')`, "toast gone")
+    }
     await click('[data-key="step-review"]')
     await waitFor(`!!document.querySelector('[data-key="run"]')`, "review two")
     await bothModes("8-round-2-review")

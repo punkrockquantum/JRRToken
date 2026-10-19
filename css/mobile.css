@@ -251,7 +251,12 @@ button, .tile, .story-card, .rail-btn, .learn-btn, .eco-part, .ra-card, .dot, a 
 #stage .tile-row-group .row-title { font-size: 12px; }
 #stage .tile-row-group .row-title .row-nerd { font-size: 12px; -webkit-line-clamp: 3; }
 .nerd { font-size: 12px; line-height: 1.4; }
-#stage .mcp-toggle { font-size: 12px; height: 32px; }
+#stage .net-panel { gap: 8px; margin-top: 8px; }
+#stage .net-panel .btn.big { min-height: 44px; font-size: 13px; }
+#stage .net-panel .route-line, #stage .net-panel .net-result, #stage .net-panel .net-hint { font-size: 12px; line-height: 1.4; }
+#stage .leg-table { font-size: 12px; }
+#stage .leg-table th, #stage .leg-table td { white-space: normal; padding: 4px 6px 4px 0; }
+#stage .leg-pick { font-size: 14px; min-height: 44px; }
 
 /* Location: the brief in one column, then the metro tiles with one trip a line. */
 #stage .who-where { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 8px; }
