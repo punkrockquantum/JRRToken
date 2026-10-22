@@ -66,6 +66,8 @@ test("the shared-scores hint shows only when health says the hosted sheet is not
 
 test("the title re-reads the sheet every time it shows and renders rank, name and score only", () => {
   assert.match(main, /if \(screen === "title"\) refreshServerLeague\(\)/, "goto('title') re-fetches: on load, after every game, after a staff action")
+  assert.match(main, /export const BOARD_REFRESH_MS = 15000/, "the board keeps polling while the title is up, so other devices' games appear without a reload")
+  assert.match(main, /boardTimer = setTimeout\(\(\) => \{\s*if \(state\.screen === "title" && document\.visibilityState !== "hidden"\) refreshServerLeague\(\)/, "polls only while the title is on screen and the tab is visible")
   assert.match(main, /fetchLeague\(\)\.then\(\(players\) => \{\s*state\.serverLeague = players/)
   assert.match(main, /fetchHealth\(\)\.then\(\(health\) => \{\s*state\.serverHealth = health/)
   assert.match(main, /titleBoard\(state\.serverLeague, state\.league, TITLE_ROWS\)/)

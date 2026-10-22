@@ -1,4 +1,4 @@
-import { PLATFORMS, SITES, USE_CASES, byId, dataHomeFor } from "./data.js"
+import { PLATFORMS, POWER_STEP_MW, SITES, USE_CASES, byId, dataHomeFor } from "./data.js"
 import { designCard, designFor, designLines, designsFor, referenceDesign } from "./refarch.js"
 import { BUILD } from "./build-info.js"
 import { drHelp } from "./drhelp.js"
@@ -20,7 +20,7 @@ import { spriteImg } from "./sprites.js"
 import { COMBO, STORIES, brainPick, choicesToBuild, cleanMetros, maxMetros, nerdChoices, simpleChoices } from "./presets.js"
 import { PRODUCTS, activeLegsFor, netOf, productOnLeg } from "./netplan.js"
 import { bestConnectivity, legWord, routeKey, routeSummary } from "./optimise.js"
-import { BUILD_STEP_IDS, STEPS, STEP_IDS, applyRacks, applyTile, audienceSummary, jobBrief, modelLabel, nextStep, prevStep, qpuRelevant, rackBounds, rackGuard, simpleDefaults, stepIndex, stepTiles, stepValue, tileGuard, tileOn, untouchedSteps, wiresHint } from "./steps.js"
+import { BUILD_STEP_IDS, STEPS, STEP_IDS, applyPower, applyRacks, applyTile, audienceSummary, jobBrief, modelLabel, nextStep, prevStep, powerNeedLine, qpuRelevant, rackBounds, rackGuard, simpleDefaults, stepIndex, stepTiles, stepValue, tileGuard, tileOn, untouchedSteps, wiresHint } from "./steps.js"
 import { canImprove, roundHint, roundLine } from "./rounds.js"
 import { TEST_MODE_BADGE, TEST_MODE_LINE, canStart, settleAttempt, testModeAfterReset } from "./testmode.js"
 
@@ -396,6 +396,10 @@ function titleScreen() {
  * every game, after a staff action): /api/league for the players, /api/health for whether the
  * hosted sheet is wired up yet. The browser's own league only stands in when the API is unreachable.
  */
+/** While the title is on screen the board re-reads the shared scores this often, so a game finished on another device shows up without a reload (game assumption: 15 s is quick for a booth and light on the server). */
+export const BOARD_REFRESH_MS = 15000
+let boardTimer = 0
+
 function refreshServerLeague() {
   const paint = () => {
     const slot = document.getElementById("league-slot")
@@ -410,6 +414,11 @@ function refreshServerLeague() {
     state.serverHealth = health
     paint()
   }).catch(() => {})
+  clearTimeout(boardTimer)
+  boardTimer = setTimeout(() => {
+    if (state.screen === "title" && document.visibilityState !== "hidden") refreshServerLeague()
+    else if (state.screen === "title") boardTimer = setTimeout(refreshServerLeague, BOARD_REFRESH_MS)
+  }, BOARD_REFRESH_MS)
 }
 
 /** HIGH SCORES: exactly the top three by best score, first and last name as entered, and the score. */
@@ -832,6 +841,7 @@ function impactStrip(impact, key) {
       chip("FIRST TOKEN", impact.firstToken.label, impact.firstToken.state, "first"),
       chip("STREAM", impact.stream.feel, impact.stream.state, "stream"),
       chip("GPU IDLE", impact.idle.label, impact.idle.state, "idle"),
+      impact.feed ? chip("FEED", impact.feed.label, impact.feed.state, "feed") : null,
     ]),
     el("span", { class: "imp-why", "data-part": "why", text: impact.why }),
     state.nerd ? el("span", { class: "imp-nerd", "data-part": "nerd", text: detailLine(impact.detail) }) : null,
@@ -954,7 +964,8 @@ function stepPanel(stepId, result) {
       hint: tile.hint,
       /* GPU tiles carry their four engine numbers as one wrapped line; metro tiles keep their row grid. */
       rows: stepId === "gpu" ? null : tile.rows || null,
-      fact: stepId === "gpu" && tile.rows?.length ? tile.rows : "", /* "serves 45% · power 0.12/0.6 MW · cost $6.9M · lead 12 wk"; narrow boards drop the labels */
+      /* GPU: "serves 45% · power 0.12/0.6 MW · cost $6.9M · lead 12 wk" (narrow boards drop the labels); other steps: the tile's own fact, e.g. a metro's power offer. */
+      fact: stepId === "gpu" ? (tile.rows?.length ? tile.rows : "") : tile.fact || "",
       on: isOn(tile),
       lines: guard.blocked ? [guard.line, ...tile.lines] : tile.lines,
       nerd: impact ? detailLine(impact.detail) : tile.nerd || "",
@@ -979,8 +990,11 @@ function stepPanel(stepId, result) {
         ? "No choice here. Read why, then NEXT."
         : stepId === "wires"
           ? `${step.hint}: pick any products, the router puts the best one on each leg, or press OPTIMISE ROUTING.`
-          : step.hint
-  /* MODEL & USERS: MODEL SIZE tiles on one row, USERS tiles on the next, each row with its own heading. */
+          : stepId === "power"
+            ? `${step.hint}: one block per metro. ${powerNeedLine(result, state.nerd)}`
+            : step.hint
+  /* MODEL & USERS: MODEL SIZE tiles on one row, USERS tiles on the next, each row with its own heading.
+     POWER: one row per chosen metro, that metro's blocks on it, the nerd 50 kW stepper beside the heading. */
   const grid = stepId === "model"
     ? ["model", "users"].map((row) => {
       const mine = wraps.filter((_, index) => tiles[index].row === row)
@@ -993,7 +1007,18 @@ function stepPanel(stepId, result) {
         el("div", { class: `tiles count-${mine.length}` }, mine),
       ])
     })
-    : [el("div", { class: `tiles count-${wraps.length}` }, wraps)]
+    : stepId === "power"
+      ? (result.power?.sites || []).map((site) => {
+        const mine = wraps.filter((_, index) => tiles[index].metro === site.id)
+        return el("div", { class: `tile-row-group row-power power-${site.state}`, "data-key": `row-power-${site.id}`, "data-state": site.state }, [
+          el("h3", { class: "row-title" }, [
+            `${site.metro.toUpperCase()} · NEEDS ${(site.needKW / 1000).toFixed(2)} MW · ${site.chosen ? `${site.mw} MW CONTRACTED` : `${site.mw} MW HELD, PICK A BLOCK`}`,
+            state.nerd ? powerStepper(site) : null,
+          ]),
+          el("div", { class: `tiles count-${mine.length}` }, mine),
+        ])
+      })
+      : [el("div", { class: `tiles count-${wraps.length}` }, wraps)]
   return el("section", { class: `step-panel step-${stepId}`, "data-key": "step-panel", "aria-labelledby": "step-title" }, [
     el("div", { class: "step-head" }, [
       el("h2", { id: "step-title", text: `${stepIndex(stepId) + 1}. ${step.title}` }),
@@ -1137,7 +1162,7 @@ function rackStepper(result, selected) {
   const served = Math.round((result.coverage || 0) * 100)
   /* Short on purpose: beside the buttons it has about thirty characters a line on a 1024px board. */
   const line = result.overPower
-    ? `Over the ${result.powerMW} MW on offer: racks brown out, the overflow is billed.`
+    ? `Over the ${result.powerMW} MW ${result.powerPicked ? "contracted" : "on offer"}: racks brown out, the overflow is billed.`
     : `${platform.name} ×${racks}: serves ${served}% · ${(result.powerUsedMW || 0).toFixed(2)}/${result.powerMW} MW · ${formatMoney(result.budgetSpend || 0)}`
   return el("div", { class: "rack-stepper", "data-key": "rack-stepper" }, [
     el("div", { class: "rack-row", title: `1 to ${bounds.max} racks in this hall` }, [
@@ -1147,6 +1172,39 @@ function rackStepper(result, selected) {
       ...bounds.steps.filter((delta) => delta > 0).map(button),
     ]),
     el("p", { class: `fine rack-line${result.overPower ? " warn" : ""}`, "data-key": "rack-line", text: line }),
+  ])
+}
+
+/**
+ * Nerd POWER step: a 50 kW stepper beside each metro's row (user: "nerd 50 kW stepper"). The row's
+ * blocks stay tappable; a stepped figure off the ladder lights no block but the heading shows it.
+ */
+function powerStepper(site) {
+  const id = state.plan.useCase
+  const button = (delta) => {
+    const node = el("button", {
+      type: "button",
+      class: "step rack-step power-step",
+      "data-key": `power-${site.id}-${delta < 0 ? "minus" : "plus"}`,
+      text: delta < 0 ? "−50 kW" : "+50 kW",
+      "aria-label": `${delta < 0 ? "Less" : "More"} power in ${site.metro} (${delta > 0 ? "+" : "−"}50 kW)`,
+      disabled: delta < 0 && site.mw <= POWER_STEP_MW + 1e-9,
+    })
+    node.addEventListener("pointerdown", (event) => event.stopPropagation())
+    node.addEventListener("click", (event) => {
+      event.stopPropagation()
+      play("select")
+      state.plan.choices = applyPower(id, state.plan.choices, site.id, delta, state.nerd)
+      syncBuild()
+      render()
+    })
+    return node
+  }
+  return el("span", { class: "rack-row power-row", "data-key": `power-stepper-${site.id}` }, [
+    button(-POWER_STEP_MW),
+    el("span", { class: "rack-count", "data-key": `power-count-${site.id}`, "aria-live": "polite", text: `${site.mw.toFixed(2)} MW` }),
+    button(POWER_STEP_MW),
+    el("span", { class: "fine row-nerd", text: `${Math.round(site.needKW)} kW need · ${Math.round(site.capKW)} kW contracted · ${formatMoney(site.annual)} a year (est.)` }),
   ])
 }
 
@@ -1245,7 +1303,9 @@ function reviewPanel(result) {
       ? value.map((site) => byId(SITES, site)?.metro || site).join(" + ")
       : stepId === "model"
         ? modelLabel(id, choices)
-        : tiles.find((tile) => tile.id === value)?.label || stepTiles(id, stepId, !state.nerd, choices).find((tile) => tile.id === value)?.label || String(value)
+        : stepId === "power"
+          ? (result.power?.sites || []).map((site) => `${site.metro} ${site.mw} MW${site.chosen ? "" : " (held)"}`).join(" + ") || "not picked"
+          : tiles.find((tile) => tile.id === value)?.label || stepTiles(id, stepId, !state.nerd, choices).find((tile) => tile.id === value)?.label || String(value)
     return el("div", { class: `review-row${untouched.has(stepId) ? " untouched" : ""}`, "data-key": `review-${stepId}` }, [
       el("span", { class: "fine", text: step.title }),
       el("strong", { text: label }),

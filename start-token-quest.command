@@ -105,9 +105,46 @@ if [ -f .env ]; then
   echo "Reading .env: $(grep -oE '^[[:space:]]*(export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*' .env | sed -E 's/^[[:space:]]*(export[[:space:]]+)?//' | tr '\n' ' ')(values are not shown)"
 fi
 
+# Every laptop feeds the one scoreboard. Without the team settings the games would stay on this machine,
+# so the launcher refuses to run a silent, offline kiosk (set KIOSK_URL for the all-central mode instead).
+UPSTREAM_URL_SET="${UPSTREAM_URL:-$(env_value UPSTREAM_URL)}"
+UPSTREAM_KEY_SET="${UPSTREAM_KEY:-$(env_value UPSTREAM_KEY)}"
+if [ -z "$UPSTREAM_URL_SET" ] || [ -z "$UPSTREAM_KEY_SET" ]; then
+  pause_and_exit "This laptop is not connected to the team scoreboard.
+Create a file named .env next to this script with:
+  UPSTREAM_URL=https://tokenquest.tokenquest.workers.dev
+  UPSTREAM_KEY=<the team server's intake key: copy it from a laptop that already has it>
+(or KIOSK_URL=https://tokenquest.tokenquest.workers.dev to run everything on the team server), then try again."
+fi
+
+# Always run the latest game: pull when this is a git checkout with a reachable remote (a failed pull is
+# not fatal: an offline laptop plays what it has and syncs later).
+if [ -d .git ] && command -v git >/dev/null 2>&1; then
+  BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+  if git pull --ff-only --quiet origin "$BRANCH" 2>/dev/null; then
+    echo "Game code is up to date ($(git rev-parse --short HEAD))."
+  else
+    echo "Could not pull the latest game (offline, or local changes): playing this laptop's copy ($(git rev-parse --short HEAD 2>/dev/null))."
+  fi
+fi
+
+# A server left running from an earlier day may predate the sync code. Restart it so it reads .env and
+# pushes everything this laptop holds before the first player arrives.
 SERVER_PID=""
 if port_open; then
-  echo "Something is already listening on port $PORT (probably Token Quest). Opening the game."
+  OLD_PID="$(lsof -tnP -iTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | head -1)"
+  if [ -n "$OLD_PID" ] && ps -o command= -p "$OLD_PID" 2>/dev/null | grep -q "scripts/serve.mjs"; then
+    echo "Restarting the Token Quest server already on port $PORT so it runs the latest code with the team settings."
+    kill "$OLD_PID" 2>/dev/null
+    for _ in $(seq 1 50); do
+      if ! port_open; then break; fi
+      sleep 0.1
+    done
+  fi
+fi
+
+if port_open; then
+  echo "Something else is listening on port $PORT. Opening the game there."
 else
   echo "Starting the Token Quest server on $URL"
   "$NODE" scripts/serve.mjs --port "$PORT" &
@@ -124,6 +161,28 @@ else
     pause_and_exit "The server did not start listening on port $PORT."
   fi
 fi
+
+# Push anything this laptop still holds (earlier days, offline play) to the team scoreboard before the
+# first game. The server queues on start-up by itself; this just waits a moment and reports the result.
+"$NODE" -e '
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+  const url = "http://127.0.0.1:" + process.argv[1] + "/api/health"
+  ;(async () => {
+    let last = null
+    for (let i = 0; i < 40; i += 1) {
+      try {
+        const res = await fetch(url)
+        const data = await res.json()
+        const up = data.upstream || {}
+        last = up
+        if (!up.configured) { console.log("Scoreboard sync: not configured (check .env)."); return }
+        if (up.queued === 0) { console.log("Scoreboard sync: every game on this laptop is on the team board (" + (up.sent || 0) + " sent)."); return }
+      } catch {}
+      await wait(500)
+    }
+    if (last) console.log("Scoreboard sync: " + last.queued + " game(s) still queued; they are sent automatically as soon as the network allows" + (last.lastError ? " (" + last.lastError + ")" : "") + ".")
+  })()
+' "$PORT"
 
 open_game
 
