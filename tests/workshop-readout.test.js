@@ -43,7 +43,7 @@ test("readout: the thoughtful build gets three true things, nothing to do differ
   assert.equal(out.wentWell.length, 3)
   assert.match(out.wentWell[0], /Approved first time at all four stations/)
   assert.match(out.wentWell[1], /FP64-capable GPUs: 72 × GB200 NVL72 give 3\.24 PFLOPS/)
-  assert.match(out.wentWell[2], /Right-sized power: a 0\.25 MW block/)
+  assert.match(out.wentWell[2], /Right-sized power: the smallest block on the ladder \(0\.25 MW\) for 163 kW; nothing bigger bought\./)
   assert.deepEqual(out.doDifferently, ["Nothing beats this build at any one station: every alternative we tried scored lower."])
   assert.deepEqual(out.architectNotes, [])
   assert.equal(out.closing, DR_CLOSING)

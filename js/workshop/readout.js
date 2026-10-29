@@ -53,7 +53,7 @@ export function wentWell(result, { sendBacks = 0, firstTime = null, limit = 3 } 
   if (stationsFirstTime === 4) lines.push("Approved first time at all four stations: clear pitches, no send-backs.")
   else if (stationsFirstTime !== null && stationsFirstTime >= 2) lines.push(`Approved first time at ${stationsFirstTime} of 4 stations.`)
   if (!r.gpu.trap) lines.push(`FP64-capable GPUs: ${r.gpu.gpus} × ${r.gpu.title.replace(/ nodes| rack| servers/, "")} give ${r.pflops} PFLOPS of double precision, ${r.runs} runs a night against a par of ${r.parRuns}.`)
-  if (r.power.state === "green") lines.push(`Right-sized power: a ${r.power.mw} MW block for ${r.power.facilityKW} kW, ${r.power.headroomPct}% headroom, nothing stranded.`)
+  if (r.power.state === "green") lines.push(r.power.headroomPct <= 20 ? `Right-sized power: a ${r.power.mw} MW block for ${r.power.facilityKW} kW, ${r.power.headroomPct}% headroom, nothing stranded.` : `Right-sized power: the smallest block on the ladder (${r.power.mw} MW) for ${r.power.facilityKW} kW; nothing bigger bought.`)
   if (r.net.allPrivate) lines.push(`Private connectivity on every leg: ${r.net.frameMs} ms remote 3D frames for both offices and the night's data home in ${r.net.ingestHours} h.`)
   else if (r.net.private) lines.push(`Private connectivity for the remote 3D views: ${r.net.frameMs} ms frames instead of the public internet's jitter.`)
   if (r.cooling.liquid && r.design.cooling === "liquid") lines.push(`Direct liquid cooling for ${r.rackKW} kW racks: the density the design needs, PUE ${r.cooling.pue}.`)

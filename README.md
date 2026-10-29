@@ -154,6 +154,58 @@ fetch the Excel file. The shared scoreboard for all devices is https://tokenques
 **Test mode:** the switch on the title screen plays a full game without saving anything, for demos and
 rehearsals.
 
+## Workshop mode (table teams)
+
+A 50-minute room format on the same Worker: up to **10 tables**, an **architect at every table** as the
+host, one iPad per table, a facilitator laptop and a projector. The scenario is fiction, labelled as such:
+*design a CFD supercomputer for Apex Aero Racing*, an F1-style aerodynamics team with 1,500 engineers in
+Milton Keynes and Modena, the simulation data in the UK data room, $9M, 16 weeks, and a par of 40 overnight
+runs. Every iPad has exactly four stations, a few three-tile decisions each, one plain sentence per tile
+and a `?` for the detail:
+
+| Station | Decisions (tiles) |
+|---|---|
+| **CONNECTIVITY** | Public internet · ServiceFabric · Cross Connect + Dark Fiber · COMBO (ServiceFabric + Dark Fiber) |
+| **OEMs** | A · Air-cooled 8-GPU node · B · Direct-liquid 8-GPU node · C · Rack-scale NVL72 |
+| **DATACENTER & POWER** | Metro: London · Frankfurt · Paris — Cooling: air · rear-door · direct liquid — Power block: smallest · middle · biggest |
+| **CFD SUPERCOMPUTER** | GPU: HGX H200 · GB200 NVL72 · RTX PRO 6000 (the inference trap) — Size: small · medium · large — Fabric: Ethernet + file storage · InfiniBand + parallel file system · NVLink-scale + GPU-adjacent storage |
+
+Delegates **pitch each station to their architect** on the iPad; the architect types a 4-digit host code
+and presses APPROVE or SEND BACK (one-tap reason: cost, power, latency, risk, wrong tool). Each send-back
+costs 3% of the score. When all four are approved the table presses SUBMIT BUILD.
+
+**Run of show (50 minutes):** 0–5 brief · 5–41 build · 41–50 read-out. The facilitator page runs the clock
+(server time; every iPad and the projector agree to the second) and can add or remove minutes.
+
+| Who | URL | What |
+|---|---|---|
+| Facilitator | `/host` | CREATE SESSION → join code + QR, ten host codes (one per architect), the PIN; START 5-MIN BRIEF → START BUILD → START READ-OUT → END SESSION; −1 / +1 / +5 MIN; tables × stations grid |
+| Table iPads | `/workshop` (or scan the QR: `/workshop?code=XXXX`) | JOIN (table number, team name, architect) → HOME (timer, scenario, four stations) → STATION → PITCH → ARCHITECT APPROVAL → SUBMIT BUILD → READ-OUT (printable) |
+| Projector | `/board/XXXX` | big clock and phase, one row per table with four station lights, scores and ranks from the read-out on; no names beyond the team names, no emails |
+
+All three pages sit behind the same team password as the game. Nothing in the workshop asks for an email.
+
+**Score** = 1,000 × runs a night vs par (cap 1.4) × money left (+2% per $1M of the $9M unspent) ×
+first-time approval (−3% per send-back, floor 0.85) × right-sized power (green 1 · amber 0.9 · red 0.75) ×
+latency (3D frames ≤ 30 ms, the night's data home ≤ 4 h) × on time (−5% a week past 16, floor 0.7); floor
+100. The thoughtful build (COMBO · rack-scale NVL72 · a liquid hall with the smallest block that fits ·
+GB200 small on NVLink) scores **1,524**; the RTX trap never passes 123; the biggest power block never beats
+a right-sized one. `node scripts/balance-workshop.mjs` enumerates all 8,748 builds and prints the tables
+(`docs/plan-workshop.md` has them).
+
+**Read-out** (each iPad at the read-out, printable, and `GET /api/team/:id/readout`): score and rank,
+WHAT WENT WELL (three things the decisions earned), WHAT YOU COULD HAVE DONE DIFFERENTLY (a quantified path of
+up to three single-station fixes and the gap to the top build), YOUR ARCHITECT'S NOTES (every send-back and
+its reason), and one closing line on Digital Realty's role, from published facts only.
+
+**Run it locally:** `node scripts/workshop-dev-server.mjs --seed` starts the real Worker on
+http://127.0.0.1:8789 with an in-memory database and prints a session code, PIN and host codes.
+`node scripts/smoke-workshop.mjs` plays a whole session in headless Chrome (three tables on iPad viewports,
+the facilitator, the board) with a layout audit on every screen; `SHOTS=.shots` keeps the screenshots.
+First deploy of the workshop: `cd deploy/intake-worker && npx --yes wrangler@4 d1 migrations apply
+tokenquest-players --remote` (the `sessions`, `teams`, `decisions`, `readouts` tables), then
+`npm run deploy:worker`.
+
 ## Hosting
 
 | Where | What | How |
@@ -180,6 +232,10 @@ server/, scripts/serve.mjs       the kiosk server: attempts log, league API, Exc
 deploy/intake-worker/            the Cloudflare Worker: static assets, API, the scores in its D1 database (readable at /staff with the team password), gate
 scripts/balance.mjs              enumerates builds per story and checks the balance
 scripts/smoke.mjs                plays the whole game in headless Chrome at four viewports
+js/workshop/, css/workshop.css,  workshop mode: the table iPad (app.js), facilitator (host.js), board (board.js),
+  assets/workshop/               the scenario + score (cfd.js), read-out, timer, QR; served at /workshop, /host, /board/<code>
+deploy/intake-worker/src/session*.mjs, migrations/0002_sessions.sql   the workshop's sessions API and tables
+scripts/workshop-dev-server.mjs, scripts/smoke-workshop.mjs, scripts/balance-workshop.mjs   local run, browser smoke, balance
 tests/                           node --test suites for the model, copy, server, worker
 docs/                            phase plans and checklists
 ```

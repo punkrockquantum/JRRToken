@@ -92,6 +92,7 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
 - `deploy/intake-worker/src/gate.mjs`: `safeNextPath()`, `loginPage({ next })`.
 - `tests/intake.test.js`: migration list assertion lists `0002_sessions.sql`.
 - `index.html`: none (the kiosk game is untouched; the workshop is reached at `/workshop`).
+- `README.md`: one new section ("Workshop mode (table teams)") and four lines in the repository layout.
 
 ## P1 — Migration + session API + tests
 
@@ -124,6 +125,14 @@ any case be stopped by `scripts/deploy-guard.mjs` while the other agent's uncomm
 Until the migration runs, every `/api/session*` call answers `503 store_unavailable` with the message
 "the workshop tables (sessions, teams, decisions, readouts) do not exist yet: run `npx wrangler d1
 migrations apply …`"; the kiosk game is unaffected (its routes and table are untouched).
+
+After the deploy, one live check: `WORKSHOP_URL=https://tokenquest.tokenquest.workers.dev
+WORKSHOP_PASSWORD=<team password> SHOTS=.shots node scripts/smoke-workshop.mjs` (creates a throwaway
+session and deletes it at the end), then read the screenshots.
+
+Commits on `cursor/token-quest-datacenter-game`: P1 `f318cf3`, P2 `70ea753`, P3 `bb386e7`, P4 `c0f7bf3`,
+P5 (this one). Workshop tests: `node --test tests/workshop-*.test.js` → 38 tests (api 10, timer 5,
+engine 9, qr 7, readout + balance 6, plus intake's migration check); whole suite 344 tests, 0 failing.
 
 ## P2 — Team iPad
 
@@ -225,8 +234,19 @@ thoughtful build: 0 → 1524 · 1 → 1479 · 2 → 1433 · 3 → 1387 · 5+ →
 
 ## P5 — Smoke + screenshots + README
 
-- [ ] `scripts/smoke-workshop.mjs`: headless Chrome, create session, three teams on iPad viewports,
-      decisions, pitches, approvals, submit, phases, board and read-outs; layout audit; screenshots
-- [ ] Run against `wrangler dev --local` (local D1) or a throwaway live session
-- [ ] README "Workshop mode (table teams)" with the run-of-show and URLs
-- [ ] final commit, push, deploy
+- [x] `scripts/smoke-workshop.mjs`: headless Chrome via CDP with one browser context per device: the
+      facilitator (1180×820) creates the session; three tables join on iPads (1180×820, 1024×768), work all
+      four stations (tiles → PITCH → architect keypad → APPROVE, one SEND BACK with a reason), one submits;
+      BRIEF → BUILD → +1 MIN → READ-OUT → END; the board (1920×1080) before and after the scores release;
+      each iPad's read-out checked for its headings, the architect's note and the closing line; scores in
+      order. Every screen passes the audit (no page scroll, nothing outside the viewport, no overlapping
+      tiles, 44 px tap targets, 8 px+ text, no console errors). `SHOTS=dir` keeps a PNG per screen and a
+      `fail-<device>.png` of every device when a step fails. `WORKSHOP_URL` + `WORKSHOP_PASSWORD` run it
+      against a live deployment on a throwaway session that is deleted at the end
+- [x] Ran green against the in-process dev server: 30 screens, 1524 / 1016 / 100 (`node --test
+      scripts/smoke-workshop.mjs` also works). The live run waits for the deploy
+- [x] The smoke found a real bug: a poll re-render wiped the architect's half-typed host code (and the
+      send-back reason). The sheet state now holds both, so the keypad survives the 4-second refresh
+- [x] README "Workshop mode (table teams)": stations and tiles, run of show, the three URLs, the score,
+      the read-out, local run, first-deploy migration; repository layout lines
+- [~] final commit, push (done); deploy waits for a clean guarded tree (see "Deploy status")

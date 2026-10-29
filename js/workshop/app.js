@@ -520,18 +520,19 @@ export function createApp({ root = document.getElementById("app"), api = createA
     } else {
       const station = stationById(s.stationId)
       const decision = decisionFor(s.stationId)
-      let code = ""
-      let reason = ""
-      const approve = el("button.btn.go.big.wide", { type: "button", disabled: true, onclick: () => judge(s.stationId, { hostCode: code, verdict: "approved" }) }, "APPROVE")
-      const sendBack = el("button.btn.big.wide", { type: "button", disabled: true, onclick: () => judge(s.stationId, { hostCode: code, verdict: "sent_back", note: reason }) }, "SEND BACK")
-      const reopen = el("button.btn.yellow.big.wide", { type: "button", disabled: true, onclick: () => judge(s.stationId, { hostCode: code, verdict: "reopen" }) }, "RE-OPEN THIS STATION")
+      /* The typed code and the chosen reason live on the sheet state: a poll re-renders the screen every few seconds and must not wipe what the architect typed. */
+      s.code = s.code || ""
+      s.reason = s.reason || ""
+      const approve = el("button.btn.go.big.wide", { type: "button", disabled: true, onclick: () => judge(s.stationId, { hostCode: s.code, verdict: "approved" }) }, "APPROVE")
+      const sendBack = el("button.btn.big.wide", { type: "button", disabled: true, onclick: () => judge(s.stationId, { hostCode: s.code, verdict: "sent_back", note: s.reason }) }, "SEND BACK")
+      const reopen = el("button.btn.yellow.big.wide", { type: "button", disabled: true, onclick: () => judge(s.stationId, { hostCode: s.code, verdict: "reopen" }) }, "RE-OPEN THIS STATION")
       const sync = () => {
-        const ready = code.length === 4
+        const ready = s.code.length === 4
         approve.disabled = !ready
-        sendBack.disabled = !ready || !reason
+        sendBack.disabled = !ready || !s.reason
         reopen.disabled = !ready
       }
-      const pad = keypad({ length: 4, onchange: (value) => ((code = value), sync()) })
+      const pad = keypad({ length: 4, initial: s.code, onchange: (value) => ((s.code = value), sync()) })
       const reasons = el(
         "div.reasons",
         {},
@@ -540,10 +541,10 @@ export function createApp({ root = document.getElementById("app"), api = createA
             "button.reason",
             {
               type: "button",
-              "aria-pressed": "false",
+              "aria-pressed": String(s.reason === label),
               onclick: (e) => {
-                reason = reason === label ? "" : label
-                for (const node of e.currentTarget.parentNode.children) node.setAttribute("aria-pressed", String(node.textContent.toLowerCase() === reason))
+                s.reason = s.reason === label ? "" : label
+                for (const node of e.currentTarget.parentNode.children) node.setAttribute("aria-pressed", String(node.textContent.toLowerCase() === s.reason))
                 sync()
               },
             },
@@ -563,7 +564,10 @@ export function createApp({ root = document.getElementById("app"), api = createA
         judging ? reasons : null,
         el("div.row", { style: { justifyContent: "flex-end" } }, el("button.btn.ghost", { type: "button", onclick: closeSheet }, "CANCEL")),
       )
-      body.resetKeypad = () => pad.reset()
+      body.resetKeypad = () => {
+        s.code = ""
+        pad.reset()
+      }
       s.node = body
     }
     return el("div.sheet-back", { onclick: (e) => e.target === e.currentTarget && s.kind === "learn" && closeSheet() }, body)
