@@ -6,7 +6,7 @@
  * architect's notes from any SEND BACK, and one closing line on Digital Realty's role built from
  * published facts only. The Worker stores the result in `readouts`; the iPad prints it.
  */
-import { SCENARIO, STATION_IDS, completeChoices, evaluateWorkshop, formatMoney, stationById, tileOf } from "./cfd.js"
+import { REFERENCE_BUILD, RUNS_CAP, SCENARIO, STATION_IDS, completeChoices, evaluateWorkshop, formatMoney, stationById, tileOf } from "./cfd.js"
 
 /** Published facts only (digitalrealty.com, checked Oct 2026). */
 export const DR_CLOSING = "Digital Realty runs 300+ data centers in 50+ metros on PlatformDIGITAL: the metros on your board are real, ServiceFabric is how a CFD site reaches the offices, the data room and the clouds privately, and its liquid-cooled halls are where 130 kW racks go."
@@ -59,7 +59,7 @@ export function wentWell(result, { sendBacks = 0, firstTime = null, limit = 3 } 
   if (r.cooling.liquid && r.design.cooling === "liquid") lines.push(`Direct liquid cooling for ${r.rackKW} kW racks: the density the design needs, PUE ${r.cooling.pue}.`)
   else if (!r.cooling.liquidInAir && !r.cooling.tooHot) lines.push(`Cooling matched the racks: ${r.rackKW} kW a rack under a ${r.cooling.capKW} kW ${r.cooling.title.toLowerCase()} cap.`)
   if (r.metro.id === "lon") lines.push(`London sits ${r.metro.dataKm} km from the UK data room: the shortest data leg on the board.`)
-  if (!r.overBudget) lines.push(`Within budget: ${formatMoney(r.capex)} of ${formatMoney(r.budget)}.`)
+  if (!r.overBudget) lines.push(`Within budget: ${formatMoney(r.capex)} of ${formatMoney(r.budget)}${r.moneyLeft >= 5e5 ? `, ${formatMoney(r.moneyLeft)} back to the car (+${Math.round((r.factors.value - 1) * 100)}%)` : ""}.`)
   if (r.lateWeeks === 0) lines.push(`Live in ${r.leadWeeks} weeks, inside the ${r.goLiveWeeks}-week deadline.`)
   if (r.efficiency >= 0.85) lines.push(`A fabric that feeds the GPUs: ${Math.round(r.efficiency * 100)}% interconnect efficiency.`)
   return lines.slice(0, limit)
@@ -84,6 +84,8 @@ export function bestAlternatives(choices, { sendBacks = 0 } = {}) {
       out.push({
         station: stationId,
         name: STATION_NAMES[stationId],
+        combo: best.combo,
+        fromCombo: complete[stationId],
         from: describeChoices(stationId, complete[stationId], complete.dcpower.metro),
         to: describeChoices(stationId, best.combo, best.combo.metro || complete.dcpower.metro),
         gain: best.result.score - base.score,
@@ -97,28 +99,59 @@ export function bestAlternatives(choices, { sendBacks = 0 } = {}) {
   return out.sort((a, b) => b.gain - a.gain)
 }
 
-/** The differently-sentences: the quantified best alternative per station, at most `limit`. */
+/**
+ * The differently-sentences, at most `limit`: a greedy path of single-station fixes, each quantified
+ * against the step before ("CFD: … +900", "Then DATACENTER & POWER: … +120 more"), and, when the path
+ * stops short of the thoughtful build, the gap to it. A build at the top gets one line saying so.
+ */
 export function doDifferently(choices, { sendBacks = 0, limit = 3 } = {}) {
-  const alternatives = bestAlternatives(choices, { sendBacks })
-  if (!alternatives.length) return ["Nothing beats this build at any one station: every alternative we tried scored lower."]
-  return alternatives.slice(0, limit).map((alt) => {
+  const lines = []
+  let current = completeChoices(choices)
+  const used = new Set()
+  while (lines.length < limit) {
+    const alt = bestAlternatives(current, { sendBacks }).find((candidate) => !used.has(candidate.station))
+    if (!alt) break
     const runs = alt.runsTo !== alt.runsFrom ? `, ${alt.runsFrom} → ${alt.runsTo} runs a night` : ""
     const why = reason(alt)
-    return `${alt.name}: ${alt.to} instead of ${alt.from} would have scored +${alt.gain} (${alt.score}${runs})${why ? `: ${why}` : ""}.`
-  })
+    lines.push(lines.length === 0 ? `${alt.name}: ${alt.to} instead of ${alt.from} would have scored +${alt.gain} (${alt.score}${runs})${why ? `: ${why}` : ""}.` : `Then ${alt.name}: ${alt.to} instead of ${alt.from}, +${alt.gain} more (${alt.score}${runs})${why ? `: ${why}` : ""}.`)
+    used.add(alt.station)
+    current = { ...current, [alt.station]: alt.combo }
+  }
+  const reached = evaluateWorkshop(current, { sendBacks })
+  const reference = evaluateWorkshop(REFERENCE_BUILD, { sendBacks })
+  if (reference.score > reached.score && lines.length < limit) {
+    const differs = STATION_IDS.filter((id) => describeChoices(id, current[id], current.dcpower.metro) !== describeChoices(id, REFERENCE_BUILD[id], REFERENCE_BUILD.dcpower.metro))
+    const where = differs.map((id) => `${STATION_NAMES[id]}: ${describeChoices(id, REFERENCE_BUILD[id], REFERENCE_BUILD.dcpower.metro)}`).join("; ")
+    const base = lines.length ? "From there, the" : "No single station change beats this build. The"
+    lines.push(`${base} top build on the board scores ${reference.score} (+${reference.score - reached.score}): ${reference.runs} runs a night for ${formatMoney(reference.capex)}, ${formatMoney(reference.moneyLeft)} back to the car. It differs at ${where}.`)
+  }
+  if (!lines.length) lines.push("Nothing beats this build at any one station: every alternative we tried scored lower.")
+  return lines
 }
 
-/** A short cause for the gain, from the factor that moved most. */
+/** A short cause for the gain, from the decision that changed. */
 function reason(alt) {
   const r = alt.result
-  const notes = []
-  if (r.gpu.trap === false && alt.from.includes("RTX")) notes.push("CFD needs FP64, which inference GPUs barely have")
-  if (alt.station === "dcpower" && r.power.state === "green") notes.push("the block fits the need with 10–20% headroom")
-  if (alt.station === "connectivity") notes.push(`${r.net.frameMs} ms frames and ${r.net.ingestHours} h for the night's data`)
-  if (alt.station === "oems" && !r.design.mismatch) notes.push("a design made for that GPU")
-  if (alt.station === "cfd" && r.efficiency > 0.8) notes.push("a fabric and storage that keep the GPUs fed")
-  if (!r.overBudget && alt.from && alt.result.capex < SCENARIO.budget && alt.station === "cfd" && notes.length === 0) notes.push("inside the budget")
-  return notes[0] || ""
+  const before = alt.fromCombo || {}
+  const after = alt.combo || {}
+  if (alt.station === "cfd") {
+    const cheaper = `still ${r.runs} runs a night (the score caps at ${Math.round(RUNS_CAP * SCENARIO.parRuns)}), with ${formatMoney(r.moneyLeft)} back to the car`
+    if (before.gpu !== after.gpu && before.gpu === "rtx") return "CFD needs FP64, which inference GPUs barely have"
+    if (before.gpu !== after.gpu) return alt.runsTo > alt.runsFrom ? "more runs with the design and hall you chose" : cheaper
+    if (before.size !== after.size) return alt.runsTo > alt.runsFrom ? `${tileOf("cfd", "size", after.size).title} is the size the par needs` : cheaper
+    if (before.fabric !== after.fabric) return alt.runsTo > alt.runsFrom ? "a fabric and storage that keep the GPUs fed" : cheaper
+    return r.overBudget ? "" : "inside the budget"
+  }
+  if (alt.station === "dcpower") {
+    if (before.cooling !== after.cooling) return r.cooling.liquid ? "the hall that cools liquid racks" : "cooling that matches the racks"
+    if (before.power !== after.power && r.power.state === "green") return "the block fits the need with 10–20% headroom"
+    if (before.power !== after.power) return r.power.shortKW > 0 ? "a block the racks do not trip" : "a block closer to the need"
+    if (before.metro !== after.metro) return `${r.metro.name} is ${r.metro.dataKm} km from the data`
+    return ""
+  }
+  if (alt.station === "connectivity") return `${r.net.frameMs} ms frames and ${r.net.ingestHours} h for the night's data`
+  if (alt.station === "oems") return r.design.mismatch ? "" : "a design made for that GPU"
+  return ""
 }
 
 /** "A", "A and B", "A, B and C". */

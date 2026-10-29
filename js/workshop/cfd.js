@@ -327,6 +327,15 @@ export function blockMW(metroId, blockId) {
 /* ---------- the engine ---------- */
 
 export const RUNS_CAP = 1.4
+/** +2% for every $1M of the budget left unspent: an F1 team under a cost cap puts that money on the car. Breaks the tie between builds that all hit the runs cap. */
+export const VALUE_PER_M = 0.02
+/** The thoughtful build: the top of the whole tile space (scripts/balance-workshop.mjs proves it). The read-out measures a table's gap to it. */
+export const REFERENCE_BUILD = Object.freeze({
+  connectivity: { product: "combo" },
+  oems: { design: "nvl72-rack" },
+  dcpower: { metro: "lon", cooling: "liquid", power: "block-0" },
+  cfd: { gpu: "gb200", size: "small", fabric: "nvlink" },
+})
 export const SEND_BACK_PENALTY = 0.03
 export const APPROVAL_FLOOR = 0.85
 export const POWER_FACTORS = { green: 1, amber: 0.9, red: 0.75 }
@@ -435,6 +444,8 @@ export function evaluateWorkshop(choices, { sendBacks = 0 } = {}) {
   const coolingCapex = racks * cooling.rackNrc
   const capex = Math.round(computeCapex + fabricCapex + coolingCapex)
   const budgetFactor = capex <= SCENARIO.budget ? 1 : Math.max(BUDGET_FLOOR, (SCENARIO.budget / capex) ** 2)
+  const moneyLeft = Math.max(0, SCENARIO.budget - capex)
+  const valueFactor = 1 + VALUE_PER_M * (moneyLeft / 1e6)
   const leadWeeks = Math.max(gpu.leadWeeks + design.leadDelta + (mismatch ? MISMATCH_WEEKS : 0), cooling.fitOutWeeks, net.leadWeeks)
   const lateWeeks = Math.max(0, leadWeeks - SCENARIO.goLiveWeeks)
   const lateFactor = Math.max(LATE_FLOOR, 1 - LATE_PER_WEEK * lateWeeks)
@@ -446,7 +457,7 @@ export function evaluateWorkshop(choices, { sendBacks = 0 } = {}) {
 
   const approvalFactor = Math.max(APPROVAL_FLOOR, 1 - SEND_BACK_PENALTY * Math.max(0, sendBacks))
   const powerFactor = POWER_FACTORS[power]
-  const raw = 1000 * runsFactor * approvalFactor * budgetFactor * powerFactor * latencyFactor * lateFactor
+  const raw = 1000 * runsFactor * approvalFactor * budgetFactor * powerFactor * latencyFactor * lateFactor * valueFactor
   const score = Math.max(SCORE_FLOOR, Math.round(raw))
 
   return {
@@ -467,6 +478,7 @@ export function evaluateWorkshop(choices, { sendBacks = 0 } = {}) {
     capex,
     budget: SCENARIO.budget,
     overBudget: capex > SCENARIO.budget,
+    moneyLeft,
     annualOpex: powerAnnual + net.annual,
     leadWeeks,
     goLiveWeeks: SCENARIO.goLiveWeeks,
@@ -481,6 +493,7 @@ export function evaluateWorkshop(choices, { sendBacks = 0 } = {}) {
       viz: round3(vizFactor),
       ingest: round3(ingestFactor),
       late: round3(lateFactor),
+      value: round3(valueFactor),
     },
     score,
   }

@@ -50,7 +50,19 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
 - **Budget and go-live in the score.** The user's formula has no cost term, so the scenario budget bites
   as a factor: over budget → `(budget / capex)²` (finance would not sign it; the architect should send it
   back for cost). Lead time past go-live costs 5% a week to a floor of 0.7. Runs per night versus par is
-  capped at 1.4 so the best score is ~1,400 with every other factor at 1.0.
+  capped at 1.4.
+- **Money left counts (+2% per $1M).** The first balance run found 44 builds tied at the 1.4 cap: H200
+  Large on air nodes, GB200 Medium on Ethernet and the thoughtful build all cleared 56 runs a night inside
+  $9M, so the cap hid the difference between "enough" and "twice as much". An F1 team under a cost cap
+  puts unspent money on the car, so `value = 1 + 0.02 × ($M of budget left)` is a factor. The thoughtful
+  build ($4.6M) scores 1,524 and is the unique top (per metro); H200 Large ($7.1M) 1,454; GB200 Medium on
+  NVLink ($8.3M) 1,413. The iPad's scenario card says it in six words ("each $1M left +2%"); the
+  read-out quotes the money back.
+- **The read-out's "differently" is a path.** Single-station neighbours alone left a floor build with one
+  line (only the GPU lifts an RTX build off 100) and a local optimum (H200 Large, air hall) with none. So:
+  a greedy path of single-station fixes, each quantified against the step before ("Then DATACENTER &
+  POWER: … +145 more (1454)"), and when the path stops short of `REFERENCE_BUILD` (the proven top, in
+  `cfd.js`), one line with the gap to it and the stations that differ. Never more than three bullets.
 - **Rate limits.** Workshop reads (iPads and boards polling every 3–5 s from one venue IP) have their own
   bucket, `RATE_LIMIT_WORKSHOP_PER_MINUTE` (default 900); joins, approvals and facilitator actions share a
   smaller `RATE_LIMIT_WORKSHOP_WRITES_PER_MINUTE` bucket (default 60).
@@ -147,13 +159,69 @@ migrations apply …`"; the kiosk game is unaffected (its routes and table are u
 
 ## P4 — Scoring + read-out + balance
 
-- [ ] `js/workshop/readout.js`: WHAT WENT WELL (3), WHAT YOU COULD HAVE DONE DIFFERENTLY (2–3 from the
-      best alternative per station, quantified), architect's SEND BACK notes, Digital Realty closing line
-- [ ] `scripts/balance-workshop.mjs`: enumerate the whole tile space; thoughtful build wins, inference trap
-      and oversized power block lose; table in this plan
-- [ ] iPad read-out screen (printable) and `/api/team/:id/readout`
-- [ ] `tests/workshop-readout.test.js`, balance invariants in `tests/workshop-engine.test.js`
-- [ ] commit, push, deploy
+- [x] `js/workshop/readout.js`: WHAT WENT WELL (3), WHAT YOU COULD HAVE DONE DIFFERENTLY (a quantified
+      path of up to 3 fixes, plus the gap to the top build), architect's SEND BACK notes, Digital Realty
+      closing line
+- [x] `scripts/balance-workshop.mjs`: enumerates all 8,748 builds, prints the tables below, exits 1 when an
+      invariant breaks (thoughtful build on top and every build at the cap sensible; trap < 400; biggest
+      block never beats a right-sized one; public internet never beats private; every station swings ≥ 150)
+- [x] iPad read-out screen (printable) and `/api/team/:id/readout` (P2 / P1)
+- [x] `tests/workshop-readout.test.js` (6 tests, including the balance invariants); engine + API tests
+      updated for the money-left factor (54 workshop + intake tests green)
+- [~] commit, push (done); deploy waits for a clean guarded tree (see "Deploy status")
+
+### Scoring
+
+    score = max(100, round(1000 × runs × value × approval × budget × power × latency × on-time))
+
+    runs     = min(1.4, runs per night / 40)          value    = 1 + 0.02 × ($M of the $9M left)
+    approval = max(0.85, 1 − 0.03 × send-backs)       budget   = 1, or (9M / capex)² over budget (floor 0.5)
+    power    = green 1 · amber 0.9 · red 0.75         latency  = 3D-frame target 30 ms × data-home target 4 h (soft)
+    on-time  = 1 − 0.05 × weeks past 16 (floor 0.7)
+    runs per night = PFLOPS(FP64) × fabric efficiency × cooling factor × power throttle × 10 h / 0.5 PF-h per run
+
+### Balance (`node scripts/balance-workshop.mjs`, 8,748 builds)
+
+| min | p25 | median | p75 | max  | at cap | at floor | power green | over budget | late |
+|-----|-----|--------|-----|------|--------|----------|-------------|-------------|------|
+| 100 | 100 | 336    | 644 | 1524 | 3      | 2712     | 2892        | 1296        | 1944 |
+
+Thoughtful build (COMBO · Rack-scale NVL72 · London/liquid/smallest block · GB200 Small NVLink): **1524**
+(the three metros tie: with private connectivity all three meet the latency targets). Inference trap
+(RTX PRO 6000) at its best: 123; median FP64 build: 513. Biggest block vs right-sized block, same other
+choices: 0 wins in 2,364 cases. Public internet vs private, same other choices: 0 wins. Send-backs on the
+thoughtful build: 0 → 1524 · 1 → 1479 · 2 → 1433 · 3 → 1387 · 5+ → 1296 (floor).
+
+| station            | combos | best | worst | worst tiles        | swing |
+|--------------------|--------|------|-------|--------------------|-------|
+| CONNECTIVITY       | 4      | 1524 | 985   | public             | 539   |
+| OEMs               | 3      | 1524 | 1056  | liquid-node        | 468   |
+| DATACENTER & POWER | 27     | 1524 | 440   | lon/air/block-2    | 1084  |
+| CFD SUPERCOMPUTER  | 27     | 1524 | 100   | rtx/small/ethernet | 1424  |
+
+| station | tile                                       | mean | best | green % |
+|---------|--------------------------------------------|------|------|---------|
+| NET     | Public internet                            | 315  | 985  | 33      |
+| NET     | ServiceFabric                              | 471  | 1518 | 33      |
+| NET     | Cross Connect + Dark Fiber                 | 467  | 1507 | 33      |
+| NET     | COMBO: ServiceFabric + Dark Fiber          | 473  | 1524 | 33      |
+| OEM     | Air-cooled 8-GPU node                      | 455  | 1454 | 33      |
+| OEM     | Direct-liquid 8-GPU node                   | 338  | 1445 | 33      |
+| OEM     | Rack-scale NVL72                           | 501  | 1524 | 33      |
+| DC      | London / Frankfurt / Paris                 | 428 / 428 / 438 | 1524 | 33 |
+| DC      | Air (cold aisle containment)               | 360  | 1454 | 33      |
+| DC      | Rear door heat exchanger                   | 384  | 1447 | 33      |
+| DC      | Direct liquid                              | 549  | 1524 | 33      |
+| DC      | Smallest block                             | 437  | 1524 | 77      |
+| DC      | Middle block                               | 454  | 1468 | 14      |
+| DC      | Biggest block                              | 403  | 1321 | 7       |
+| CFD     | HGX H200 nodes                             | 614  | 1454 | 33      |
+| CFD     | GB200 NVL72 rack                           | 578  | 1524 | 33      |
+| CFD     | RTX PRO 6000 servers                       | 101  | 123  | 33      |
+| CFD     | Small / Medium / Large                     | 315 / 462 / 517 | 1524 / 1468 / 1454 | 33 |
+| CFD     | Ethernet + file storage                    | 386  | 1468 | 33      |
+| CFD     | InfiniBand + parallel file system          | 451  | 1509 | 33      |
+| CFD     | NVLink-scale fabric + GPU-adjacent storage | 457  | 1524 | 33      |
 
 ## P5 — Smoke + screenshots + README
 

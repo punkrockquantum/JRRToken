@@ -16,6 +16,7 @@ import {
   SEND_BACK_PENALTY,
   STATIONS,
   STATION_IDS,
+  VALUE_PER_M,
   blankChoices,
   blockMW,
   completeChoices,
@@ -148,8 +149,11 @@ test("physics: frame latency and transfer hours follow js/physics.js; the four c
 
 test("score: the thoughtful build hits the cap, the inference trap hits the floor, the H200 middle sits between, and every factor is in range", () => {
   const best = evaluateWorkshop(BEST)
-  assert.equal(best.score, 1400)
-  assert.deepEqual(best.factors, { runs: RUNS_CAP, approval: 1, budget: 1, power: 1, latency: 1, viz: 1, ingest: 1, late: 1 })
+  const moneyLeftM = (SCENARIO.budget - best.capex) / 1e6
+  assert.equal(best.score, Math.round(1000 * RUNS_CAP * (1 + VALUE_PER_M * moneyLeftM)), "the cap times the money-left bonus")
+  assert.equal(best.score, 1524)
+  assert.equal(best.moneyLeft, SCENARIO.budget - best.capex)
+  assert.deepEqual(best.factors, { runs: RUNS_CAP, approval: 1, budget: 1, power: 1, latency: 1, viz: 1, ingest: 1, late: 1, value: Math.round((1 + VALUE_PER_M * moneyLeftM) * 1000) / 1000 })
   assert.ok(best.runs > SCENARIO.parRuns && !best.overBudget && best.lateWeeks === 0 && best.power.state === "green" && best.net.allPrivate)
   assert.equal(best.gpu.gpus, 72)
   assert.equal(best.pflops, 3.24)
@@ -161,7 +165,8 @@ test("score: the thoughtful build hits the cap, the inference trap hits the floo
   assert.ok(trap.gpu.trap && trap.runs < 5, `the trap gives ${trap.runs} runs a night`)
 
   const middle = evaluateWorkshop(H200)
-  assert.ok(middle.score > 800 && middle.score < 1000, `H200 medium on InfiniBand scores ${middle.score}`)
+  assert.ok(middle.score > 900 && middle.score < 1100 && middle.score < best.score, `H200 medium on InfiniBand scores ${middle.score}`)
+  assert.ok(middle.factors.runs < 1 && middle.factors.value > 1.09, "under par on runs, but cheap: the money-left bonus is real and still loses to the thoughtful build")
   assert.ok(middle.runs > 30 && middle.runs < SCENARIO.parRuns, `${middle.runs} runs`)
 
   const naive = evaluateWorkshop(blankChoices())
@@ -170,7 +175,7 @@ test("score: the thoughtful build hits the cap, the inference trap hits the floo
   for (const choices of [BEST, TRAP, H200, blankChoices()]) {
     const r = evaluateWorkshop(choices)
     for (const [name, value] of Object.entries(r.factors)) assert.ok(value >= 0 && value <= RUNS_CAP, `${name}=${value}`)
-    assert.ok(r.score >= SCORE_FLOOR && r.score <= 1400)
+    assert.ok(r.score >= SCORE_FLOOR && r.score <= 1000 * RUNS_CAP * (1 + (VALUE_PER_M * SCENARIO.budget) / 1e6))
     assert.equal(scoreWorkshop(choices), r.score)
     assert.ok(Number.isFinite(r.capex) && r.capex > 0 && Number.isFinite(r.annualOpex))
     assert.ok(r.leadWeeks > 0)

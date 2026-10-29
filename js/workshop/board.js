@@ -101,7 +101,7 @@ export function createBoard({ root = document.getElementById("app"), api = creat
       "div.foot",
       {},
       el("span", {}, `Lights: ${legend} · blue working · yellow pitched · green approved · orange sent back`),
-      el("span", {}, state.released ? "Scores: 1,000 × runs per night vs par × first-time approval × right-sized power × latency" : "Scores appear at the read-out"),
+      el("span", {}, state.released ? "Score: 1,000 × runs a night vs par × money left × first-time approval × right-sized power × latency × on time" : "Scores appear at the read-out"),
     )
   }
 

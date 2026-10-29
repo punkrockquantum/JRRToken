@@ -13,7 +13,7 @@
  * secret: the host code is typed by the architect each time, never stored.
  */
 import { ApiError, codeFromLocation, createApi, createStore } from "./api.js"
-import { SCENARIO, STATIONS, STATION_IDS, completeChoices, evaluateWorkshop, formatMoney, metroFacts, powerTileTitle, stationById, stationLine, tileLearn, tileOf } from "./cfd.js"
+import { SCENARIO, STATIONS, STATION_IDS, VALUE_PER_M, completeChoices, evaluateWorkshop, formatMoney, metroFacts, powerTileTitle, stationById, stationLine, tileLearn, tileOf } from "./cfd.js"
 import { clientTimer } from "./timer.js"
 import { el, keypad, mount, statusChip, toast } from "./ui.js"
 
@@ -370,7 +370,7 @@ export function createApp({ root = document.getElementById("app"), api = createA
           "div.targets",
           {},
           el("div.target", {}, el("b", {}, `${SCENARIO.parRuns} runs a night`), el("span", {}, "overnight CFD runs, par")),
-          el("div.target", {}, el("b", {}, `${formatMoney(SCENARIO.budget)} budget`), el("span", {}, "capex, all in")),
+          el("div.target", {}, el("b", {}, `${formatMoney(SCENARIO.budget)} budget`), el("span", {}, `capex, all in · each $1M left +${Math.round(VALUE_PER_M * 100)}%`)),
           el("div.target", {}, el("b", {}, `${SCENARIO.goLiveWeeks} weeks`), el("span", {}, "to go-live")),
           el("div.target", {}, el("b", {}, `${SCENARIO.vizTargetMs} ms · ${SCENARIO.ingestTargetH} h`), el("span", {}, "3D view frame · night's data home")),
         ),

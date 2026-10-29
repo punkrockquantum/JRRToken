@@ -10,7 +10,7 @@ import { CODE_ALPHABET, TEAM_COOKIE, hostCodes, normaliseCode, randomInts, sessi
 import { createSessionStore } from "../deploy/intake-worker/src/session-store.mjs"
 import { cleanText, isWorkshopPage, rankScores, rewriteWorkshopAsset, statusOf } from "../deploy/intake-worker/src/session.mjs"
 import { createHandler, gateConfig } from "../deploy/intake-worker/src/worker.mjs"
-import { STATION_IDS } from "../js/workshop/cfd.js"
+import { STATION_IDS, scoreWorkshop } from "../js/workshop/cfd.js"
 import { fakeD1 } from "./helpers/fake-d1.mjs"
 
 const ORIGIN = "https://tokenquest.example.workers.dev"
@@ -22,6 +22,7 @@ const BEST = {
   dcpower: { metro: "lon", cooling: "liquid", power: "block-0" },
   cfd: { gpu: "gb200", size: "small", fabric: "nvlink" },
 }
+const BEST_SCORE = scoreWorkshop(BEST)
 const TRAP = {
   connectivity: { product: "public" },
   oems: { design: "air-node" },
@@ -398,7 +399,7 @@ test("API: submit needs four approvals; the facilitator runs the phases with the
   assert.deepEqual(board.json.teams.map((team) => [team.number, team.approved, team.submitted, team.score]), [[1, 4, true, null], [2, 4, true, null], [3, 0, false, null]])
   /* The facilitator (PIN header) sees scores as they come in. */
   const facilitatorView = await s.call("GET", `/api/session/${code}`, { headers: { "X-Facilitator-Pin": pin } })
-  assert.equal(facilitatorView.json.teams[0].score, 1400)
+  assert.equal(facilitatorView.json.teams[0].score, BEST_SCORE)
   assert.equal((await s.call("GET", `/api/session/${code}`)).json.teams[0].score, null)
 
   /* Phases. */
@@ -431,7 +432,7 @@ test("API: submit needs four approvals; the facilitator runs the phases with the
 
   const redOut = await s.call("GET", `/api/team/${red.team.id}/readout`, { headers: red.headers })
   assert.equal(redOut.status, 200, redOut.text)
-  assert.deepEqual([redOut.json.readout.score, redOut.json.readout.rank, redOut.json.readout.teams], [1400, 1, 3])
+  assert.deepEqual([redOut.json.readout.score, redOut.json.readout.rank, redOut.json.readout.teams], [BEST_SCORE, 1, 3])
   assert.equal(redOut.json.readout.wentWell.length, 3)
   assert.ok(redOut.json.readout.wentWell.some((line) => /Approved first time at all four stations/.test(line)), redOut.json.readout.wentWell.join(" | "))
   assert.deepEqual(redOut.json.readout.doDifferently, ["Nothing beats this build at any one station: every alternative we tried scored lower."])
@@ -448,7 +449,7 @@ test("API: submit needs four approvals; the facilitator runs the phases with the
   assert.ok(greenOut.json.readout.doDifferently[0].includes("never saved a choice at CONNECTIVITY and DATACENTER & POWER"), greenOut.json.readout.doDifferently[0])
   assert.deepEqual([redOut.json.readout.rank, greenOut.json.readout.rank, blueOut.json.readout.rank].sort(), [1, 2, 3])
   const teamState = await s.call("GET", `/api/team/${red.team.id}`, { headers: red.headers })
-  assert.equal(teamState.json.readout.score, 1400, "the iPad's own state carries the read-out once released")
+  assert.equal(teamState.json.readout.score, BEST_SCORE, "the iPad's own state carries the read-out once released")
 
   board = await s.call("GET", `/api/session/${code}/board`)
   assert.equal(board.json.released, true)
