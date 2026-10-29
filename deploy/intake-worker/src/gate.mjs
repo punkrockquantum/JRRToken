@@ -91,6 +91,19 @@ export function clearSessionCookie() {
   return `${SESSION_COOKIE}=; Max-Age=0; ${COOKIE_FLAGS}`
 }
 
+/**
+ * Where to send the browser after a login: the same-origin path it asked for (so an iPad that scanned
+ * the workshop QR lands on /workshop?code=... and not on the kiosk game), or "/" for anything that is
+ * not a plain absolute path: another origin, a protocol-relative "//host", a backslash, control
+ * characters, whitespace, or anything over 200 characters.
+ */
+export function safeNextPath(value) {
+  if (typeof value !== "string" || value.length > 200) return "/"
+  // eslint-disable-next-line no-control-regex
+  if (!/^\/(?![/\\])[^\s\\\u0000-\u001f\u007f]*$/.test(value)) return "/"
+  return value
+}
+
 export function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char])
 }
@@ -107,7 +120,9 @@ export const LOGIN_PAGE_HEADERS = {
 }
 
 /** The 8-bit login screen: inline CSS only, a monospace stand-in for the game's pixel font, one field, ENTER. */
-export function loginPage({ error = "" } = {}) {
+export function loginPage({ error = "", next = "/" } = {}) {
+  const target = safeNextPath(next)
+  const action = target === "/" ? "/login" : `/login?next=${encodeURIComponent(target)}`
   return `<!DOCTYPE html>
 <html lang="en-GB">
   <head>
@@ -138,7 +153,7 @@ export function loginPage({ error = "" } = {}) {
     <main>
       <h1>Token <span>Quest</span></h1>
       <p>Team access · enter the password you were given</p>
-      <form method="post" action="/login" autocomplete="off">
+      <form method="post" action="${escapeHtml(action)}" autocomplete="off">
         <label for="password">Password</label>
         <input id="password" name="password" type="password" autocomplete="current-password" autofocus required maxlength="200" />
         <button type="submit">Enter</button>

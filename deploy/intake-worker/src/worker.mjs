@@ -71,11 +71,12 @@
  */
 import { csvFilename, renderAttemptsCsv } from "./csv.mjs"
 import { createD1Store } from "./d1store.mjs"
-import { LOGIN_PAGE_HEADERS, SESSION_COOKIE, clearSessionCookie, constantTimeEqual, createSession, loginPage, parseCookies, sessionCookie, verifySession } from "./gate.mjs"
+import { LOGIN_PAGE_HEADERS, SESSION_COOKIE, clearSessionCookie, constantTimeEqual, createSession, loginPage, parseCookies, safeNextPath, sessionCookie, verifySession } from "./gate.mjs"
 import { GitHubError, createContentsClient } from "./github.mjs"
 import { renderPlayersMarkdown } from "./markdown.mjs"
 import { aggregatePlayers, findPlayer, publicLeague } from "./players.mjs"
 import { createRateLimiter } from "./ratelimit.mjs"
+import { createSessionRoutes, isWorkshopPage, rewriteWorkshopAsset } from "./session.mjs"
 import { staffPage } from "./staff.mjs"
 import { PLAYERS_MD, StoreUnavailableError, createPlayersStore } from "./store.mjs"
 import { validateAttempt } from "./validate.mjs"
@@ -265,6 +266,8 @@ async function readJson(request) {
 export function createHandler(deps = {}) {
   const { fetch: fetchImpl = (...args) => globalThis.fetch(...args), now = () => new Date(), random = Math.random, sleep, log = (line) => console.log(line) } = deps
   const mirrors = new Map()
+  /* Workshop mode (table teams): /api/session/* and /api/team/*, see session.mjs. */
+  const sessions = createSessionRoutes({ now, log })
   let limiters = null
   /**
    * The last thing the database (and the mirror) did in this isolate, so /api/health can show staff
@@ -412,7 +415,7 @@ export function createHandler(deps = {}) {
     const given = form.get("password") ?? ""
     if (given && (await constantTimeEqual(given, gate.password))) {
       const value = await createSession(gate.secret, { now: now().getTime() })
-      return redirect("/", { "Set-Cookie": sessionCookie(value) })
+      return redirect(safeNextPath(url.searchParams.get("next")), { "Set-Cookie": sessionCookie(value) })
     }
     if (sleep) await sleep(WRONG_PASSWORD_DELAY_MS)
     else await new Promise((resolve) => setTimeout(resolve, WRONG_PASSWORD_DELAY_MS))
@@ -435,7 +438,7 @@ export function createHandler(deps = {}) {
     }
     if (!gate.enabled || pathname === "/api/health" || (await hasSession(request, gate))) return null
     if (pathname.startsWith("/api/")) throw new HttpError(401, "unauthorised", "Log in to Token Quest first, then play again.")
-    if (method === "GET" || method === "HEAD") return html(200, loginPage())
+    if (method === "GET" || method === "HEAD") return html(200, loginPage({ next: isWorkshopPage(pathname) ? safeNextPath(`${pathname}${url.search}`) : "/" }))
     throw new HttpError(401, "unauthorised", "Log in to Token Quest first.")
   }
 
@@ -444,6 +447,9 @@ export function createHandler(deps = {}) {
     const { pathname } = url
 
     if (method === "OPTIONS") return new Response(null, { status: 204, headers: { ...cors, Allow: "GET, POST, OPTIONS" } })
+
+    const workshop = await sessions.handle(request, env, url, cors, access, { json, readJson, HttpError, gate: gateConfig(env) })
+    if (workshop) return workshop
 
     if (pathname === "/api/attempt") {
       if (method !== "POST") throw new HttpError(405, "method_not_allowed", "Use POST here.", { Allow: "POST, OPTIONS" })
@@ -567,7 +573,7 @@ export function createHandler(deps = {}) {
           response = gated
         } else if (isAssetRequest(url, env)) {
           // The game itself: static assets (index.html, js/, css/, assets/, 404.html) served as uploaded.
-          return withAssetHeaders(await env.ASSETS.fetch(request), url.pathname)
+          return withAssetHeaders(await env.ASSETS.fetch(rewriteWorkshopAsset(request, url)), url.pathname)
         } else {
           if (origin !== null && !sameOrigin && !crossOriginOk) throw new HttpError(403, "cross_origin", "This origin may not use the Token Quest API.")
           const authorised = key || !gate.enabled || (await hasSession(request, gate))

@@ -262,7 +262,7 @@ test("PLAYERS.md: pipes, backslashes, newlines and angle brackets cannot break o
 // ---------------------------------------------------------------------------------------------
 
 test("d1store: the migration creates the table; record() appends once per game, all() keeps arrival order, totals() count players by email", async () => {
-  assert.deepEqual(migrationFiles(), ["0001_attempts.sql"])
+  assert.deepEqual(migrationFiles(), ["0001_attempts.sql", "0002_sessions.sql"])
   const d1 = fakeD1()
   const store = createD1Store({ db: d1 })
   assert.equal(store.kind, "d1")
