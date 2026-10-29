@@ -128,11 +128,22 @@ migrations apply …`"; the kiosk game is unaffected (its routes and table are u
 
 ## P3 — Facilitator + projector board
 
-- [ ] `host.html` + `js/workshop/host.js`: create session, code, QR (inline SVG, `js/workshop/qr.js`, no
-      deps), 10 host codes, phase buttons, master timer, +/- minutes, teams × stations grid, board link
-- [ ] `board.html` + `js/workshop/board.js`: leaderboard / progress, timer, phase, auto-refresh, no emails
-- [ ] `tests/workshop-qr.test.js`
-- [ ] commit, push, deploy
+- [x] `assets/workshop/host.html` (served at `/host`) + `js/workshop/host.js`: CREATE SESSION → code big,
+      QR, join URL, COPY links, 10 host codes with the team that holds each, PIN; phase bar (LOBBY / BRIEF /
+      BUILD / READ-OUT / DONE) with one big next-action button, −1 / +1 / +5 MIN, master timer (server
+      time + offset), run-of-show line, progress line, tables × stations grid (chips, approvals, send-backs,
+      early scores for the facilitator only), PROJECTOR BOARD link, LEAVE, DELETE SESSION after END.
+      A reload resumes from localStorage; `/host?code=XXXX` on another browser asks for the PIN (keypad)
+- [x] `assets/workshop/board.html` (served at `/board/<code>`) + `js/workshop/board.js`: big clock + phase,
+      join hint with the code, one row per table with four station lights, approvals during the build,
+      scores + ranks from the read-out on; scales so ten rows fill 1080p and 720p; no emails, no codes
+- [x] `js/workshop/qr.js`: dependency-free QR encoder (byte mode, level M, versions 1–10, mask penalty,
+      version blocks from v7); verified with Apple's CoreImage detector on rendered PNGs (v1, v3, v4, v7)
+- [x] `tests/workshop-qr.test.js` (7 tests: capacity table, Reed–Solomon vector, finders/timing/format,
+      every mask round-trips through the test decoder, alignment, version bits, SVG shape)
+- [x] Headless-Chrome check at 1180×820, 1024×768 (host) and 1920×1080, 1280×720 (board): no page scroll,
+      no console errors, create → join ×3/×10 → decisions → brief → +1 min → build → read-out → end
+- [~] commit, push (done); deploy waits for a clean guarded tree (see "Deploy status")
 
 ## P4 — Scoring + read-out + balance
 
