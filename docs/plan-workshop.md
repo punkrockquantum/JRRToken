@@ -122,6 +122,12 @@ any case be stopped by `scripts/deploy-guard.mjs` while the other agent's uncomm
     cd deploy/intake-worker && npx --yes wrangler@4 d1 migrations apply tokenquest-players --remote && cd ../..
     npm run deploy:worker
 
+The migration can run before the deploy (the live Worker never touches the four new tables, and wrangler
+records applied migrations, so re-running it is a no-op). Attempted at the end of P5 with the cached
+`~/.npm/_npx/*/node_modules/.bin/wrangler` 4.151.1: it got as far as Cloudflare's auth server and was
+stopped by the sandbox's network ("auth token has expired and could not be refreshed … could not be
+reached"); credentials were left unchanged, so the login is still valid for the next attempt.
+
 Until the migration runs, every `/api/session*` call answers `503 store_unavailable` with the message
 "the workshop tables (sessions, teams, decisions, readouts) do not exist yet: run `npx wrangler d1
 migrations apply …`"; the kiosk game is unaffected (its routes and table are untouched).
@@ -131,7 +137,7 @@ WORKSHOP_PASSWORD=<team password> SHOTS=.shots node scripts/smoke-workshop.mjs` 
 session and deletes it at the end), then read the screenshots.
 
 Commits on `cursor/token-quest-datacenter-game`: P1 `f318cf3`, P2 `70ea753`, P3 `bb386e7`, P4 `c0f7bf3`,
-P5 (this one). Workshop tests: `node --test tests/workshop-*.test.js` → 38 tests (api 10, timer 5,
+P5 `7f40c84` (+ this note). Workshop tests: `node --test tests/workshop-*.test.js` → 38 tests (api 10, timer 5,
 engine 9, qr 7, readout + balance 6, plus intake's migration check); whole suite 344 tests, 0 failing.
 
 ## P2 — Team iPad
