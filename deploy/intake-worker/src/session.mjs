@@ -83,17 +83,30 @@ export function rankScores(rows) {
   return ranks
 }
 
-/** The workshop's pages: the only ones the login page sends a browser back to (the kiosk game always lands on /). */
-export function isWorkshopPage(pathname) {
-  return /^\/(workshop|host)(?:\.html)?\/?$/.test(pathname) || BOARD_PAGE.test(pathname)
+/**
+ * The workshop's three pages live in assets/workshop/ (the build copies assets/ as it is, so no build
+ * hook is needed) and are served at short URLs: /workshop (team iPads), /host (facilitator) and
+ * /board/<code> (projector). Each page uses root-relative /css and /js links for that reason.
+ */
+export const WORKSHOP_PAGES = { workshop: "/assets/workshop/workshop.html", host: "/assets/workshop/host.html", board: "/assets/workshop/board.html" }
+
+/** The asset path behind a workshop URL, or null for anything else. */
+export function workshopPageFor(pathname) {
+  const page = /^\/(workshop|host)(?:\.html)?\/?$/.exec(pathname)
+  if (page) return WORKSHOP_PAGES[page[1]]
+  if (BOARD_PAGE.test(pathname)) return WORKSHOP_PAGES.board
+  return null
 }
 
-/** GET /board/<code> is the projector page: serve board.html for it (the page reads the code from the path). */
+/** The workshop's pages: the only ones the login page sends a browser back to (the kiosk game always lands on /). */
+export function isWorkshopPage(pathname) {
+  return workshopPageFor(pathname) !== null
+}
+
+/** GET /workshop, /host and /board/<code> fetch their page from assets/workshop/ (the board page reads the code from the path). */
 export function rewriteWorkshopAsset(request, url) {
-  if ((request.method === "GET" || request.method === "HEAD") && BOARD_PAGE.test(url.pathname)) {
-    return new Request(`${url.origin}/board.html`, request)
-  }
-  return request
+  const page = request.method === "GET" || request.method === "HEAD" ? workshopPageFor(url.pathname) : null
+  return page ? new Request(`${url.origin}${page}`, request) : request
 }
 
 function positiveInt(value, fallback) {

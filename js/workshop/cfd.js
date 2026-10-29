@@ -56,7 +56,7 @@ export const SCENARIO = {
     "Apex Aero Racing (fictional) runs a wind-tunnel-in-software: every night its engineers queue CFD runs on the next car.",
     "1,500 engineers sit in Milton Keynes and Modena. The simulation data lives in the UK data room at Milton Keynes.",
     "You have $9M, 16 weeks until the season, and a target of 40 overnight runs a night.",
-    "Four stations, one decision each. Pitch every choice to the architect at your table. Approved first time scores best.",
+    "Four stations, a few tiles each, one pitch per station. Convince the architect at your table: approved first time scores best.",
   ],
 }
 

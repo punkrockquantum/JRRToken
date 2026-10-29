@@ -19,11 +19,12 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
 
 ## Decisions taken while the user was away
 
-- **Pages into dist.** `scripts/build-static.mjs` only copies `index.html`, `css/`, `js/`, `assets/`, so the
-  three workshop pages get a tiny additive hook: an optional `EXTRA_PAGES` list (`workshop.html`, `host.html`,
-  `board.html`) copied when present. Workers Static Assets' default `auto-trailing-slash` html handling serves
-  `/workshop` and `/host` from the `.html` files; `/board/<code>` is rewritten to `/board.html` by the Worker
-  (`rewriteWorkshopAsset` in `session.mjs`), so `board.html` uses root-relative `/css/...` and `/js/...` links.
+- **Pages into dist without a build hook.** `scripts/build-static.mjs` only copies `index.html`, `css/`,
+  `js/`, `assets/`, and the other agent has ~200 uncommitted lines in it (the import guard), so instead of
+  an `EXTRA_PAGES` hook the three pages live in `assets/workshop/` (`workshop.html`, `host.html`,
+  `board.html`), which the build already copies as it is. The Worker serves them at the short URLs:
+  `/workshop`, `/host` and `/board/<code>` are rewritten to those assets (`rewriteWorkshopAsset` in
+  `session.mjs`), so every page uses root-relative `/css/...` and `/js/...` links.
 - **Login redirect.** The team-password login page always redirected to `/`, which would lose the iPad's join
   URL (`/workshop?code=ABCD` from the QR). `gate.mjs` gets `safeNextPath()` (same-origin path only, no `//`,
   no scheme, ≤ 200 chars) and the login form carries `?next=`; `worker.mjs` passes it through (two lines).
@@ -73,7 +74,7 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
 
 ## Hooks in shared files (tiny, additive)
 
-- `scripts/build-static.mjs`: `EXTRA_PAGES` copied when present.
+- `scripts/build-static.mjs`: none (pages live under `assets/workshop/`, see above).
 - `deploy/intake-worker/src/worker.mjs`: import of `session.mjs`; `sessions.handle(...)` first in `route()`;
   `rewriteWorkshopAsset` in the asset branch; `next` passed to the login page and honoured after login.
 - `deploy/intake-worker/src/gate.mjs`: `safeNextPath()`, `loginPage({ next })`.
@@ -95,16 +96,35 @@ Legend: `[x]` done in the tree · `[~]` partly done (what remains is listed) · 
 - [x] `js/workshop/readout.js` (pulled forward from P4: the Worker stores the read-out at submit)
 - [x] Hooks in `worker.mjs`, `gate.mjs`, `tests/intake.test.js`
 - [x] `tests/workshop-api.test.js`, `tests/workshop-timer.test.js`, `tests/workshop-engine.test.js` (41 tests)
-- [ ] `wrangler d1 migrations apply tokenquest-players --remote`, commit, push, deploy
+- [~] commit `f318cf3`, pushed; `wrangler d1 migrations apply tokenquest-players --remote` and the deploy
+      are pending (see "Deploy status")
+
+## Deploy status
+
+The Worker deploy and the remote D1 migration both need the Cloudflare API, which this session's sandbox
+cannot reach (the harness refused every elevated-permission command), and `npm run deploy:worker` would in
+any case be stopped by `scripts/deploy-guard.mjs` while the other agent's uncommitted work sits under
+`css/`, `js/`, `index.html` and `scripts/`. When the tree is clean, from the repo root:
+
+    cd deploy/intake-worker && npx --yes wrangler@4 d1 migrations apply tokenquest-players --remote && cd ../..
+    npm run deploy:worker
+
+Until the migration runs, every `/api/session*` call answers `503 store_unavailable` with the message
+"the workshop tables (sessions, teams, decisions, readouts) do not exist yet: run `npx wrangler d1
+migrations apply …`"; the kiosk game is unaffected (its routes and table are untouched).
 
 ## P2 — Team iPad
 
-- [ ] `workshop.html`, `css/workshop.css`, `js/workshop/app.js`, `js/workshop/api.js`, `js/workshop/ui.js`
-- [ ] JOIN → HOME (timer, scenario card, four tiles with status) → STATION (3-tile decisions, why it
-      matters, live what-this-does line, PITCH) → HOST APPROVAL panel (host code, APPROVE / SEND BACK with
-      a one-tap reason) → SUBMIT BUILD
-- [ ] 1180×820 and 1024×768 landscape first; phone-tolerant; 44 px targets; no page scroll
-- [ ] commit, push, deploy
+- [x] `assets/workshop/workshop.html` (served at `/workshop`), `css/workshop.css`, `js/workshop/app.js`,
+      `js/workshop/api.js`, `js/workshop/ui.js`
+- [x] JOIN → HOME (timer, scenario card, four tiles with status) → STATION (3-tile decisions, why it
+      matters, live what-this-does line, PITCH) → HOST APPROVAL panel (host code keypad, APPROVE / SEND BACK
+      with a one-tap reason, RE-OPEN) → SUBMIT BUILD → READ-OUT (printable)
+- [x] 1180×820 and 1024×768 landscape first; phone-tolerant; 44 px targets; no page scroll (checked in
+      headless Chrome against `scripts/workshop-dev-server.mjs`; the formal audit is the P5 smoke)
+- [x] `scripts/workshop-dev-server.mjs`: the real Worker on `node:http` with an in-memory D1 and the repo's
+      files as assets (`--seed` prints a session's code, PIN and host codes); the smoke starts it in-process
+- [~] commit, push (done); deploy waits for a clean guarded tree (see "Deploy status" below)
 
 ## P3 — Facilitator + projector board
 
